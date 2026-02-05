@@ -1,0 +1,17 @@
+{
+  "name": "talos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Talos - Your AI chief of staff",
+  "scripts": {
+    "dev": "pnpm run --parallel dev",
+    "dev:server": "pnpm --filter @talos/server dev",
+    "dev:web": "pnpm --filter @talos/web dev",
+    "build": "pnpm -r run build",
+    "clean": "pnpm -r exec rm -rf dist node_modules && rm -rf node_modules dist"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@9.0.0"
+}
