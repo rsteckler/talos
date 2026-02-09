@@ -16,7 +16,7 @@ todos:
     status: completed
   - id: phase-5
     content: "Phase 5: Tool System - Manifest loader, tool runner, bundled tools (shell, web-search), tool config UI"
-    status: pending
+    status: completed
   - id: phase-6
     content: "Phase 6: Task Scheduler - Task CRUD, cron/polling/webhook triggers, task UI, inbox integration"
     status: pending
@@ -32,7 +32,7 @@ isProject: false
 
 Talos is a self-hosted AI agent that acts as your "chief of staff." It supports bring-your-own-key (BYOK) model providers, scheduled/triggered tasks, and extensible tools. The user interacts via chat (sync) and receives results via an inbox (async).
 
-**Progress:** Phase 4 complete. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
+**Progress:** Phase 5 complete. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
 
 ---
 
@@ -50,11 +50,12 @@ graph TB
     subgraph Backend["apps/server (Express + Node)"]
         API[REST API]
         WS[WebSocket Server]
+        Logger[Logger<br/>Two-axis, Pino + SQLite]
         Scheduler[Task Scheduler]
         ToolRunner[Tool Runner]
         AgentCore[Agent Core<br/>Orchestration Loop]
     end
-    
+
     subgraph Data["Data Layer"]
         SQLite[(SQLite DB)]
         SoulMD[SOUL.md]
@@ -115,8 +116,9 @@ All intelligence lives in the remote LLM. Talos is a "dumb relay + local executo
 | UI Components   | shadcn/ui + Tailwind CSS                                 |
 | Database        | SQLite via Drizzle ORM                                   |
 | Real-time       | WebSocket (ws library)                                   |
-| LLM Integration | Vercel AI SDK (supports OpenAI, Anthropic, Google, etc.) |
-| Scheduling      | node-cron or custom scheduler                            |
+| LLM Integration | Vercel AI SDK (supports OpenAI, Anthropic, Google, OpenRouter) |
+| Logging         | Pino (structured JSON) + SQLite persistence + WS streaming   |
+| Scheduling      | node-cron or custom scheduler                                |
 | Docs            | Docusaurus                                               |
 | Dev Ports       | Server: 3001, Web: 5173 (Vite default)                   |
 
@@ -143,8 +145,9 @@ talos/
 │   │   │   ├── api/             # REST routes
 │   │   │   ├── ws/              # WebSocket handlers
 │   │   │   ├── agent/           # Agent core logic
+│   │   │   ├── logger/          # Structured logging (pino + two-axis)
 │   │   │   ├── scheduler/       # Cron, polling, webhook triggers
-│   │   │   ├── tools/           # Tool runner
+│   │   │   ├── tools/           # Tool loader + runner
 │   │   │   ├── providers/       # LLM provider adapters
 │   │   │   ├── db/              # SQLite schema, queries
 │   │   │   └── config/          # Config loading
@@ -163,7 +166,9 @@ talos/
 │           ├── App.tsx
 │           ├── components/
 │           │   ├── ui/          # shadcn components
-│           │   ├── chat/        # Chat interface
+│           │   ├── chat/        # Chat interface + tool call display
+│           │   ├── logs/        # Log viewer, config, settings panels
+│           │   ├── settings/    # Tool list, tool config dialog
 │           │   ├── orb/         # Status orb
 │           │   └── inbox/       # Notifications/results
 │           ├── hooks/           # Custom hooks (useWebSocket, etc.)
@@ -201,8 +206,8 @@ talos/
 CREATE TABLE providers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,           -- "OpenAI", "Anthropic", etc.
-  type TEXT NOT NULL,           -- "openai", "anthropic", "google", etc.
-  api_key TEXT NOT NULL,        -- Encrypted
+  type TEXT NOT NULL CHECK(type IN ('openai', 'anthropic', 'google', 'openrouter')),
+  api_key TEXT NOT NULL,        -- Plaintext (self-hosted; encryption deferred)
   base_url TEXT,                -- Optional custom endpoint
   is_active INTEGER DEFAULT 1,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -276,9 +281,39 @@ CREATE TABLE inbox (
 -- Tool configurations (credentials, settings per tool)
 CREATE TABLE tool_configs (
   tool_id TEXT PRIMARY KEY,     -- Matches folder name in tools/
-  config TEXT NOT NULL,         -- JSON: API keys, settings
-  is_enabled INTEGER DEFAULT 1,
+  config TEXT NOT NULL DEFAULT '{}', -- JSON: API keys, settings
+  is_enabled INTEGER DEFAULT 0, -- Tools disabled by default (explicit enable required)
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Structured log entries (two-axis: user + dev)
+CREATE TABLE logs (
+  id TEXT PRIMARY KEY,
+  timestamp TEXT NOT NULL,
+  axis TEXT NOT NULL CHECK(axis IN ('user', 'dev')),
+  level TEXT NOT NULL,          -- user: low/medium/high; dev: debug/verbose; always: error/warn/info
+  area TEXT NOT NULL,           -- server, ws, agent, db, tools, api, tool:<id>
+  message TEXT NOT NULL,
+  data TEXT,                    -- JSON structured data (nullable)
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_logs_timestamp ON logs(timestamp);
+CREATE INDEX idx_logs_area ON logs(area);
+CREATE INDEX idx_logs_axis_level ON logs(axis, level);
+
+-- Per-area log verbosity configuration
+CREATE TABLE log_configs (
+  area TEXT PRIMARY KEY,        -- Area name or '_default' for fallback
+  user_level TEXT NOT NULL DEFAULT 'medium',  -- silent|low|medium|high
+  dev_level TEXT NOT NULL DEFAULT 'debug',    -- silent|debug|verbose
+  updated_at TEXT NOT NULL
+);
+
+-- Global log settings
+CREATE TABLE log_settings (
+  id INTEGER PRIMARY KEY,
+  prune_days INTEGER NOT NULL DEFAULT 7,
+  updated_at TEXT NOT NULL
 );
 
 -- Agent settings
@@ -407,6 +442,15 @@ GET    /api/agent/status                 # Get agent status (idle, working, etc.
 GET    /api/agent/soul                   # Get SOUL.md content
 PUT    /api/agent/soul                   # Update SOUL.md
 
+# Logs (structured two-axis logging)
+GET    /api/logs                         # Query logs (pagination, axis/level/area/search/date filters)
+DELETE /api/logs                         # Purge logs (optional olderThanDays body param)
+GET    /api/logs/configs                 # Get all per-area log configs
+PUT    /api/logs/configs/:area           # Update config for an area
+GET    /api/logs/settings                # Get global settings (pruneDays)
+PUT    /api/logs/settings                # Update global settings
+GET    /api/logs/areas                   # List known areas (predefined + dynamic tool:*)
+
 # Webhooks (for external triggers)
 POST   /api/webhooks/:task_id            # Trigger task via webhook
 ```
@@ -426,6 +470,14 @@ interface CancelRequest {
   conversationId: string;
 }
 
+interface SubscribeLogs {
+  type: 'subscribe_logs';    // Opt-in to receive log entries via WS
+}
+
+interface UnsubscribeLogs {
+  type: 'unsubscribe_logs';  // Stop receiving log entries
+}
+
 // Server -> Client
 interface StreamChunk {
   type: 'chunk';
@@ -442,14 +494,16 @@ interface StreamEnd {
 interface ToolCall {
   type: 'tool_call';
   conversationId: string;
-  tool: string;
-  function: string;
-  arguments: Record<string, unknown>;
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
 }
 
 interface ToolResult {
   type: 'tool_result';
   conversationId: string;
+  toolCallId: string;
+  toolName: string;
   result: unknown;
 }
 
@@ -458,6 +512,25 @@ interface AgentStatus {
   status: 'idle' | 'thinking' | 'tool_calling' | 'responding';
   taskId?: string;
   taskName?: string;
+}
+
+interface ErrorMessage {
+  type: 'error';
+  conversationId?: string;
+  error: string;
+}
+
+interface LogEntry {
+  type: 'log';
+  entry: {
+    id: string;
+    timestamp: string;
+    axis: 'user' | 'dev';
+    level: string;
+    area: string;
+    message: string;
+    data?: unknown;
+  };
 }
 
 interface InboxUpdate {
@@ -739,7 +812,7 @@ interface InboxUpdate {
 **Pre-existing issues (not introduced by Phase 4):**
 - `TalosOrb.tsx` still has uninitialized variable and ref type errors from Phase 2 - doesn't affect Vite dev or Vite build, only fails strict `tsc -b`
 
-### Phase 5: Tool System
+### Phase 5: Tool System — DONE
 
 - Implement tool manifest loader
 - Build tool runner that executes tool functions
@@ -747,6 +820,69 @@ interface InboxUpdate {
 - Implement tool configuration storage
 - Add tool management UI in settings
 - Wire tools into agent (function calling)
+
+#### Phase 5 Implementation Notes
+
+**What was built — Tool System:**
+- **Tool manifest loader** (`apps/server/src/tools/loader.ts`): Scans `tools/` directory on startup. Each tool is a folder with `manifest.json` (declares id, name, description, credentials, functions with JSON Schema parameters), optional `prompt.md` (appended to system prompt when tool is enabled), and `index.ts` (exports handler functions). Validates manifests on load, logs errors for malformed tools.
+- **Tool runner** (`apps/server/src/tools/runner.ts`): `buildToolSet()` converts loaded tool manifests into an AI SDK `ToolSet`. JSON Schema → Zod conversion handles string, number, boolean, array types. Each tool function's `execute()` is wrapped in try-catch — errors return `{ error: message }` rather than crashing the stream. Tool names namespaced as `${toolId}_${functionName}`.
+- **Tool config storage:** `tool_configs` DB table (tool_id PK, config JSON for credentials, is_enabled boolean, created_at). Tools must be explicitly enabled via UI.
+- **Bundled tools:** `tools/shell/` (command execution), `tools/web-search/` (web search), `tools/file-read/` (file reading). Each has manifest.json, prompt.md, and index.ts.
+- **Tool REST API** (`apps/server/src/api/tools.ts`): GET /api/tools (list all with manifests + config), GET /api/tools/:id (single tool detail), PUT /api/tools/:id/config (update credentials/config), POST /api/tools/:id/enable, POST /api/tools/:id/disable.
+- **Tool management UI:** `ToolList.tsx` (settings page section listing available tools with enable/disable switches), `ToolConfigDialog.tsx` (dialog for editing tool credentials), `ToolCallDisplay.tsx` (in-chat display of tool invocations and results).
+- **Agent integration:** `streamChat()` calls `buildToolSet()` to get enabled tools, passes them to `streamText()` with `stopWhen: stepCountIs(10)` (max 10 agentic steps). Tool `prompt.md` content appended to system prompt.
+- **WS protocol extensions:** `tool_call` and `tool_result` server messages with toolCallId, toolName, args/result. Client handles these for in-chat tool display. Status transitions: `thinking` → `tool_calling` → (tool runs) → `responding`.
+
+**What was built — Logging System:**
+- **Structured logging with Pino** (`apps/server/src/logger/`): Four-file module — `index.ts` (createLogger/initLogger), `config.ts` (per-area config cache + shouldLog), `broadcast.ts` (WS subscriber management), `pruner.ts` (auto-prune every 6h).
+- **Two-axis verbosity model:** Each log call specifies axis (user or dev) and importance. User axis: `high` (always shown at any non-silent level), `medium` (shown at medium+), `low` (shown only at high). Dev axis: `debug` (shown at debug+), `verbose` (shown only at verbose). Always-on methods: `error()`, `warn()`, `info()` bypass level checks.
+- **Per-area configuration:** Each area (server, ws, agent, db, tools, api, plus dynamic `tool:<toolId>`) has independent user and dev level thresholds. Stored in `log_configs` table with in-memory cache. Default: user=medium, dev=debug.
+- **SQLite persistence:** `logs` table with indexes on timestamp, area, and (axis, level). `log_settings` table for global settings (pruneDays, default 7). Auto-pruning deletes entries older than pruneDays every 6 hours.
+- **Real-time WS streaming:** Opt-in — frontend sends `subscribe_logs` when /logs page mounts, `unsubscribe_logs` on unmount. Only subscribed clients receive log entries. Prevents unnecessary log traffic to chat-only clients.
+- **Lazy initialization:** Logger falls back to `console.*` before `initLogger()` is called (before DB migrations). After init, writes to pino (stdout) + SQLite + WS broadcast.
+- **Logs REST API** (`apps/server/src/api/logs.ts`): GET /logs (paginated, filterable by axis/level/area/search/date range), DELETE /logs (purge), GET/PUT /logs/configs (per-area level config), GET/PUT /logs/settings (global prune settings), GET /logs/areas (known area list).
+- **Frontend log viewer:** Full page at `/logs` with LogViewer (tabs: Combined/User/Dev), LogToolbar (search, area filter, level filter, live toggle), LogTable/LogRow (color-coded level badges, expandable data JSON), LogConfigPanel (per-area level selects), LogSettingsPanel (prune days + manual purge).
+- **Frontend store:** `useLogStore` with entries, filters, streaming state, configs, pagination. WS handler adds streamed entries.
+- **All console.* calls replaced:** ~16 raw console calls across server, ws, agent, tools, db, api files replaced with structured `createLogger(area)` calls.
+
+**Key decisions:**
+- **OpenRouter requires Chat Completions API for tools:** The AI SDK's default `provider(modelId)` call uses the Responses API, which doesn't reliably forward tool definitions to models on OpenRouter. Fix: use `provider.chat(modelId)` specifically for OpenRouter providers. This forces the Chat Completions API endpoint. Other providers continue using the default.
+- **Logging must NEVER crash the caller:** All `writeLog()` and `writeAlwaysLog()` functions are wrapped in outer try-catch. `broadcastLog()` catches JSON.stringify failures and ws.send failures independently. A `safeData()` helper converts Error objects to `{message, name, stack}` and validates JSON serializability before passing data to pino/SQLite. This prevents logging side-effects from killing LLM streams or request handlers.
+- **Empty assistant messages must not be persisted:** When a model returns no text content (e.g., tool-only response that produces no text, or a model that doesn't support tools), the agent must skip persisting the assistant message. Empty `content: ""` in conversation history causes all subsequent LLM responses in that conversation to be empty — the model mirrors the empty pattern.
+- **Automatic retry without tools:** If the model returns empty content with tools enabled and made zero tool calls, the agent retries without tools. This handles models that don't support tool calling — they often silently return empty when given tool definitions. The retry produces a normal text response.
+- **Human-readable logs over raw data:** User-axis logs are written as narrative sentences with context (e.g., `Thinking: "first 50 chars"`, `Using tool: shell`, `Done (2 tool call(s), 3 step(s)): "first 50 chars"`) rather than raw data dumps. Dev-axis logs carry the structured data payloads for debugging.
+- **Default log levels set for practical use:** user=medium and dev=debug — shows moderate user activity and all dev debugging. Initial implementation used low/silent defaults which effectively hid all logs, requiring a migration fix.
+- **`getActiveProvider()` returns pre-built model object:** Instead of returning a provider factory, `getActiveProvider()` now returns `{ model, modelId, providerType }` where `model` is the ready-to-use AI SDK model instance. This allows provider-specific model construction (e.g., `.chat()` for OpenRouter) to be centralized in one place.
+
+**Deviations from plan:**
+- **Logging system added to Phase 5:** The original plan didn't include a logging system — it was designed and implemented alongside the tool system as it became clear that debugging tool calling and agent behavior required structured observability.
+- **Pino used without pino-pretty:** The plan specified pino-pretty as a devDependency for human-readable dev output, but it was not installed. Pino's default JSON output is used; the log viewer UI provides the human-readable view.
+- **Tool configs default to disabled:** Plan implied `is_enabled INTEGER DEFAULT 1` but implementation uses `DEFAULT 0`. Tools must be explicitly enabled in the UI after configuring credentials, which is safer.
+
+**Bugs found and fixed during Phase 5:**
+1. **OpenRouter tool calling broken:** AI SDK Responses API doesn't forward tool definitions properly on OpenRouter. Models received requests but ignored tools, responding with text only. Fix: `provider.chat(modelId)` for OpenRouter forces Chat Completions API.
+2. **Logger crashing LLM streams:** Non-serializable data (Error objects, circular refs) passed to `JSON.stringify` in logging code threw exceptions that propagated into the streaming loop, killing the response mid-stream. Fix: outer try-catch on all log writes + `safeData()` serialization guard.
+3. **Empty messages corrupting conversations:** Empty assistant messages persisted to DB caused all subsequent responses in that conversation to be empty. The LLM saw `{role: "assistant", content: ""}` in history and mirrored the pattern. Fix: skip persistence when content is empty, send user error instead.
+4. **Default log levels too restrictive:** Initial defaults (user=low, dev=silent) hid almost all logs from the viewer. Fix: changed defaults to medium/debug, added migration to update existing _default rows.
+
+**Principles discovered:**
+- **Logging is a critical system, not an afterthought.** It must be designed early and never be allowed to affect the systems it observes (crash-proof, performance-neutral).
+- **Don't persist empty/invalid LLM outputs.** Validate before writing to conversation history. Bad data in history compounds — the LLM uses it as context for future responses.
+- **Provider-specific API quirks need centralized handling.** Different providers have different API requirements (Responses API vs Chat Completions). Centralize provider-specific logic in one place (`getActiveProvider()`) rather than scattering it across call sites.
+- **Retry with degraded capabilities beats failure.** When a model can't handle tools, retry without them rather than returning an error. The user gets a response (even without tool use) instead of nothing.
+
+**Handy for later phases:**
+- **Adding new tools:** Create folder in `tools/` with `manifest.json`, `prompt.md`, `index.ts`. Server scans on startup. Enable in Settings → Tools UI.
+- **Testing tools:** Enable a tool in Settings, start a chat, and ask the model to use it. Check `/logs` for `agent` and `tools` area entries to trace the full tool call lifecycle.
+- **Log viewer:** Navigate to `/logs`. Live mode streams new entries via WS. Filter by axis tab, area dropdown, or search. Configure per-area verbosity in the Log Configuration card.
+- **Debugging empty responses:** Check logs for "Model returned nothing" or "Model returned empty response" messages. These indicate the model doesn't support the offered capabilities.
+- **curl for logs API:**
+  ```bash
+  curl http://localhost:3001/api/logs
+  curl http://localhost:3001/api/logs/areas
+  curl http://localhost:3001/api/logs/configs
+  curl -X PUT http://localhost:3001/api/logs/configs/agent -H "Content-Type: application/json" -d '{"userLevel":"high","devLevel":"verbose"}'
+  ```
 
 ### Phase 6: Task Scheduler
 
