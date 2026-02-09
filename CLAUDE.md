@@ -72,14 +72,18 @@ All intelligence lives in the remote LLM. Talos is a "dumb relay + local executo
 
 ## Implementation Status
 
-**Phase 2 complete.** See plan file for Phase 3-7 details.
+**Phase 4 complete.** See plan file for Phase 5-7 details.
 
 Current state:
-- Basic Express server with health endpoint
-- Full UI shell: collapsible sidebar, chat area with controlled input, settings page, routing
+- Express server with SQLite (Drizzle ORM), provider/model CRUD, conversation CRUD, SOUL.md API
+- WebSocket server attached to HTTP server — handles chat streaming with AbortController support
+- Agent core: loads active provider → system prompt → conversation history → streams via Vercel AI SDK
+- Full UI shell: collapsible sidebar, chat area with message rendering, settings page, routing
+- Chat messages stream in real-time via WebSocket with placeholder → final ID swap
+- Conversation list in sidebar with new chat, switching, delete
+- SOUL.md editor in settings (load/save)
 - TalosOrb animated component with sleep/idle/turbo states
-- Shared types package linked to web app (InboxItem, Message, Conversation, WebSocket protocol types)
-- Zustand stores: useChatStore, useInboxStore, useConnectionStore
+- Zustand stores: useChatStore (with conversation management), useInboxStore, useConnectionStore (with WS send), useProviderStore
 - WebSocket hook with auto-reconnect (gracefully handles server not running)
 - Inbox UI with mock data (unread badges, read/unread dots, type icons, relative timestamps)
 - Connection status indicator in sidebar footer

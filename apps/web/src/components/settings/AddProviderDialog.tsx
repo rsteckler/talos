@@ -24,6 +24,7 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
   google: "Google",
+  openrouter: "OpenRouter",
 }
 
 interface AddProviderDialogProps {
@@ -98,6 +99,7 @@ export function AddProviderDialog({ open, onOpenChange }: AddProviderDialogProps
                 <SelectItem value="openai">OpenAI</SelectItem>
                 <SelectItem value="anthropic">Anthropic</SelectItem>
                 <SelectItem value="google">Google</SelectItem>
+                <SelectItem value="openrouter">OpenRouter</SelectItem>
               </SelectContent>
             </Select>
           </div>

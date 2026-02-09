@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: phase-4
     content: "Phase 4: Chat Implementation - Vercel AI SDK integration, WebSocket streaming, conversation persistence, SOUL.md integration"
-    status: pending
+    status: completed
   - id: phase-5
     content: "Phase 5: Tool System - Manifest loader, tool runner, bundled tools (shell, web-search), tool config UI"
     status: pending
@@ -32,7 +32,7 @@ isProject: false
 
 Talos is a self-hosted AI agent that acts as your "chief of staff." It supports bring-your-own-key (BYOK) model providers, scheduled/triggered tasks, and extensible tools. The user interacts via chat (sync) and receives results via an inbox (async).
 
-**Progress:** Phase 3 complete. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
+**Progress:** Phase 4 complete. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
 
 ---
 
@@ -708,6 +708,36 @@ interface InboxUpdate {
 - Add conversation history/switching
 - Load SOUL.md as system prompt
 - Add SOUL.md editor in settings
+
+#### Phase 4 Implementation Notes
+
+**What was built:**
+- **Server dependencies:** `ws`, `ai`, `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/google`, `@types/ws`
+- **Database tables:** `conversations` (id, title, created_at, updated_at) and `messages` (id, conversation_id FK cascade, role, content, created_at)
+- **LLM provider adapter** (`apps/server/src/providers/llm.ts`): `createLLMProvider()`, `getActiveProvider()`, `loadSystemPrompt()`, `readSoulFile()`, `writeSoulFile()`
+- **Agent core** (`apps/server/src/agent/core.ts`): `streamChat()` - loads active provider, system prompt, conversation history, persists messages, streams via Vercel AI SDK `streamText()`
+- **WebSocket server** (`apps/server/src/ws/index.ts`): `attachWebSocket(server)` - handles `chat` and `cancel` message types, per-connection AbortControllers, sends status/chunk/end/error messages
+- **REST API:** Conversation CRUD (`/api/conversations`), SOUL.md read/write (`/api/agent/soul`)
+- **Server entry point:** Changed to `http.createServer(app)` + `attachWebSocket(server)`, mounted conversation and soul routers
+- **Vite WS proxy:** Added `/ws` proxy to `ws://localhost:3001`
+- **Frontend API clients:** `conversationsApi` and `soulApi`
+- **useChatStore:** Full conversation management (fetch, create, load, delete, setMessages, clearMessages, updateMessageId)
+- **useWebSocket:** Streaming message handling with placeholder assistant messages, error handling, send function registered to connection store
+- **useConnectionStore:** Added `sendFn`/`setSendFn`/`send` so ChatArea can send WS messages without prop drilling
+- **ChatArea:** Message rendering with auto-scroll, "no provider" state, conversation auto-creation on first message, streaming indicator
+- **MessageBubble:** User/assistant message display with role icons and styling
+- **ConversationsSection:** Sidebar conversation list with new chat, switching, delete, active highlighting
+- **SOUL.md editor:** In SettingsPage, replaces Notifications placeholder - textarea with load/save/error states
+- **Shared types:** Added `error` variant to `ServerMessage`
+
+**Key decisions:**
+- AI SDK now uses `ModelMessage` instead of `CoreMessage` (API changed in recent versions)
+- `send` function exposed via `useConnectionStore.sendFn` rather than context/props - avoids threading through component tree
+- Streaming creates a placeholder assistant message on first chunk, then appends; on `end`, replaces the placeholder ID with the real DB ID
+- Conversation auto-created on first message with title derived from message content (truncated to 50 chars)
+
+**Pre-existing issues (not introduced by Phase 4):**
+- `TalosOrb.tsx` still has uninitialized variable and ref type errors from Phase 2 - doesn't affect Vite dev or Vite build, only fails strict `tsc -b`
 
 ### Phase 5: Tool System
 

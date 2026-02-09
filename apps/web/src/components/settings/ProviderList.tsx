@@ -10,6 +10,7 @@ const TYPE_COLORS: Record<string, string> = {
   openai: "bg-green-600/20 text-green-400 border-green-600/30",
   anthropic: "bg-orange-600/20 text-orange-400 border-orange-600/30",
   google: "bg-blue-600/20 text-blue-400 border-blue-600/30",
+  openrouter: "bg-purple-600/20 text-purple-400 border-purple-600/30",
 }
 
 export function ProviderList() {

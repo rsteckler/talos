@@ -39,7 +39,7 @@ export interface Conversation {
 
 // --- Providers & Models ---
 
-export type ProviderType = "openai" | "anthropic" | "google";
+export type ProviderType = "openai" | "anthropic" | "google" | "openrouter";
 
 export interface Provider {
   id: string;
@@ -94,6 +94,7 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: "chunk"; conversationId: string; content: string }
   | { type: "end"; conversationId: string; messageId: string }
+  | { type: "error"; conversationId?: string; error: string }
   | { type: "tool_call"; conversationId: string; toolName: string; args: Record<string, unknown> }
   | { type: "tool_result"; conversationId: string; toolName: string; result: unknown }
   | { type: "status"; status: AgentStatus }

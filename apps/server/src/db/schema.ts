@@ -3,7 +3,7 @@ import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 export const providers = sqliteTable("providers", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  type: text("type", { enum: ["openai", "anthropic", "google"] }).notNull(),
+  type: text("type", { enum: ["openai", "anthropic", "google", "openrouter"] }).notNull(),
   apiKey: text("api_key").notNull(),
   baseUrl: text("base_url"),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
@@ -18,5 +18,22 @@ export const models = sqliteTable("models", {
   modelId: text("model_id").notNull(),
   displayName: text("display_name").notNull(),
   isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+export const conversations = sqliteTable("conversations", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const messages = sqliteTable("messages", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  role: text("role", { enum: ["user", "assistant", "system"] }).notNull(),
+  content: text("content").notNull(),
   createdAt: text("created_at").notNull(),
 });

@@ -79,6 +79,10 @@ export function useWebSocket() {
   }, [])
 
   useEffect(() => {
+    useConnectionStore.getState().setSendFn(send)
+  }, [send])
+
+  useEffect(() => {
     connect()
     return () => {
       if (reconnectTimerRef.current) {
@@ -91,13 +95,44 @@ export function useWebSocket() {
   return { send }
 }
 
+// Track the placeholder message ID for the currently streaming assistant response
+let streamingPlaceholderId: string | null = null
+
 function handleMessage(message: ServerMessage) {
+  const store = useChatStore.getState()
+
   switch (message.type) {
-    case "chunk":
-      useChatStore.getState().appendToLastMessage(message.content)
+    case "chunk": {
+      if (!streamingPlaceholderId) {
+        // Create a placeholder assistant message for streaming
+        streamingPlaceholderId = `streaming-${crypto.randomUUID()}`
+        store.addMessage({
+          id: streamingPlaceholderId,
+          conversationId: message.conversationId,
+          role: "assistant",
+          content: message.content,
+          created_at: new Date().toISOString(),
+        })
+        store.setStreaming(true)
+      } else {
+        store.appendToLastMessage(message.content)
+      }
       break
+    }
     case "end":
-      useChatStore.getState().setStreaming(false)
+      if (streamingPlaceholderId) {
+        store.updateMessageId(streamingPlaceholderId, message.messageId)
+        streamingPlaceholderId = null
+      }
+      store.setStreaming(false)
+      break
+    case "error":
+      if (streamingPlaceholderId) {
+        // Append the error to the streaming message
+        store.appendToLastMessage(`\n\n[Error: ${message.error}]`)
+        streamingPlaceholderId = null
+      }
+      store.setStreaming(false)
       break
     case "inbox":
       useInboxStore.getState().addItem(message.item)

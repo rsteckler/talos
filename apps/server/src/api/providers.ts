@@ -43,7 +43,7 @@ function seedModels(providerId: string, providerType: string): void {
 
 const createProviderSchema = z.object({
   name: z.string().min(1),
-  type: z.enum(["openai", "anthropic", "google"]),
+  type: z.enum(["openai", "anthropic", "google", "openrouter"]),
   apiKey: z.string().min(1),
   baseUrl: z.string().url().optional(),
 });

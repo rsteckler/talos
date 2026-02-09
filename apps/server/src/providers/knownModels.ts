@@ -23,4 +23,14 @@ export const KNOWN_MODELS: Record<string, KnownModel[]> = {
     { modelId: "gemini-1.5-pro", displayName: "Gemini 1.5 Pro" },
     { modelId: "gemini-1.5-flash", displayName: "Gemini 1.5 Flash" },
   ],
+  openrouter: [
+    { modelId: "anthropic/claude-sonnet-4", displayName: "Claude Sonnet 4" },
+    { modelId: "anthropic/claude-3.5-sonnet", displayName: "Claude 3.5 Sonnet" },
+    { modelId: "openai/gpt-4o", displayName: "GPT-4o" },
+    { modelId: "openai/gpt-4o-mini", displayName: "GPT-4o Mini" },
+    { modelId: "google/gemini-2.0-flash-001", displayName: "Gemini 2.0 Flash" },
+    { modelId: "meta-llama/llama-3.3-70b-instruct", displayName: "Llama 3.3 70B" },
+    { modelId: "deepseek/deepseek-chat", displayName: "DeepSeek V3" },
+    { modelId: "mistralai/mistral-large", displayName: "Mistral Large" },
+  ],
 };

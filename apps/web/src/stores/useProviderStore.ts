@@ -10,7 +10,7 @@ interface ProviderState {
   error: string | null;
 
   fetchProviders: () => Promise<void>;
-  addProvider: (data: { name: string; type: "openai" | "anthropic" | "google"; apiKey: string; baseUrl?: string }) => Promise<void>;
+  addProvider: (data: { name: string; type: "openai" | "anthropic" | "google" | "openrouter"; apiKey: string; baseUrl?: string }) => Promise<void>;
   removeProvider: (id: string) => Promise<void>;
   fetchModels: (providerId: string) => Promise<void>;
   refreshModels: (providerId: string) => Promise<void>;
