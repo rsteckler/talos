@@ -72,10 +72,14 @@ All intelligence lives in the remote LLM. Talos is a "dumb relay + local executo
 
 ## Implementation Status
 
-**Phase 1 complete.** See plan file for Phase 2-7 details.
+**Phase 2 complete.** See plan file for Phase 3-7 details.
 
 Current state:
 - Basic Express server with health endpoint
-- Vite + React + Tailwind scaffolding with shadcn CSS variable setup
-- Empty placeholder directories for future components
-- Shared types package (not yet linked to apps)
+- Full UI shell: collapsible sidebar, chat area with controlled input, settings page, routing
+- TalosOrb animated component with sleep/idle/turbo states
+- Shared types package linked to web app (InboxItem, Message, Conversation, WebSocket protocol types)
+- Zustand stores: useChatStore, useInboxStore, useConnectionStore
+- WebSocket hook with auto-reconnect (gracefully handles server not running)
+- Inbox UI with mock data (unread badges, read/unread dots, type icons, relative timestamps)
+- Connection status indicator in sidebar footer

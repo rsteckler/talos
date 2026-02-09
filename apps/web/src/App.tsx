@@ -1,27 +1,45 @@
+import { useEffect } from "react"
 import { BrowserRouter, Routes, Route } from "react-router-dom"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { SettingsProvider } from "@/contexts/SettingsContext"
 import { OrbProvider } from "@/contexts/OrbContext"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { SettingsPage } from "@/pages/SettingsPage"
+import { useWebSocket } from "@/hooks/useWebSocket"
+import { useInboxStore } from "@/stores"
+import { mockInboxItems } from "@/lib/mockData"
+
+function AppContent() {
+  const setItems = useInboxStore((s) => s.setItems)
+
+  useEffect(() => {
+    setItems(mockInboxItems)
+  }, [setItems])
+
+  useWebSocket()
+
+  return (
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <OrbProvider>
+            <SidebarProvider>
+              <AppLayout />
+            </SidebarProvider>
+          </OrbProvider>
+        }
+      />
+      <Route path="/settings" element={<SettingsPage />} />
+    </Routes>
+  )
+}
 
 function App() {
   return (
     <SettingsProvider>
       <BrowserRouter>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <OrbProvider>
-                <SidebarProvider>
-                  <AppLayout />
-                </SidebarProvider>
-              </OrbProvider>
-            }
-          />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
+        <AppContent />
       </BrowserRouter>
     </SettingsProvider>
   )

@@ -1,10 +1,32 @@
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { useOrb } from "@/contexts/OrbContext"
-import { Moon, Circle, Zap, Shuffle } from "lucide-react"
+import { useChatStore } from "@/stores"
+import { Moon, Circle, Zap, Shuffle, Send } from "lucide-react"
+import type { FormEvent } from "react"
 
 export function ChatArea() {
   const orbRef = useOrb()
+  const inputValue = useChatStore((s) => s.inputValue)
+  const setInputValue = useChatStore((s) => s.setInputValue)
+  const clearInput = useChatStore((s) => s.clearInput)
+  const addMessage = useChatStore((s) => s.addMessage)
+  const isStreaming = useChatStore((s) => s.isStreaming)
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const trimmed = inputValue.trim()
+    if (!trimmed || isStreaming) return
+
+    addMessage({
+      id: crypto.randomUUID(),
+      conversationId: "default",
+      role: "user",
+      content: trimmed,
+      created_at: new Date().toISOString(),
+    })
+    clearInput()
+  }
 
   return (
     <div className="flex h-full flex-col bg-black">
@@ -53,16 +75,23 @@ export function ChatArea() {
           </div>
         </div>
         <div className="border-t border-zinc-800 p-4 bg-zinc-950/50">
-          <div className="flex gap-2">
+          <form onSubmit={handleSubmit} className="flex gap-2">
             <input
               type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               placeholder="Message Talos..."
               className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 ring-offset-background placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             />
-            <button className="inline-flex h-10 items-center justify-center rounded-md bg-cyan-600 px-4 py-2 text-sm font-medium text-white ring-offset-background transition-colors hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || isStreaming}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-cyan-600 px-4 py-2 text-sm font-medium text-white ring-offset-background transition-colors hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send className="size-4" />
               Send
             </button>
-          </div>
+          </form>
         </div>
       </div>
     </div>
