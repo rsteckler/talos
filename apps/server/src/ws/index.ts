@@ -84,6 +84,16 @@ function handleChat(
       sendMessage(ws, { type: "status", status: "idle" });
     },
     signal: controller.signal,
+  }).catch((err: unknown) => {
+    // Safety net for any unhandled rejection in streamChat
+    console.error("[WS] Unhandled streamChat error:", err);
+    abortControllers.delete(conversationId);
+    sendMessage(ws, {
+      type: "error",
+      conversationId,
+      error: err instanceof Error ? err.message : "Internal server error",
+    });
+    sendMessage(ws, { type: "status", status: "idle" });
   });
 }
 

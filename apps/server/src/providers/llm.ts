@@ -12,6 +12,36 @@ const SOUL_PATH = path.join(__dirname, "..", "..", "data", "SOUL.md");
 
 type ProviderRow = typeof schema.providers.$inferSelect;
 
+/**
+ * Fetch middleware for OpenRouter's Responses API.
+ * The AI SDK sends assistant history items as `{ role: "assistant", content: [...] }`
+ * but OpenRouter requires `{ type: "message", role: "assistant", id: "...", status: "completed", content: [...] }`.
+ */
+const openRouterResponsesFetch: typeof globalThis.fetch = async (url, init) => {
+  if (init?.method === "POST" && String(url).includes("/responses")) {
+    try {
+      const body = JSON.parse(init.body as string);
+      if (Array.isArray(body.input)) {
+        body.input = body.input.map((item: Record<string, unknown>, i: number) => {
+          if (item["role"] === "assistant" && !item["type"]) {
+            return {
+              type: "message",
+              ...item,
+              id: item["id"] ?? `hist_${i}_${Date.now()}`,
+              status: "completed",
+            };
+          }
+          return item;
+        });
+        init = { ...init, body: JSON.stringify(body) };
+      }
+    } catch {
+      // pass through on parse failure
+    }
+  }
+  return globalThis.fetch(url, init);
+};
+
 export function createLLMProvider(row: ProviderRow) {
   const opts = {
     apiKey: row.apiKey,
@@ -29,6 +59,7 @@ export function createLLMProvider(row: ProviderRow) {
       return createOpenAI({
         apiKey: row.apiKey,
         baseURL: row.baseUrl || "https://openrouter.ai/api/v1",
+        fetch: openRouterResponsesFetch,
       });
     default:
       throw new Error(`Unknown provider type: ${row.type}`);

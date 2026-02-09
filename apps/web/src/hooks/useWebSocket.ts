@@ -52,6 +52,10 @@ export function useWebSocket() {
       }
 
       ws.onclose = () => {
+        // Only act if this is still the active WebSocket.
+        // In React StrictMode, the cleanup closes the first WS and
+        // its async onclose must not clobber the replacement.
+        if (wsRef.current !== ws) return
         console.log("[WebSocket] Disconnected")
         wsRef.current = null
         scheduleReconnect()
@@ -131,6 +135,15 @@ function handleMessage(message: ServerMessage) {
         // Append the error to the streaming message
         store.appendToLastMessage(`\n\n[Error: ${message.error}]`)
         streamingPlaceholderId = null
+      } else {
+        // Error arrived before any chunks — show as a visible error message
+        store.addMessage({
+          id: `error-${crypto.randomUUID()}`,
+          conversationId: message.conversationId ?? "",
+          role: "assistant",
+          content: `[Error: ${message.error}]`,
+          created_at: new Date().toISOString(),
+        })
       }
       store.setStreaming(false)
       break
@@ -138,7 +151,7 @@ function handleMessage(message: ServerMessage) {
       useInboxStore.getState().addItem(message.item)
       break
     case "status":
-      // Could dispatch to an agent status store in the future
+      useConnectionStore.getState().setAgentStatus(message.status)
       break
     case "tool_call":
     case "tool_result":

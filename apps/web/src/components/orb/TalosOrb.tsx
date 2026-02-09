@@ -106,6 +106,8 @@ export interface TalosOrbRef {
 export interface TalosOrbProps {
   /** Initial config (optional) */
   initialConfig?: Partial<OrbConfig>
+  /** Initial state - 'idle' (default, colorful) or 'sleep' (gray, slow) */
+  initialState?: OrbState
   /** Show the control panel */
   showControls?: boolean
   /** Show the state buttons (sleep/idle/turbo) */
@@ -116,21 +118,46 @@ export interface TalosOrbProps {
   onStateChange?: (state: OrbState) => void
 }
 
+const SLEEP_VISUAL: Partial<OrbConfig> = {
+  orbPrimaryColor: '#888888',
+  orbSecondaryColor: '#888888',
+  orbTertiaryColor: '#888888',
+  glowColor: '#888888',
+  ringPrimaryColor: '#888888',
+  ringSecondaryColor: '#888888',
+  cometPrimaryColor: '#888888',
+  cometSecondaryColor: '#888888',
+  animationScale: 0.03,
+}
+
 export const TalosOrb = forwardRef<TalosOrbRef, TalosOrbProps>(({
   initialConfig,
+  initialState = 'idle',
   showControls = false,
   showStateButtons = false,
   className,
   onStateChange,
 }, ref) => {
-  const [config, setConfig] = useState<Partial<OrbConfig>>(() => initialConfig || randomConfig())
+  // Generate full config once (random colors + user overrides) so both
+  // the display config and the stored idle config share the same palette
+  const [baseConfig] = useState(() => ({ ...randomConfig(), ...initialConfig }))
+
+  const [config, setConfig] = useState<Partial<OrbConfig>>(() => {
+    if (initialState === 'sleep') {
+      return { ...baseConfig, ...SLEEP_VISUAL }
+    }
+    return baseConfig
+  })
   const [showParams, setShowParams] = useState(true)
-  const [orbState, setOrbState] = useState<OrbState>('idle')
+  const [orbState, setOrbState] = useState<OrbState>(initialState)
 
   const configRef = useRef(config)
   configRef.current = config
 
-  const idleConfigRef = useRef<Partial<OrbConfig> | null>(null)
+  // When starting in sleep, store the colorful config so idle() can restore it
+  const idleConfigRef = useRef<Partial<OrbConfig> | null>(
+    initialState === 'sleep' ? baseConfig : null
+  )
   const animationRef = useRef<number | null>(null)
 
   // Constants

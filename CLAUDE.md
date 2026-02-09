@@ -24,6 +24,9 @@ pnpm dev:web      # http://localhost:5173
 # Build all packages
 pnpm build
 
+# Typecheck all packages (no emit)
+pnpm typecheck
+
 # Clean all dist and node_modules
 pnpm clean
 

@@ -1,6 +1,9 @@
+import { useEffect, useRef } from "react"
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar"
 import { TalosOrb as AnimatedOrb } from "@/components/orb/TalosOrb"
 import { useOrb } from "@/contexts/OrbContext"
+import { useConnectionStore } from "@/stores"
+import type { AgentStatus } from "@talos/shared/types"
 
 const sidebarOrbConfig = {
   size: 200,
@@ -13,6 +16,25 @@ const sidebarOrbConfig = {
 
 export function TalosOrb() {
   const orbRef = useOrb()
+  const agentStatus = useConnectionStore((s) => s.agentStatus)
+  const prevStatusRef = useRef<AgentStatus>("idle")
+
+  useEffect(() => {
+    const orb = orbRef.current
+    if (!orb || agentStatus === prevStatusRef.current) return
+    prevStatusRef.current = agentStatus
+
+    switch (agentStatus) {
+      case "idle":
+        orb.sleep()
+        break
+      case "thinking":
+      case "responding":
+      case "tool_calling":
+        orb.idle()
+        break
+    }
+  }, [agentStatus, orbRef])
 
   return (
     <SidebarMenu>
@@ -36,7 +58,7 @@ export function TalosOrb() {
                 top: '50%',
               }}
             >
-              <AnimatedOrb ref={orbRef} initialConfig={sidebarOrbConfig} />
+              <AnimatedOrb ref={orbRef} initialConfig={sidebarOrbConfig} initialState="sleep" />
             </div>
           </div>
           <div className="ml-auto flex flex-col gap-0.5 leading-none text-right">

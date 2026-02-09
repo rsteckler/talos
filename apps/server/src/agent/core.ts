@@ -26,45 +26,44 @@ export async function streamChat(
 
   const systemPrompt = loadSystemPrompt();
 
-  // Load conversation history
-  const historyRows = db
-    .select()
-    .from(schema.messages)
-    .where(eq(schema.messages.conversationId, conversationId))
-    .orderBy(asc(schema.messages.createdAt))
-    .all();
-
-  const history: ModelMessage[] = historyRows.map((row) => ({
-    role: row.role as "user" | "assistant",
-    content: row.content,
-  }));
-
-  // Persist user message
-  const userMsgId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  db.insert(schema.messages)
-    .values({
-      id: userMsgId,
-      conversationId,
-      role: "user",
-      content: userContent,
-      createdAt: now,
-    })
-    .run();
-
-  // Update conversation updated_at
-  db.update(schema.conversations)
-    .set({ updatedAt: now })
-    .where(eq(schema.conversations.id, conversationId))
-    .run();
-
-  // Build messages array for the LLM
-  const messages: ModelMessage[] = [
-    ...history,
-    { role: "user", content: userContent },
-  ];
-
   try {
+    // Load conversation history
+    const historyRows = db
+      .select()
+      .from(schema.messages)
+      .where(eq(schema.messages.conversationId, conversationId))
+      .orderBy(asc(schema.messages.createdAt))
+      .all();
+
+    const history: ModelMessage[] = historyRows.map((row) => ({
+      role: row.role as "user" | "assistant",
+      content: row.content,
+    }));
+
+    // Persist user message
+    const userMsgId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    db.insert(schema.messages)
+      .values({
+        id: userMsgId,
+        conversationId,
+        role: "user",
+        content: userContent,
+        createdAt: now,
+      })
+      .run();
+
+    // Update conversation updated_at
+    db.update(schema.conversations)
+      .set({ updatedAt: now })
+      .where(eq(schema.conversations.id, conversationId))
+      .run();
+
+    // Build messages array for the LLM
+    const messages: ModelMessage[] = [
+      ...history,
+      { role: "user", content: userContent },
+    ];
     const result = streamText({
       model: active.provider(active.modelId),
       system: systemPrompt,
