@@ -2,8 +2,10 @@ import { request } from "./client";
 import type {
   Provider,
   ProviderCreateRequest,
+  ProviderUpdateRequest,
   Model,
   ActiveModel,
+  CatalogModel,
 } from "@talos/shared/types";
 
 export const providersApi = {
@@ -12,6 +14,12 @@ export const providersApi = {
   create: (data: ProviderCreateRequest) =>
     request<Provider>("/providers", {
       method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: ProviderUpdateRequest) =>
+    request<Provider>(`/providers/${id}`, {
+      method: "PUT",
       body: JSON.stringify(data),
     }),
 
@@ -34,5 +42,14 @@ export const providersApi = {
     request<ActiveModel>("/models/active", {
       method: "PUT",
       body: JSON.stringify({ modelId }),
+    }),
+
+  fetchCatalog: (providerId: string) =>
+    request<CatalogModel[]>(`/providers/${providerId}/models/catalog`),
+
+  setActiveFromCatalog: (providerId: string, catalogModelId: string, displayName: string) =>
+    request<ActiveModel>("/models/active", {
+      method: "PUT",
+      body: JSON.stringify({ providerId, catalogModelId, displayName }),
     }),
 };

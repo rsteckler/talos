@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Provider, Model, ActiveModel } from "@talos/shared/types"
+import type { Provider, Model, ActiveModel, ProviderUpdateRequest } from "@talos/shared/types"
 import { providersApi } from "@/api"
 
 interface ProviderState {
@@ -11,11 +11,13 @@ interface ProviderState {
 
   fetchProviders: () => Promise<void>;
   addProvider: (data: { name: string; type: "openai" | "anthropic" | "google" | "openrouter"; apiKey: string; baseUrl?: string }) => Promise<void>;
+  updateProvider: (id: string, data: ProviderUpdateRequest) => Promise<void>;
   removeProvider: (id: string) => Promise<void>;
   fetchModels: (providerId: string) => Promise<void>;
   refreshModels: (providerId: string) => Promise<void>;
   fetchActiveModel: () => Promise<void>;
   setActiveModel: (modelId: string) => Promise<void>;
+  setActiveModelFromCatalog: (providerId: string, catalogModelId: string, displayName: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -50,6 +52,19 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       throw e;
     } finally {
       set({ isLoading: false });
+    }
+  },
+
+  updateProvider: async (id, data) => {
+    set({ error: null });
+    try {
+      const updated = await providersApi.update(id, data);
+      set((s) => ({
+        providers: s.providers.map((p) => (p.id === id ? updated : p)),
+      }));
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to update provider" });
+      throw e;
     }
   },
 
@@ -120,6 +135,17 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         }
         return { modelsByProvider: updated };
       });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to set active model" });
+    }
+  },
+
+  setActiveModelFromCatalog: async (providerId, catalogModelId, displayName) => {
+    try {
+      const activeModel = await providersApi.setActiveFromCatalog(providerId, catalogModelId, displayName);
+      set({ activeModel });
+      // Refresh models for this provider since a new one may have been inserted
+      await get().fetchModels(providerId);
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to set active model" });
     }

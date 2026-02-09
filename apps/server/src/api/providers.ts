@@ -3,6 +3,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { KNOWN_MODELS } from "../providers/knownModels.js";
+import { fetchModelCatalog } from "../providers/catalogFetcher.js";
 import type { Provider } from "@talos/shared";
 
 const router = Router();
@@ -48,9 +49,20 @@ const createProviderSchema = z.object({
   baseUrl: z.string().url().optional(),
 });
 
-const setActiveModelSchema = z.object({
-  modelId: z.string().min(1),
+const updateProviderSchema = z.object({
+  name: z.string().min(1).optional(),
+  apiKey: z.string().min(1).optional(),
+  baseUrl: z.string().url().nullish(),
 });
+
+const setActiveModelSchema = z.union([
+  z.object({ modelId: z.string().min(1) }),
+  z.object({
+    providerId: z.string().min(1),
+    catalogModelId: z.string().min(1),
+    displayName: z.string().min(1),
+  }),
+]);
 
 // --- Routes ---
 
@@ -106,6 +118,59 @@ router.delete("/providers/:id", (req, res) => {
 
   db.delete(schema.providers).where(eq(schema.providers.id, id!)).run();
   res.json({ data: { success: true } });
+});
+
+// PUT /api/providers/:id
+router.put("/providers/:id", (req, res) => {
+  const { id } = req.params;
+  const existing = db.select().from(schema.providers).where(eq(schema.providers.id, id!)).get();
+  if (!existing) {
+    res.status(404).json({ error: "Provider not found" });
+    return;
+  }
+
+  const parsed = updateProviderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request" });
+    return;
+  }
+
+  const updates: Partial<Pick<typeof schema.providers.$inferInsert, "name" | "apiKey" | "baseUrl">> = {};
+  if (parsed.data.name !== undefined) updates.name = parsed.data.name;
+  if (parsed.data.apiKey !== undefined) updates.apiKey = parsed.data.apiKey;
+  if (parsed.data.baseUrl !== undefined) updates.baseUrl = parsed.data.baseUrl ?? null;
+
+  if (Object.keys(updates).length > 0) {
+    db.update(schema.providers)
+      .set(updates)
+      .where(eq(schema.providers.id, id!))
+      .run();
+  }
+
+  const updated = db.select().from(schema.providers).where(eq(schema.providers.id, id!)).get();
+  if (!updated) {
+    res.status(500).json({ error: "Failed to update provider" });
+    return;
+  }
+
+  res.json({ data: toProviderResponse(updated) });
+});
+
+// GET /api/providers/:id/models/catalog
+router.get("/providers/:id/models/catalog", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const existing = db.select().from(schema.providers).where(eq(schema.providers.id, id!)).get();
+    if (!existing) {
+      res.status(404).json({ error: "Provider not found" });
+      return;
+    }
+
+    const catalog = await fetchModelCatalog(existing);
+    res.json({ data: catalog });
+  } catch (e) {
+    next(e);
+  }
 });
 
 // GET /api/providers/:id/models
@@ -182,11 +247,47 @@ router.put("/models/active", (req, res) => {
     return;
   }
 
-  const { modelId } = parsed.data;
-  const model = db.select().from(schema.models).where(eq(schema.models.id, modelId)).get();
-  if (!model) {
-    res.status(404).json({ error: "Model not found" });
-    return;
+  let targetModelId: string;
+
+  if ("modelId" in parsed.data) {
+    // Existing model by DB id
+    const model = db.select().from(schema.models).where(eq(schema.models.id, parsed.data.modelId)).get();
+    if (!model) {
+      res.status(404).json({ error: "Model not found" });
+      return;
+    }
+    targetModelId = model.id;
+  } else {
+    // Catalog model — find or create
+    const { providerId, catalogModelId, displayName } = parsed.data;
+    const provider = db.select().from(schema.providers).where(eq(schema.providers.id, providerId)).get();
+    if (!provider) {
+      res.status(404).json({ error: "Provider not found" });
+      return;
+    }
+
+    // Check if this model already exists for this provider
+    const existing = db.select().from(schema.models).all()
+      .find((m) => m.providerId === providerId && m.modelId === catalogModelId);
+
+    if (existing) {
+      targetModelId = existing.id;
+    } else {
+      // Insert the new model
+      const newId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      db.insert(schema.models)
+        .values({
+          id: newId,
+          providerId,
+          modelId: catalogModelId,
+          displayName,
+          isDefault: false,
+          createdAt: now,
+        })
+        .run();
+      targetModelId = newId;
+    }
   }
 
   // Clear all defaults
@@ -194,18 +295,17 @@ router.put("/models/active", (req, res) => {
   // Set the new default
   db.update(schema.models)
     .set({ isDefault: true })
-    .where(eq(schema.models.id, modelId))
+    .where(eq(schema.models.id, targetModelId))
     .run();
 
-  const provider = db
-    .select()
-    .from(schema.providers)
-    .where(eq(schema.providers.id, model.providerId))
-    .get();
+  const model = db.select().from(schema.models).where(eq(schema.models.id, targetModelId)).get();
+  const provider = model
+    ? db.select().from(schema.providers).where(eq(schema.providers.id, model.providerId)).get()
+    : null;
 
   res.json({
     data: {
-      model: { ...model, isDefault: true },
+      model: model ? { ...model, isDefault: true } : null,
       provider: provider ? toProviderResponse(provider) : null,
     },
   });

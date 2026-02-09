@@ -57,6 +57,17 @@ export interface ProviderCreateRequest {
   baseUrl?: string;
 }
 
+export interface ProviderUpdateRequest {
+  name?: string;
+  apiKey?: string;
+  baseUrl?: string | null;
+}
+
+export interface CatalogModel {
+  modelId: string;
+  displayName: string;
+}
+
 export interface Model {
   id: string;
   providerId: string;
