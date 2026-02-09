@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { MessageSquare, Wrench, Settings, ScrollText } from "lucide-react"
+import { Settings, ScrollText } from "lucide-react"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -10,14 +10,6 @@ import {
 import { ConnectionStatus } from "@/components/sidebar/ConnectionStatus"
 
 const navItems = [
-  {
-    title: "Chat History",
-    icon: MessageSquare,
-  },
-  {
-    title: "Tools",
-    icon: Wrench,
-  },
   {
     title: "Logs",
     icon: ScrollText,

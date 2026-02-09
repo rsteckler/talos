@@ -7,7 +7,9 @@
     "dev": "pnpm run --parallel dev",
     "dev:server": "pnpm --filter @talos/server dev",
     "dev:web": "pnpm --filter @talos/web dev",
+    "dev:docs": "pnpm --filter @talos/docs dev",
     "build": "pnpm -r run build",
+    "build:docs": "pnpm --filter @talos/docs build",
     "typecheck": "pnpm -r run typecheck",
     "clean": "pnpm -r exec rm -rf dist node_modules && rm -rf node_modules dist"
   },

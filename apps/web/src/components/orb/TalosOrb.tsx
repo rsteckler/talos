@@ -37,8 +37,8 @@ function generateHarmoniousPalette(mode?: HarmonyMode): ColorPalette {
   const modes: HarmonyMode[] = ['complementary', 'analogous']
   const selectedMode = mode || modes[Math.floor(Math.random() * modes.length)]
 
-  let ringHue: number
-  let cometHue: number
+  let ringHue = orbHue
+  let cometHue = orbHue
 
   switch (selectedMode) {
     case 'complementary':
@@ -130,7 +130,7 @@ const SLEEP_VISUAL: Partial<OrbConfig> = {
   animationScale: 0.03,
 }
 
-export const TalosOrb = forwardRef<TalosOrbRef, TalosOrbProps>(({
+export const TalosOrb = forwardRef<TalosOrbRef | null, TalosOrbProps>(({
   initialConfig,
   initialState = 'idle',
   showControls = false,

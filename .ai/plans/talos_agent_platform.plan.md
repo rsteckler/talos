@@ -22,7 +22,7 @@ todos:
     status: completed
   - id: phase-7
     content: "Phase 7: Polish & Docs - Error handling, loading states, Docusaurus setup, user guide"
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -32,7 +32,7 @@ isProject: false
 
 Talos is a self-hosted AI agent that acts as your "chief of staff." It supports bring-your-own-key (BYOK) model providers, scheduled/triggered tasks, and extensible tools. The user interacts via chat (sync) and receives results via an inbox (async).
 
-**Progress:** Phase 6 complete. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
+**Progress:** Phase 7 complete — all phases done. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
 
 ---
 
@@ -954,6 +954,79 @@ interface InboxUpdate {
 - Mobile responsiveness
 - Set up Docusaurus for documentation
 - Write user guide and tool development guide
+
+#### Phase 7 Implementation Notes
+
+**What was built:**
+- **TypeScript build fixes (`apps/web/src/components/orb/TalosOrb.tsx`):** Fixed two pre-existing errors that blocked `pnpm build` for the web package. (1) `ringHue`/`cometHue` were declared with `let` but no initializer, and the switch had no `default` case — with `noUncheckedIndexedAccess` the mode could be `undefined`, so the variables were potentially uninitialized. Fixed by adding default values (`let ringHue = orbHue`). (2) `forwardRef<TalosOrbRef, TalosOrbProps>` didn't accept `null` but `useOrb()` returns `RefObject<TalosOrbRef | null>`. Fixed by changing the generic to `forwardRef<TalosOrbRef | null, TalosOrbProps>`.
+- **Confirmation dialogs:** Created reusable `ConfirmDialog` component (`apps/web/src/components/ui/confirm-dialog.tsx`) using existing shadcn Dialog primitives. Props: `open`, `onOpenChange`, `title`, `description`, `confirmLabel` (default "Delete"), `onConfirm`. Confirm button uses `variant="destructive"`. Added to four destructive actions:
+  - Delete provider (`ProviderList.tsx`) — `deletingProvider` state, dialog shows provider name
+  - Delete conversation (`ConversationsSection.tsx`) — `deletingConvId` state
+  - Delete task (`TasksSection.tsx`) — `deletingTaskId` state
+  - Purge logs (`LogSettingsPanel.tsx`) — `confirmPurge` state, confirmLabel="Purge"
+- **Loading states:**
+  - Added `isLoading: boolean` to `useInboxStore`. Set true/false around `fetchInbox()` API call.
+  - `FlowSection.tsx`: Shows `Loader2` spinner with "Loading..." when `isLoading && items.length === 0`
+  - `TasksSection.tsx`: Shows spinner during initial fetch, error text if fetch fails. Reads `isLoading` and `error` from store. Added `actionError` state for inline error feedback — `handleDelete` and `handleTrigger` wrapped in try/catch.
+- **Concurrent execution guard (`apps/server/src/scheduler/index.ts`):** Added `runningTasks: Set<string>` at module scope. Cron and interval callbacks check `runningTasks.has(task.id)` before executing — skip with `log.warn("Skipping task — previous run still in progress")` if so. Task ID added to set before execution, removed in `.finally()`. Exposed `isTaskRunning(taskId)` function on the scheduler export.
+- **409 for running tasks (`apps/server/src/api/tasks.ts`):** `POST /api/tasks/:id/run` now calls `scheduler.isTaskRunning(taskId)` and returns `{ error: "Task is already running" }` with status 409 if true.
+- **Cleanup:**
+  - Deleted `apps/web/src/lib/mockData.ts` — confirmed no imports anywhere.
+  - Removed "Chat History" and "Tools" nav items from `NavMenu.tsx` — they had no routes and duplicated sidebar sections. Only "Logs" and "Settings" remain.
+  - `LogToolbar.tsx`: Changed parent div to `flex flex-wrap items-center gap-2`. Changed input/select widths to responsive: `w-full sm:w-48`, `w-full sm:w-32`, `w-full sm:w-28`.
+  - `SettingsPage.tsx`: Added `overflow-x-hidden` to the top-level div.
+- **Docusaurus documentation site (`website/`):** Full site with 16 markdown pages:
+  - `docs/intro.md` — What is Talos, feature overview, architecture diagram
+  - `docs/getting-started/installation.md` — Prerequisites, setup, directory structure
+  - `docs/getting-started/configuration.md` — Providers, SOUL.md, data storage
+  - `docs/getting-started/first-chat.md` — Step-by-step first conversation, orb states
+  - `docs/user-guide/chat.md` — Conversations, streaming, tool calling, cancellation
+  - `docs/user-guide/tasks.md` — Trigger types, cron syntax, webhooks, concurrent guard
+  - `docs/user-guide/inbox.md` — Item types, reading items, API
+  - `docs/user-guide/tools.md` — Bundled tools, enabling, how tools work in chat
+  - `docs/user-guide/settings.md` — All settings sections
+  - `docs/tool-development/overview.md` — Plugin architecture, execution flow
+  - `docs/tool-development/manifest-schema.md` — Full manifest.json reference with examples
+  - `docs/tool-development/handler-functions.md` — index.ts patterns, ToolContext, error handling
+  - `docs/tool-development/prompt-engineering.md` — prompt.md best practices
+  - `docs/tool-development/example-tool.md` — Build a weather tool tutorial
+  - `docs/api-reference/rest-api.md` — All REST endpoints with request/response examples
+  - `docs/api-reference/websocket-protocol.md` — All WS message types with flow diagram
+  - `docs/architecture/overview.md` — System diagram, data flow, tech stack table
+  - `docs/architecture/agent-core.md` — Orchestration loop, design principle
+  - `docs/architecture/database-schema.md` — All 11 tables with columns documented
+  - `docs/architecture/logging-system.md` — Two-axis system, per-area config, auto-pruning
+  - Site config files: `docusaurus.config.ts`, `sidebars.ts`, `src/css/custom.css`, `package.json`, `tsconfig.json`
+- **Root updates:**
+  - `pnpm-workspace.yaml`: Added `"website"` to packages list.
+  - `package.json`: Added `dev:docs` (filters to @talos/docs) and `build:docs` scripts.
+  - `README.md`: Rewrote with current features list, project structure, quick start, dev commands, documentation section.
+
+**Dependencies added (`website/package.json`):**
+- `@docusaurus/core` ^3.7.0 — Framework
+- `@docusaurus/preset-classic` ^3.7.0 — Default preset (docs, blog, theme)
+- `react` ^18.3.1 — Docusaurus peer dependency (separate from apps/web)
+- `react-dom` ^18.3.1 — Docusaurus peer dependency
+- `@docusaurus/module-type-aliases` ^3.7.0 (dev) — TS support
+
+**Key decisions:**
+- **ConfirmDialog built on existing Dialog:** Rather than adding shadcn's AlertDialog component (which would need to be installed), built on top of the existing Dialog primitives already in the project. Same behavior, no new dependency.
+- **Default initialization for TalosOrb vars:** Rather than an exhaustive `default` case (which TypeScript rejects because `noUncheckedIndexedAccess` makes `selectedMode` possibly `undefined`, not `never`), used default initialization `let ringHue = orbHue` which handles both the undefined case and keeps the code clean.
+- **Concurrent guard at scheduler level:** Used a simple `Set<string>` rather than per-task state in the DB. This is sufficient for a single-process server and avoids extra DB writes on every execution check. The set is cleared in `.finally()` so it handles both success and error paths.
+- **Docusaurus as separate workspace:** Added `website` to `pnpm-workspace.yaml` rather than nesting under `apps/`. This keeps docs isolated from the app build pipeline while still being managed by pnpm.
+- **Docs at root route:** Configured Docusaurus with `routeBasePath: "/"` so docs are served at the site root rather than under `/docs`.
+- **No typecheck for website:** Docusaurus module-type-aliases v3.9 doesn't ship a tsconfig.json, and Docusaurus's own type declarations have known issues with pnpm strict node_modules and `esModuleInterop`. Removed `typecheck` script from website package — Docusaurus handles TS compilation internally via its webpack pipeline. The config files (`docusaurus.config.ts`, `sidebars.ts`) are validated at build time.
+
+**Deviations from plan:**
+- **TalosOrb fix approach:** Plan specified adding a `default` case with exhaustive check. Due to `noUncheckedIndexedAccess`, `selectedMode` can be `undefined` (from array index access), making a `never` exhaustive check impossible. Used default variable initialization instead — simpler and handles the same case.
+- **Website typecheck removed:** Plan didn't anticipate Docusaurus type-checking issues with pnpm strict mode. Removed typecheck script rather than fighting upstream type issues.
+
+**Handy for later:**
+- **Running docs locally:** `pnpm dev:docs` starts on port 3002. `pnpm build:docs` generates static files in `website/build/`.
+- **Adding doc pages:** Add a markdown file to `website/docs/`, then update `website/sidebars.ts` to include it in navigation.
+- **Docusaurus config:** `website/docusaurus.config.ts` — dark mode default, docs at root route, no blog.
+- **ConfirmDialog usage:** Import from `@/components/ui/confirm-dialog`. Manage open state externally, pass `onConfirm` callback. Dialog closes itself after confirm via `onOpenChange(false)`.
+- **Checking concurrent tasks:** `scheduler.isTaskRunning(taskId)` returns boolean. The `runningTasks` set is module-level — no persistence across server restarts (tasks resume from scratch on restart).
 
 ---
 

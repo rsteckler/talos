@@ -1,4 +1,4 @@
-import { ChevronRight, Inbox, Bell, ClipboardCheck, Calendar } from "lucide-react"
+import { ChevronRight, Inbox, Bell, ClipboardCheck, Calendar, Loader2 } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -45,6 +45,7 @@ export function FlowSection() {
   const { state } = useSidebar()
   const items = useInboxStore((s) => s.items)
   const unreadCount = useInboxStore((s) => s.unreadCount)
+  const isLoading = useInboxStore((s) => s.isLoading)
   const markAsRead = useInboxStore((s) => s.markAsRead)
 
   if (state === "collapsed") {
@@ -84,7 +85,14 @@ export function FlowSection() {
         <CollapsibleContent>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.length === 0 ? (
+              {isLoading && items.length === 0 ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton>
+                    <Loader2 className="size-4 animate-spin" />
+                    <span className="text-muted-foreground">Loading...</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : items.length === 0 ? (
                 <SidebarMenuItem>
                   <SidebarMenuButton>
                     <span className="text-muted-foreground">Inbox empty</span>

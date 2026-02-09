@@ -52,7 +52,7 @@ export function SettingsPage() {
   }, [soulContent])
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen overflow-x-hidden bg-background">
       <header className="border-b">
         <div className="container flex h-14 items-center gap-4 px-4">
           <Button variant="ghost" size="icon" asChild>

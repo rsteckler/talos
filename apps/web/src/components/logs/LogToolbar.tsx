@@ -47,14 +47,14 @@ export function LogToolbar({ streaming, onToggleStreaming }: LogToolbarProps) {
   )
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <div className="relative">
         <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
         <Input
           placeholder="Search logs..."
           value={filters.search}
           onChange={handleSearchChange}
-          className="pl-9 w-48"
+          className="pl-9 w-full sm:w-48"
         />
       </div>
 
@@ -62,7 +62,7 @@ export function LogToolbar({ streaming, onToggleStreaming }: LogToolbarProps) {
         value={filters.areas.length === 1 ? filters.areas[0] : "all"}
         onValueChange={handleAreaChange}
       >
-        <SelectTrigger className="w-32">
+        <SelectTrigger className="w-full sm:w-32">
           <SelectValue placeholder="Area" />
         </SelectTrigger>
         <SelectContent>
@@ -79,7 +79,7 @@ export function LogToolbar({ streaming, onToggleStreaming }: LogToolbarProps) {
         value={filters.level ?? "all"}
         onValueChange={handleLevelChange}
       >
-        <SelectTrigger className="w-28">
+        <SelectTrigger className="w-full sm:w-28">
           <SelectValue placeholder="Level" />
         </SelectTrigger>
         <SelectContent>

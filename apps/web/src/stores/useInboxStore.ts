@@ -5,6 +5,7 @@ import type { InboxItem } from "@talos/shared/types"
 interface InboxState {
   items: InboxItem[]
   unreadCount: number
+  isLoading: boolean
   addItem: (item: InboxItem) => void
   markAsRead: (id: string) => Promise<void>
   removeItem: (id: string) => Promise<void>
@@ -15,6 +16,7 @@ interface InboxState {
 export const useInboxStore = create<InboxState>((set) => ({
   items: [],
   unreadCount: 0,
+  isLoading: false,
 
   addItem: (item) =>
     set((state) => {
@@ -52,11 +54,12 @@ export const useInboxStore = create<InboxState>((set) => ({
     set({ items, unreadCount: items.filter((i) => !i.is_read).length }),
 
   fetchInbox: async () => {
+    set({ isLoading: true })
     try {
       const items = await inboxApi.list()
-      set({ items, unreadCount: items.filter((i) => !i.is_read).length })
+      set({ items, unreadCount: items.filter((i) => !i.is_read).length, isLoading: false })
     } catch {
-      // Silently fail — inbox will be empty until next fetch or WS push
+      set({ isLoading: false })
     }
   },
 }))

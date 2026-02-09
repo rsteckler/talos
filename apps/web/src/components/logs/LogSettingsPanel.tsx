@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react"
 import { Save, Loader2, Check, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useLogStore } from "@/stores"
@@ -15,6 +16,7 @@ export function LogSettingsPanel() {
   const [saved, setSaved] = useState(false)
   const [purging, setPurging] = useState(false)
   const [purgeResult, setPurgeResult] = useState<string | null>(null)
+  const [confirmPurge, setConfirmPurge] = useState(false)
 
   const handleSave = useCallback(async () => {
     const days = Number(pruneDays)
@@ -72,7 +74,7 @@ export function LogSettingsPanel() {
         <Button
           variant="destructive"
           size="sm"
-          onClick={handlePurge}
+          onClick={() => setConfirmPurge(true)}
           disabled={purging}
         >
           {purging ? (
@@ -86,6 +88,15 @@ export function LogSettingsPanel() {
           <span className="text-sm text-muted-foreground">{purgeResult}</span>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmPurge}
+        onOpenChange={setConfirmPurge}
+        title="Purge All Logs"
+        description="Delete all log entries? This cannot be undone."
+        confirmLabel="Purge"
+        onConfirm={handlePurge}
+      />
     </div>
   )
 }

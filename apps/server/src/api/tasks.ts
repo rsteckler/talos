@@ -202,6 +202,11 @@ router.post("/tasks/:id/run", (req, res) => {
     return;
   }
 
+  if (scheduler.isTaskRunning(taskId)) {
+    res.status(409).json({ error: "Task is already running" });
+    return;
+  }
+
   // Fire and forget — return 202 immediately
   executeTask(task).catch(() => {
     // Errors are handled inside executeTask

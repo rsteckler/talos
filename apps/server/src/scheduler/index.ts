@@ -15,6 +15,7 @@ interface ScheduledJob {
 }
 
 const jobs = new Map<string, ScheduledJob>();
+const runningTasks = new Set<string>();
 
 /**
  * Compute the next run time for a cron expression.
@@ -64,12 +65,21 @@ function scheduleTask(task: TaskRow): void {
     }
 
     const cronTask = cron.schedule(expression, () => {
-      executeTask(task).catch((err: unknown) => {
-        log.error(`Unhandled error executing task "${task.name}"`, {
-          taskId: task.id,
-          error: err instanceof Error ? err.message : String(err),
+      if (runningTasks.has(task.id)) {
+        log.warn(`Skipping task "${task.name}" — previous run still in progress`, { taskId: task.id });
+        return;
+      }
+      runningTasks.add(task.id);
+      executeTask(task)
+        .catch((err: unknown) => {
+          log.error(`Unhandled error executing task "${task.name}"`, {
+            taskId: task.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        })
+        .finally(() => {
+          runningTasks.delete(task.id);
         });
-      });
     });
 
     jobs.set(task.id, { type: "cron", cronTask });
@@ -83,12 +93,21 @@ function scheduleTask(task: TaskRow): void {
 
     const ms = minutes * 60_000;
     const intervalId = setInterval(() => {
-      executeTask(task).catch((err: unknown) => {
-        log.error(`Unhandled error executing task "${task.name}"`, {
-          taskId: task.id,
-          error: err instanceof Error ? err.message : String(err),
+      if (runningTasks.has(task.id)) {
+        log.warn(`Skipping task "${task.name}" — previous run still in progress`, { taskId: task.id });
+        return;
+      }
+      runningTasks.add(task.id);
+      executeTask(task)
+        .catch((err: unknown) => {
+          log.error(`Unhandled error executing task "${task.name}"`, {
+            taskId: task.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        })
+        .finally(() => {
+          runningTasks.delete(task.id);
         });
-      });
     }, ms);
 
     jobs.set(task.id, { type: "interval", intervalId });
@@ -144,6 +163,10 @@ function shutdown(): void {
   log.info("Scheduler shut down");
 }
 
+function isTaskRunning(taskId: string): boolean {
+  return runningTasks.has(taskId);
+}
+
 export const scheduler = {
   init,
   shutdown,
@@ -151,6 +174,7 @@ export const scheduler = {
   unscheduleTask,
   rescheduleTask,
   computeNextRunAt,
+  isTaskRunning,
 };
 
 export { executeTask } from "./executor.js";

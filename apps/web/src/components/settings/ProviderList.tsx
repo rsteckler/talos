@@ -3,6 +3,7 @@ import { Plus, Trash2, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useProviderStore } from "@/stores"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { AddProviderDialog } from "./AddProviderDialog"
 import { EditProviderDialog } from "./EditProviderDialog"
 import type { Provider } from "@talos/shared/types"
@@ -24,6 +25,7 @@ export function ProviderList() {
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null)
+  const [deletingProvider, setDeletingProvider] = useState<Provider | null>(null)
 
   useEffect(() => {
     fetchProviders()
@@ -81,7 +83,7 @@ export function ProviderList() {
                     variant="ghost"
                     size="icon"
                     className="size-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => removeProvider(provider.id)}
+                    onClick={() => setDeletingProvider(provider)}
                   >
                     <Trash2 className="size-4" />
                   </Button>
@@ -106,6 +108,15 @@ export function ProviderList() {
       <EditProviderDialog
         provider={editingProvider}
         onOpenChange={(open) => { if (!open) setEditingProvider(null) }}
+      />
+      <ConfirmDialog
+        open={deletingProvider !== null}
+        onOpenChange={(open) => { if (!open) setDeletingProvider(null) }}
+        title="Delete Provider"
+        description={`Delete "${deletingProvider?.name}"? This cannot be undone.`}
+        onConfirm={() => {
+          if (deletingProvider) removeProvider(deletingProvider.id)
+        }}
       />
     </div>
   )

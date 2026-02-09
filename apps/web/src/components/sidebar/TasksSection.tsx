@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ChevronRight, ListTodo, Plus, Clock, RefreshCw, Globe, Play, Trash2 } from "lucide-react"
+import { ChevronRight, ListTodo, Plus, Clock, RefreshCw, Globe, Play, Trash2, Loader2 } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { TaskDialog } from "@/components/tasks/TaskDialog"
 import { useTaskStore } from "@/stores"
 import type { Task, TriggerType } from "@talos/shared/types"
@@ -30,12 +31,16 @@ const TRIGGER_ICONS: Record<TriggerType, typeof Clock> = {
 export function TasksSection() {
   const { state } = useSidebar()
   const tasks = useTaskStore((s) => s.tasks)
+  const isLoading = useTaskStore((s) => s.isLoading)
+  const error = useTaskStore((s) => s.error)
   const fetchTasks = useTaskStore((s) => s.fetchTasks)
   const deleteTask = useTaskStore((s) => s.deleteTask)
   const triggerTask = useTaskStore((s) => s.triggerTask)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTasks()
@@ -52,11 +57,21 @@ export function TasksSection() {
   }
 
   async function handleDelete(taskId: string) {
-    await deleteTask(taskId)
+    try {
+      setActionError(null)
+      await deleteTask(taskId)
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed to delete task")
+    }
   }
 
   async function handleTrigger(taskId: string) {
-    await triggerTask(taskId)
+    try {
+      setActionError(null)
+      await triggerTask(taskId)
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed to trigger task")
+    }
   }
 
   if (state === "collapsed") {
@@ -92,7 +107,20 @@ export function TasksSection() {
           <CollapsibleContent>
             <SidebarGroupContent>
               <SidebarMenu>
-                {tasks.length === 0 ? (
+                {isLoading && tasks.length === 0 ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span className="text-muted-foreground">Loading...</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : error && tasks.length === 0 ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton>
+                      <span className="text-destructive text-xs">{error}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : tasks.length === 0 ? (
                   <SidebarMenuItem>
                     <SidebarMenuButton>
                       <span className="text-muted-foreground">No tasks</span>
@@ -125,7 +153,7 @@ export function TasksSection() {
                             <button
                               className="p-0.5 rounded hover:bg-muted"
                               title="Delete"
-                              onClick={(e) => { e.stopPropagation(); handleDelete(task.id) }}
+                              onClick={(e) => { e.stopPropagation(); setDeletingTaskId(task.id) }}
                             >
                               <Trash2 className="size-3" />
                             </button>
@@ -134,6 +162,11 @@ export function TasksSection() {
                       </SidebarMenuItem>
                     )
                   })
+                )}
+                {actionError && (
+                  <SidebarMenuItem>
+                    <span className="px-2 text-xs text-destructive">{actionError}</span>
+                  </SidebarMenuItem>
                 )}
                 <SidebarMenuItem>
                   <SidebarMenuButton onClick={handleCreate}>
@@ -151,6 +184,15 @@ export function TasksSection() {
         task={editingTask}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+      />
+      <ConfirmDialog
+        open={deletingTaskId !== null}
+        onOpenChange={(open) => { if (!open) setDeletingTaskId(null) }}
+        title="Delete Task"
+        description="Delete this task? This cannot be undone."
+        onConfirm={() => {
+          if (deletingTaskId) handleDelete(deletingTaskId)
+        }}
       />
     </>
   )

@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { ChevronRight, MessageSquare, Plus, Trash2 } from "lucide-react"
 import {
   Collapsible,
@@ -14,6 +15,7 @@ import {
   SidebarMenuAction,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useChatStore } from "@/stores"
 
 export function ConversationsSection() {
@@ -24,6 +26,8 @@ export function ConversationsSection() {
   const deleteConversation = useChatStore((s) => s.deleteConversation)
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const clearMessages = useChatStore((s) => s.clearMessages)
+
+  const [deletingConvId, setDeletingConvId] = useState<string | null>(null)
 
   const handleNewChat = () => {
     setActiveConversation(null)
@@ -45,6 +49,7 @@ export function ConversationsSection() {
   }
 
   return (
+  <>
     <Collapsible defaultOpen className="group/collapsible">
       <SidebarGroup>
         <SidebarGroupLabel asChild>
@@ -75,7 +80,7 @@ export function ConversationsSection() {
                   <SidebarMenuAction
                     onClick={(e) => {
                       e.stopPropagation()
-                      deleteConversation(conv.id)
+                      setDeletingConvId(conv.id)
                     }}
                     className="opacity-0 group-hover/menu-item:opacity-100"
                   >
@@ -95,5 +100,15 @@ export function ConversationsSection() {
         </CollapsibleContent>
       </SidebarGroup>
     </Collapsible>
+    <ConfirmDialog
+      open={deletingConvId !== null}
+      onOpenChange={(open) => { if (!open) setDeletingConvId(null) }}
+      title="Delete Conversation"
+      description="Delete this conversation? This cannot be undone."
+      onConfirm={() => {
+        if (deletingConvId) deleteConversation(deletingConvId)
+      }}
+    />
+  </>
   )
 }
