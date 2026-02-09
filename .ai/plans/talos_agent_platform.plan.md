@@ -7,7 +7,7 @@ todos:
     status: completed
   - id: phase-2
     content: "Phase 2: Core UI Shell - Layout, Chat area, Status Orb, Inbox, Settings skeleton, zustand stores, WebSocket hook"
-    status: pending
+    status: completed
   - id: phase-3
     content: "Phase 3: Provider/Model Management - SQLite setup, provider CRUD API, model enumeration, Settings UI for providers"
     status: pending
@@ -32,7 +32,7 @@ isProject: false
 
 Talos is a self-hosted AI agent that acts as your "chief of staff." It supports bring-your-own-key (BYOK) model providers, scheduled/triggered tasks, and extensible tools. The user interacts via chat (sync) and receives results via an inbox (async).
 
-**Progress:** Phase 1 complete. See "Phase 1 Implementation Notes" under Implementation Phases for what was built, decisions, deviations, and notes for future agents.
+**Progress:** Phase 2 complete. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
 
 ---
 
@@ -574,7 +574,7 @@ interface InboxUpdate {
 - Kill server on 3001: `lsof -ti:3001 | xargs -r kill` (Linux/WSL).
 - Add shadcn components from `apps/web`: `pnpm dlx shadcn@latest add <component>`; ensure Tailwind content includes new paths if you add files outside `src/`.
 
-### Phase 2: Core UI Shell
+### Phase 2: Core UI Shell — DONE
 
 - Implement main layout with header, chat area, input
 - Build Status Orb component (static, expandable)
@@ -583,6 +583,47 @@ interface InboxUpdate {
 - Set up React Router (if needed) or simple view switching
 - Implement zustand stores for UI state
 - Add WebSocket hook for real-time connection
+
+#### Phase 2 Implementation Notes (for future agents)
+
+**What was built**
+
+- **Layout:** `AppLayout` with `AppSidebar` (collapsible via shadcn `Sidebar`) + `SidebarInset` wrapping `ChatArea`. Sidebar has: `TalosOrb` header, `TasksSection`, `FlowSection` (inbox), and `NavMenu` footer. Uses `react-router-dom` with `/` (main app) and `/settings` routes.
+- **Status Orb:** `TalosOrb` — animated canvas-based orb in `components/orb/` with sleep, idle, and turbo states. Exposed via `forwardRef` with `TalosOrbRef` interface (`sleep()`, `idle()`, `turbo()`, `randomize()`). Managed through `OrbContext` provider. Sidebar shows a smaller orb in the header; chat area has orb control buttons.
+- **Inbox (Flow):** `FlowSection` reads from `useInboxStore`. Renders items with type-specific icons (`ClipboardCheck`, `Calendar`, `Bell`), cyan unread dots, relative timestamps, and an unread count badge. Collapsed sidebar shows badge on the icon. Click marks items as read.
+- **Settings:** `SettingsPage` at `/settings` with `SettingsContext` provider. Theme selection (dark/light/system) and placeholder provider settings. Standalone page (not inside sidebar layout).
+- **Shared types (`@talos/shared`):** Added `InboxItem`, `Message`, `Conversation`, `ConnectionStatus`, `ClientMessage` (chat, cancel), `ServerMessage` (chunk, end, tool_call, tool_result, status, inbox). Linked into web app as `workspace:*` dependency.
+- **Zustand stores (`stores/`):**
+  - `useChatStore` — `conversations`, `activeConversationId`, `messages`, `inputValue`, `isStreaming`, with actions for add/append/clear.
+  - `useInboxStore` — `items`, `unreadCount`, with `addItem`, `markAsRead`, `removeItem`, `setItems`.
+  - `useConnectionStore` — `status` (ConnectionStatus), `reconnectAttempts`, with set/increment/reset actions.
+  - Barrel export from `stores/index.ts`.
+- **WebSocket hook (`hooks/useWebSocket.ts`):** Connects to `ws://localhost:3001`. Auto-reconnects up to 10 attempts with 3s interval. Uses ref-based pattern to avoid circular `useCallback` dependencies between `connect` and `scheduleReconnect`. Dispatches `ServerMessage` to appropriate stores via standalone `handleMessage()` function that calls `getState()` directly. Gracefully handles server not running.
+- **Chat input:** `ChatArea` wired to `useChatStore`. Controlled `<form>` with `onSubmit` handler that adds a user `Message` to the store and clears input. Send button disabled when empty or streaming.
+- **Connection status:** `ConnectionStatus` component in sidebar footer (inside `NavMenu`). Shows green `Wifi` when connected, amber spinning `Loader2` when reconnecting, red `WifiOff` when disconnected. Uses `SidebarMenuButton` for consistent sidebar styling.
+- **Mock data (`lib/mockData.ts`):** 5 static `InboxItem` entries (3 unread, 2 read) with realistic titles, types, and relative timestamps. Loaded in `AppContent` via `useEffect` on mount.
+
+**Decisions made**
+
+- **Zustand v5:** Used `create` from `zustand` (v5.x). Store actions access other stores via `getState()` outside React (e.g., in WebSocket handler) to avoid unnecessary subscriptions.
+- **WebSocket ref pattern:** `connectRef` holds the latest `connect` function so `scheduleReconnect` doesn't need `connect` in its dependency array, breaking the circular callback chain.
+- **Sidebar structure:** Used shadcn's `Sidebar` with `collapsible="icon"` mode. Sections use `Collapsible` for expand/collapse. `NavMenu` lives in `SidebarFooter`.
+- **Inbox in sidebar (not separate panel):** Inbox items render directly in the sidebar `FlowSection` rather than a separate dropdown panel. Fits the collapsible sidebar pattern better.
+- **Mock data on mount:** `AppContent` component extracted from `App` so hooks (`useWebSocket`, `useInboxStore`) run inside `BrowserRouter` context. Mock data seeded via `useEffect`.
+
+**Deviations from plan**
+
+- **No inbox dropdown/panel:** Inbox is inline in the sidebar rather than a separate overlay component. The `components/inbox/` directory from Phase 1 is still empty; inbox rendering lives in `FlowSection`.
+- **Orb controls in chat:** Orb state buttons (sleep/idle/turbo/randomize) are in the chat area rather than in a dedicated orb panel. This was done in a prior commit.
+- **shadcn components:** Added via `pnpm dlx shadcn@latest add` during earlier work: button, card, collapsible, input, label, select, separator, sheet, sidebar, skeleton, tooltip. `components.json` was not needed.
+
+**Handy for later phases**
+
+- **Adding to stores:** Follow the existing pattern — `create<State>((set) => ({ ... }))` with typed interface. Use `getState()` for access outside React.
+- **WebSocket messages:** Add new `ServerMessage` variants in `@talos/shared/types.ts`, then handle in `handleMessage()` in `useWebSocket.ts`.
+- **Sidebar sections:** Copy `TasksSection` or `FlowSection` pattern — uses `Collapsible` + `SidebarGroup` + `SidebarMenu`. Add to `AppSidebar.tsx`.
+- **shadcn components:** Run from `apps/web`: `pnpm dlx shadcn@latest add <component>`. They land in `src/components/ui/`.
+- **Pre-existing tsc errors:** `TalosOrb.tsx` has uninitialized variable warnings and a ref type mismatch. These don't affect Vite dev/build but will fail `tsc -b`. Fix when touching orb code.
 
 ### Phase 3: Provider and Model Management
 
