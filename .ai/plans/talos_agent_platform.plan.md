@@ -18,8 +18,8 @@ todos:
     content: "Phase 5: Tool System - Manifest loader, tool runner, bundled tools (shell, web-search), tool config UI"
     status: completed
   - id: phase-6
-    content: "Phase 6: Task Scheduler - Task CRUD, cron/polling/webhook triggers, task UI, inbox integration"
-    status: pending
+    content: "Phase 6: Task Scheduler - Task CRUD, cron/interval/webhook/manual triggers, task UI, inbox integration"
+    status: completed
   - id: phase-7
     content: "Phase 7: Polish & Docs - Error handling, loading states, Docusaurus setup, user guide"
     status: pending
@@ -32,7 +32,7 @@ isProject: false
 
 Talos is a self-hosted AI agent that acts as your "chief of staff." It supports bring-your-own-key (BYOK) model providers, scheduled/triggered tasks, and extensible tools. The user interacts via chat (sync) and receives results via an inbox (async).
 
-**Progress:** Phase 5 complete. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
+**Progress:** Phase 6 complete. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
 
 ---
 
@@ -118,7 +118,7 @@ All intelligence lives in the remote LLM. Talos is a "dumb relay + local executo
 | Real-time       | WebSocket (ws library)                                   |
 | LLM Integration | Vercel AI SDK (supports OpenAI, Anthropic, Google, OpenRouter) |
 | Logging         | Pino (structured JSON) + SQLite persistence + WS streaming   |
-| Scheduling      | node-cron or custom scheduler                                |
+| Scheduling      | node-cron                                                        |
 | Docs            | Docusaurus                                               |
 | Dev Ports       | Server: 3001, Web: 5173 (Vite default)                   |
 
@@ -884,15 +884,68 @@ interface InboxUpdate {
   curl -X PUT http://localhost:3001/api/logs/configs/agent -H "Content-Type: application/json" -d '{"userLevel":"high","devLevel":"verbose"}'
   ```
 
-### Phase 6: Task Scheduler
+### Phase 6: Task Scheduler — DONE
 
 - Implement task CRUD API
 - Build cron scheduler (node-cron)
-- Build polling scheduler
+- Build interval scheduler (setInterval)
 - Implement webhook endpoint for external triggers
-- Create task management UI
-- Wire scheduler to agent execution
-- Implement inbox item creation from task results
+- Create task management UI (sidebar + dialog)
+- Wire scheduler to headless agent execution (generateText)
+- Implement inbox persistence and real-time broadcast
+- Replace mock inbox data with real API
+
+#### Phase 6 Implementation Notes
+
+**What was built:**
+- **Dependency added:** `node-cron` (v4.2.1) + `@types/node-cron` in `apps/server`.
+- **Shared types (`packages/shared/src/types.ts`):** Added `TriggerType` ("cron" | "interval" | "webhook" | "manual"), `Task`, `TaskRun`, `TaskCreateRequest`, `TaskUpdateRequest`. Updated `InboxItem` with optional `task_run_id` field.
+- **Database tables:** `tasks` (id, name, description, trigger_type, trigger_config JSON, action_prompt, tools JSON, is_active, last_run_at, next_run_at, created_at), `task_runs` (id, task_id FK cascade, status, started_at, completed_at, result, error), `inbox` (id, task_run_id FK set null, title, content, type, is_read, created_at). Indexes on `task_runs.task_id` and `inbox.created_at`.
+- **Task executor** (`apps/server/src/scheduler/executor.ts`): Headless task execution using AI SDK `generateText()` (not `streamText` — no streaming target). Loads active provider, system prompt, builds tool set with optional filtering. Creates `task_run` record (running → completed/failed), creates `inbox` item, broadcasts to WS clients. All errors caught and persisted to task_run + inbox.
+- **Scheduler engine** (`apps/server/src/scheduler/index.ts`): Manages in-process jobs via `Map<taskId, ScheduledJob>`. Cron tasks use `node-cron.schedule()`. Interval tasks use `setInterval()`. Webhook and manual tasks have no schedule — triggered via REST API. `init()` loads all active tasks from DB and schedules them. `shutdown()` stops all jobs for graceful shutdown.
+- **Task REST API** (`apps/server/src/api/tasks.ts`): Full CRUD — GET /api/tasks, POST /api/tasks (Zod validated), GET /api/tasks/:id (includes recent runs), PUT /api/tasks/:id, DELETE /api/tasks/:id (unschedules), POST /api/tasks/:id/run (manual trigger, returns 202), GET /api/tasks/:id/runs (run history).
+- **Inbox REST API** (`apps/server/src/api/inbox.ts`): GET /api/inbox (optional `?unread=true` filter), PUT /api/inbox/:id/read, DELETE /api/inbox/:id.
+- **Webhook endpoint** (`apps/server/src/api/webhooks.ts`): POST /api/webhooks/:task_id — validates task exists, is webhook type, is active; fires execution asynchronously; returns 202.
+- **WS broadcast** (`apps/server/src/ws/index.ts`): Added `broadcastInbox(item)` — sends `{ type: "inbox", item }` to ALL connected clients. Uses module-level `wssRef` to access the WebSocketServer instance. Frontend already handled `type: "inbox"` messages from Phase 2.
+- **Server wiring** (`apps/server/src/index.ts`): Mounted taskRouter, inboxRouter, webhookRouter. Scheduler `init()` called after tool loading. Added `handleShutdown()` on SIGTERM/SIGINT that calls `scheduler.shutdown()`.
+- **Tool filtering** (`apps/server/src/tools/runner.ts`): `buildToolSet()` now accepts optional `filterToolIds` parameter. When provided, only tools in the list are included. Used by executor when a task specifies a `tools` array.
+- **Frontend API clients:** `apps/web/src/api/tasks.ts` (tasksApi: list, create, get, update, remove, trigger, getRuns), `apps/web/src/api/inbox.ts` (inboxApi: list, markRead, remove).
+- **Frontend stores:** `useTaskStore` (tasks, isLoading, error, fetchTasks, createTask, updateTask, deleteTask, triggerTask). Updated `useInboxStore` — added `fetchInbox()` calling real API, wired `markAsRead`/`removeItem` to call API with optimistic local updates.
+- **TaskDialog** (`apps/web/src/components/tasks/TaskDialog.tsx`): Create/edit dialog with name, description, trigger type selector (Select), trigger config (cron expression or interval minutes, conditionally shown), action prompt (textarea), active toggle (Switch). Validates required fields. Shows webhook URL for webhook tasks.
+- **TasksSection** (`apps/web/src/components/sidebar/TasksSection.tsx`): Full rewrite — fetches tasks on mount, shows task list with trigger type icons (Clock/RefreshCw/Globe/Play), task count badge, hover actions (run now, delete), "Add Task" button. Click opens edit dialog.
+- **Mock inbox replaced** (`apps/web/src/App.tsx`): Removed `mockInboxItems` import and `setItems(mockInboxItems)`. Added `fetchInbox()` call alongside other init fetches.
+
+**Key decisions:**
+- **Headless execution with `generateText`:** Tasks use `generateText()` instead of `streamText()` since there's no streaming target. AI SDK's `generateText` supports tools + multi-step via `maxSteps` (mapped to `stopWhen: stepCountIs(10)`). Results are stored in DB and sent to inbox.
+- **Four trigger types:** `cron` (node-cron expressions), `interval` (setInterval in minutes), `webhook` (external HTTP trigger), `manual` (API-only trigger). Plan originally had "polling" — replaced with "interval" which is more general and doesn't require a polling target.
+- **`trigger_config` as JSON string:** Flexible config per trigger type — `{ cron: "0 9 * * 1-5" }` for cron, `{ interval_minutes: 60 }` for interval, `{}` for manual/webhook. Avoids separate columns per trigger type.
+- **Inbox is a real DB table now:** Phase 2 used mock data. Phase 6 adds the `inbox` table with FK to `task_runs`. Items are persisted, queryable, and deletable. WS broadcast ensures real-time delivery.
+- **Optimistic inbox updates:** Frontend `markAsRead`/`removeItem` update local state immediately, then fire API call. If API fails, the local state still reflects the user action (acceptable for inbox UX).
+- **No auth on webhooks:** Self-hosted app; webhook endpoint has no token auth for MVP. Can add token validation later.
+- **Task tools field nullable:** When `tools` is null, executor uses all enabled tools. When it's a JSON array of tool IDs, executor filters to only those tools via `buildToolSet(filterToolIds)`.
+
+**Deviations from plan:**
+- **"Polling" trigger type replaced with "interval":** Plan specified "cron, polling, webhook" triggers. "Polling" implied checking an external source at intervals, but without a specific polling target, plain interval execution is more useful. Renamed to "interval" with `interval_minutes` config.
+- **No TaskRunHistory component:** Plan suggested a `TaskRunHistory.tsx` component. Deferred — run history is available via GET /api/tasks/:id (includes recent runs) and GET /api/tasks/:id/runs, but no dedicated UI for it yet. Can be added in Phase 7 polish.
+- **No client-side cron validation:** Plan mentioned "validates cron expressions client-side." Deferred — server-side validation via `node-cron.validate()` catches bad expressions. Client-side validation can be added in Phase 7 with a cron parsing library.
+
+**Handy for later phases:**
+- **Testing tasks via curl:**
+  ```bash
+  # Create a manual task
+  curl -X POST http://localhost:3001/api/tasks -H "Content-Type: application/json" -d '{"name":"Test","trigger_type":"manual","trigger_config":"{}","action_prompt":"Say hello"}'
+  # Trigger it
+  curl -X POST http://localhost:3001/api/tasks/<id>/run
+  # Check inbox
+  curl http://localhost:3001/api/inbox
+  # Create a cron task (every minute)
+  curl -X POST http://localhost:3001/api/tasks -H "Content-Type: application/json" -d '{"name":"Cron Test","trigger_type":"cron","trigger_config":"{\"cron\":\"* * * * *\"}","action_prompt":"What time is it?"}'
+  # Webhook trigger
+  curl -X POST http://localhost:3001/api/webhooks/<task_id>
+  ```
+- **Scheduler initialization:** Scheduler `init()` runs after tool loading. Check server logs for "Scheduler initialized with N active task(s)" to verify.
+- **Graceful shutdown:** SIGTERM/SIGINT handlers call `scheduler.shutdown()` which stops all cron jobs and clears all intervals before exiting.
+- **Adding to inbox programmatically:** Insert into `schema.inbox` table and call `broadcastInbox(item)` from `apps/server/src/ws/index.ts` to notify connected clients.
 
 ### Phase 7: Polish and Documentation
 
