@@ -1,12 +1,13 @@
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { useOrb } from "@/contexts/OrbContext"
-import { useChatStore } from "@/stores"
+import { useChatStore, useProviderStore } from "@/stores"
 import { Moon, Circle, Zap, Shuffle, Send } from "lucide-react"
 import type { FormEvent } from "react"
 
 export function ChatArea() {
   const orbRef = useOrb()
+  const activeModel = useProviderStore((s) => s.activeModel)
   const inputValue = useChatStore((s) => s.inputValue)
   const setInputValue = useChatStore((s) => s.setInputValue)
   const clearInput = useChatStore((s) => s.clearInput)
@@ -34,6 +35,11 @@ export function ChatArea() {
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-2 h-4" />
         <span className="font-semibold text-zinc-100">Chat</span>
+        {activeModel.model && (
+          <span className="text-xs text-zinc-500">
+            {activeModel.model.displayName}
+          </span>
+        )}
       </header>
       <div className="flex flex-1 flex-col">
         <div className="relative flex-1 overflow-auto p-4">

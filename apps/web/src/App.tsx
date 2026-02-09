@@ -6,15 +6,17 @@ import { OrbProvider } from "@/contexts/OrbContext"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { SettingsPage } from "@/pages/SettingsPage"
 import { useWebSocket } from "@/hooks/useWebSocket"
-import { useInboxStore } from "@/stores"
+import { useInboxStore, useProviderStore } from "@/stores"
 import { mockInboxItems } from "@/lib/mockData"
 
 function AppContent() {
   const setItems = useInboxStore((s) => s.setItems)
+  const fetchActiveModel = useProviderStore((s) => s.fetchActiveModel)
 
   useEffect(() => {
     setItems(mockInboxItems)
-  }, [setItems])
+    fetchActiveModel()
+  }, [setItems, fetchActiveModel])
 
   useWebSocket()
 

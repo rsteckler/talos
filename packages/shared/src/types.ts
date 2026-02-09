@@ -37,6 +37,50 @@ export interface Conversation {
   updated_at: string;
 }
 
+// --- Providers & Models ---
+
+export type ProviderType = "openai" | "anthropic" | "google";
+
+export interface Provider {
+  id: string;
+  name: string;
+  type: ProviderType;
+  baseUrl: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ProviderCreateRequest {
+  name: string;
+  type: ProviderType;
+  apiKey: string;
+  baseUrl?: string;
+}
+
+export interface Model {
+  id: string;
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  isDefault: boolean;
+  createdAt: string;
+}
+
+export interface ActiveModel {
+  model: Model | null;
+  provider: Provider | null;
+}
+
+// --- API Response ---
+
+export interface ApiResponse<T> {
+  data: T;
+}
+
+export interface ApiError {
+  error: string;
+}
+
 // --- Connection ---
 
 export type ConnectionStatus = "connected" | "disconnected" | "reconnecting";

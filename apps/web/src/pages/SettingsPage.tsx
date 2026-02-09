@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useSettings, type Theme } from "@/contexts/SettingsContext"
+import { ProviderList } from "@/components/settings/ProviderList"
 
 export function SettingsPage() {
   const { settings, updateSettings } = useSettings()
@@ -70,9 +71,7 @@ export function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Coming soon...
-              </p>
+              <ProviderList />
             </CardContent>
           </Card>
 
