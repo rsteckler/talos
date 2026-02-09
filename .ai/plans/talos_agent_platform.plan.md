@@ -10,7 +10,7 @@ todos:
     status: completed
   - id: phase-3
     content: "Phase 3: Provider/Model Management - SQLite setup, provider CRUD API, model enumeration, Settings UI for providers"
-    status: pending
+    status: completed
   - id: phase-4
     content: "Phase 4: Chat Implementation - Vercel AI SDK integration, WebSocket streaming, conversation persistence, SOUL.md integration"
     status: pending
@@ -32,7 +32,7 @@ isProject: false
 
 Talos is a self-hosted AI agent that acts as your "chief of staff." It supports bring-your-own-key (BYOK) model providers, scheduled/triggered tasks, and extensible tools. The user interacts via chat (sync) and receives results via an inbox (async).
 
-**Progress:** Phase 2 complete. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
+**Progress:** Phase 3 complete. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
 
 ---
 
@@ -625,7 +625,7 @@ interface InboxUpdate {
 - **shadcn components:** Run from `apps/web`: `pnpm dlx shadcn@latest add <component>`. They land in `src/components/ui/`.
 - **Pre-existing tsc errors:** `TalosOrb.tsx` has uninitialized variable warnings and a ref type mismatch. These don't affect Vite dev/build but will fail `tsc -b`. Fix when touching orb code.
 
-### Phase 3: Provider and Model Management
+### Phase 3: Provider and Model Management — DONE
 
 - Implement SQLite database setup and migrations
 - Build provider CRUD API endpoints
@@ -633,6 +633,71 @@ interface InboxUpdate {
 - Build Settings UI for provider management
 - Add model selector in UI
 - Store API keys encrypted (or rely on environment variables initially)
+
+#### Phase 3 Implementation Notes (for future agents)
+
+**What was built**
+
+- **Database layer (`server/src/db/`):**
+  - `schema.ts` — Drizzle table definitions for `providers` and `models`. `providers` has id, name, type (enum: openai/anthropic/google), api_key, base_url, is_active, created_at. `models` has id, provider_id (FK with `onDelete: "cascade"`), model_id, display_name, is_default, created_at. Both use `text` for IDs and `integer({ mode: "boolean" })` for booleans.
+  - `index.ts` — Initializes `better-sqlite3` at `apps/server/data/talos.db`, enables `PRAGMA journal_mode = WAL` and `PRAGMA foreign_keys = ON`, exports Drizzle `db` instance with schema.
+  - `migrate.ts` — `runMigrations()` uses raw SQL `CREATE TABLE IF NOT EXISTS` (idempotent). Called on server startup. No drizzle-kit migration CLI needed for self-hosted app.
+- **Known models registry (`server/src/providers/knownModels.ts`):** Static `KNOWN_MODELS` map keyed by provider type. OpenAI: gpt-4o, gpt-4o-mini, gpt-4-turbo, o1, o1-mini, o3-mini. Anthropic: claude-sonnet-4, claude-3.5-sonnet, claude-3.5-haiku, claude-3-opus. Google: gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash. Used when creating/refreshing a provider to seed its models.
+- **Shared types (`packages/shared/src/types.ts`):** Added `ProviderType` ("openai" | "anthropic" | "google"), `Provider` (no apiKey — never sent to frontend), `ProviderCreateRequest`, `Model`, `ActiveModel` ({ model, provider } both nullable), `ApiResponse<T>` ({ data: T }), `ApiError` ({ error: string }).
+- **API routes (`server/src/api/providers.ts`):** Express Router with 7 endpoints:
+  - `GET /api/providers` — list all, apiKey stripped via `toProviderResponse()`.
+  - `POST /api/providers` — Zod-validated create, auto-seeds known models, returns 201.
+  - `DELETE /api/providers/:id` — 404 if not found, models cascade-deleted by FK.
+  - `GET /api/providers/:id/models` — list models for a provider.
+  - `POST /api/providers/:id/models/refresh` — deletes existing models, re-seeds from `KNOWN_MODELS`.
+  - `GET /api/models/active` — returns `{ model, provider }` where `isDefault = true`, or both null.
+  - `PUT /api/models/active` — Zod-validated, clears all `isDefault`, sets one, returns model + provider.
+- **Error handler (`server/src/api/errorHandler.ts`):** Express error middleware returning `{ error: "..." }` JSON with 500 status.
+- **Server entry (`server/src/index.ts`):** Calls `runMigrations()` before listen, mounts `providerRouter` at `/api`, adds error handler last. Fixed pre-existing `process.env.PORT` → `process.env["PORT"]` for `noPropertyAccessFromIndexSignature`.
+- **Frontend API client (`web/src/api/`):**
+  - `client.ts` — `request<T>()` wrapper around `fetch` with JSON headers, unwraps `{ data: T }` envelope, throws `ApiClientError` on non-ok responses.
+  - `providers.ts` — `providersApi` object with typed methods: `list`, `create`, `remove`, `listModels`, `refreshModels`, `getActiveModel`, `setActiveModel`.
+  - `index.ts` — barrel export.
+- **Provider store (`web/src/stores/useProviderStore.ts`):** State: `providers[]`, `modelsByProvider` record, `activeModel`, `isLoading`, `error`. Async actions call `providersApi` and update state. `removeProvider` also re-fetches active model. `setActiveModel` optimistically updates `isDefault` across all models in the store.
+- **Settings UI:**
+  - `ProviderList.tsx` — Lists providers with type badges (color-coded: green/openai, orange/anthropic, blue/google), delete button, expandable model list with radio buttons for active model selection, refresh button, "Add Provider" button. Error banner with dismiss.
+  - `AddProviderDialog.tsx` — shadcn Dialog with form: provider type selector (auto-fills name), display name, API key (password input), base URL (optional). Client-side validation, loading state, error display. Resets on close.
+  - `SettingsPage.tsx` — replaced "Coming soon..." in Model Providers card with `<ProviderList />`.
+- **Chat header (`ChatArea.tsx`):** Shows `activeModel.model.displayName` as small text next to "Chat" title.
+- **App init (`App.tsx`):** Calls `fetchActiveModel()` in `AppContent` `useEffect` so chat header has data on first load.
+- **shadcn components added:** `dialog.tsx`, `badge.tsx` (via `pnpm dlx shadcn@latest add`).
+
+**Decisions made**
+
+- **API keys never returned:** `toProviderResponse()` strips `apiKey` from every response. Keys go in via POST but don't come out. No encryption at rest yet (plaintext in SQLite) — acceptable for self-hosted MVP; can add encryption later.
+- **Hardcoded models for MVP:** `KNOWN_MODELS` is a static map. Avoids needing Vercel AI SDK just for model enumeration. Easy to update. Phase 4 can add dynamic enumeration if desired.
+- **`CREATE TABLE IF NOT EXISTS` on startup:** Simpler than drizzle-kit migration CLI for a self-hosted app. Idempotent — safe to run on every startup.
+- **`crypto.randomUUID()` for IDs:** No extra dependency needed (nanoid not required). Built into Node 19+.
+- **Single active model:** One global default tracked via `is_default` boolean on models table. `PUT /api/models/active` clears all defaults then sets one.
+- **Cascade deletes:** FK `ON DELETE CASCADE` on `models.provider_id` — deleting a provider auto-deletes its models at the DB level.
+- **`@talos/shared` as server dependency:** Added `"@talos/shared": "workspace:*"` to server `package.json`. Previously only the web app depended on shared. Import as `from "@talos/shared"` (not `@talos/shared/types`) for NodeNext module resolution compatibility.
+
+**Deviations from plan**
+
+- **No API key encryption:** Plan mentioned "Store API keys encrypted (or rely on environment variables initially)." Went with plaintext in SQLite for now. This is a self-hosted app where the user controls the DB file. Can add encryption in Phase 7 polish if desired.
+- **No model validation against provider:** Plan mentioned "validates API key" on POST. Skipped — just stores the key. Actual validation will happen in Phase 4 when the Vercel AI SDK makes real LLM calls.
+- **Known models list may need updates:** Model IDs use the versioned format for Anthropic (e.g., `claude-sonnet-4-20250514`) but generic IDs for others. Update as new models are released.
+
+**Handy for later phases**
+
+- **Testing API with curl:**
+  ```bash
+  # List providers
+  curl http://localhost:3001/api/providers
+  # Create provider
+  curl -X POST http://localhost:3001/api/providers -H "Content-Type: application/json" -d '{"name":"OpenAI","type":"openai","apiKey":"sk-..."}'
+  # Get active model
+  curl http://localhost:3001/api/models/active
+  ```
+- **Accessing the DB:** The Drizzle `db` instance is exported from `server/src/db/index.ts`. Import `{ db, schema }` from there. Use `db.select().from(schema.tableName)` pattern.
+- **Adding new tables:** Add to `schema.ts`, add `CREATE TABLE IF NOT EXISTS` SQL in `migrate.ts`. No migration CLI step needed.
+- **Provider store in components:** `useProviderStore((s) => s.providers)` for reactive access. `useProviderStore.getState().fetchProviders()` for imperative access outside React.
+- **Pre-existing tsc errors:** `TalosOrb.tsx` still has uninitialized variable and ref type errors (from Phase 2). These don't affect Vite dev but will fail `tsc -b`. New Phase 3 code has zero TypeScript errors.
 
 ### Phase 4: Chat Implementation
 
