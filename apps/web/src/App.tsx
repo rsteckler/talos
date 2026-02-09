@@ -8,18 +8,17 @@ import { SettingsPage } from "@/pages/SettingsPage"
 import { LogsPage } from "@/pages/LogsPage"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useInboxStore, useProviderStore, useChatStore } from "@/stores"
-import { mockInboxItems } from "@/lib/mockData"
 
 function AppContent() {
-  const setItems = useInboxStore((s) => s.setItems)
+  const fetchInbox = useInboxStore((s) => s.fetchInbox)
   const fetchActiveModel = useProviderStore((s) => s.fetchActiveModel)
   const fetchConversations = useChatStore((s) => s.fetchConversations)
 
   useEffect(() => {
-    setItems(mockInboxItems)
+    fetchInbox()
     fetchActiveModel()
     fetchConversations()
-  }, [setItems, fetchActiveModel, fetchConversations])
+  }, [fetchInbox, fetchActiveModel, fetchConversations])
 
   useWebSocket()
 

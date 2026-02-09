@@ -1,13 +1,30 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "node:http";
-import type { ClientMessage, ServerMessage } from "@talos/shared/types";
+import type { ClientMessage, ServerMessage, InboxItem } from "@talos/shared/types";
 import { streamChat } from "../agent/core.js";
 import { createLogger, addLogSubscriber, removeLogSubscriber } from "../logger/index.js";
 
 const log = createLogger("ws");
 
+let wssRef: WebSocketServer | null = null;
+
+/**
+ * Broadcast an inbox item to ALL connected WebSocket clients.
+ * Called by the task executor when a task run completes.
+ */
+export function broadcastInbox(item: InboxItem): void {
+  if (!wssRef) return;
+  const msg = JSON.stringify({ type: "inbox", item } satisfies ServerMessage);
+  for (const client of wssRef.clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(msg);
+    }
+  }
+}
+
 export function attachWebSocket(server: Server): void {
   const wss = new WebSocketServer({ server });
+  wssRef = wss;
 
   wss.on("connection", (ws) => {
     log.dev.debug("Client connected");

@@ -51,13 +51,17 @@ function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodObject<Record<st
 /**
  * Build an AI SDK ToolSet from all enabled, loaded tools.
  * Returns the toolset and any prompt.md content to append to the system prompt.
+ * If filterToolIds is provided, only include those specific tool IDs.
  */
-export function buildToolSet(): { tools: ToolSet; toolPrompts: string[] } {
+export function buildToolSet(filterToolIds?: string[]): { tools: ToolSet; toolPrompts: string[] } {
   const loadedTools = getLoadedTools();
   const tools: ToolSet = {};
   const toolPrompts: string[] = [];
 
   for (const [toolId, loaded] of loadedTools) {
+    // If a filter is specified, skip tools not in the list
+    if (filterToolIds && !filterToolIds.includes(toolId)) continue;
+
     // Check if tool is enabled in DB
     const configRow = db
       .select()

@@ -72,6 +72,44 @@ export function runMigrations(): void {
       prune_days INTEGER NOT NULL DEFAULT 7,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      trigger_type TEXT NOT NULL CHECK(trigger_type IN ('cron', 'interval', 'webhook', 'manual')),
+      trigger_config TEXT NOT NULL DEFAULT '{}',
+      action_prompt TEXT NOT NULL,
+      tools TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      last_run_at TEXT,
+      next_run_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS task_runs (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed')),
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      result TEXT,
+      error TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_task_runs_task_id ON task_runs(task_id);
+
+    CREATE TABLE IF NOT EXISTS inbox (
+      id TEXT PRIMARY KEY,
+      task_run_id TEXT REFERENCES task_runs(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('task_result', 'schedule_result', 'notification')),
+      is_read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_inbox_created_at ON inbox(created_at);
   `);
 
   // Migrate existing providers table: expand CHECK constraint to include 'openrouter'

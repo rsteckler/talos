@@ -68,3 +68,39 @@ export const logSettings = sqliteTable("log_settings", {
   pruneDays: integer("prune_days").notNull().default(7),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const tasks = sqliteTable("tasks", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  triggerType: text("trigger_type", { enum: ["cron", "interval", "webhook", "manual"] }).notNull(),
+  triggerConfig: text("trigger_config").notNull().default("{}"),
+  actionPrompt: text("action_prompt").notNull(),
+  tools: text("tools"), // JSON array of tool IDs, null = all enabled
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  lastRunAt: text("last_run_at"),
+  nextRunAt: text("next_run_at"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const taskRuns = sqliteTable("task_runs", {
+  id: text("id").primaryKey(),
+  taskId: text("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  status: text("status", { enum: ["running", "completed", "failed"] }).notNull(),
+  startedAt: text("started_at").notNull(),
+  completedAt: text("completed_at"),
+  result: text("result"),
+  error: text("error"),
+});
+
+export const inbox = sqliteTable("inbox", {
+  id: text("id").primaryKey(),
+  taskRunId: text("task_run_id").references(() => taskRuns.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  type: text("type", { enum: ["task_result", "schedule_result", "notification"] }).notNull(),
+  isRead: integer("is_read", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});

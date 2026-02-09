@@ -9,10 +9,51 @@ export interface HealthResponse {
   service: string;
 }
 
+// --- Tasks ---
+
+export type TriggerType = "cron" | "interval" | "webhook" | "manual";
+
+export interface Task {
+  id: string;
+  name: string;
+  description: string | null;
+  trigger_type: TriggerType;
+  trigger_config: string; // JSON: { cron?: string, interval_minutes?: number }
+  action_prompt: string;
+  tools: string | null; // JSON array of tool IDs, null = all enabled
+  is_active: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_at: string;
+}
+
+export interface TaskRun {
+  id: string;
+  task_id: string;
+  status: "running" | "completed" | "failed";
+  started_at: string;
+  completed_at: string | null;
+  result: string | null;
+  error: string | null;
+}
+
+export interface TaskCreateRequest {
+  name: string;
+  description?: string;
+  trigger_type: TriggerType;
+  trigger_config: string;
+  action_prompt: string;
+  tools?: string[];
+  is_active?: boolean;
+}
+
+export type TaskUpdateRequest = Partial<TaskCreateRequest>;
+
 // --- Inbox ---
 
 export interface InboxItem {
   id: string;
+  task_run_id?: string | null;
   title: string;
   content: string;
   type: "task_result" | "schedule_result" | "notification";
