@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Message, Conversation } from "@talos/shared/types"
+import type { Message, Conversation, ToolCallInfo } from "@talos/shared/types"
 import { conversationsApi } from "@/api/conversations"
 
 interface ChatState {
@@ -22,6 +22,10 @@ interface ChatState {
   setMessages: (messages: Message[]) => void;
   clearMessages: () => void;
   updateMessageId: (oldId: string, newId: string) => void;
+
+  // Tool calls
+  addToolCall: (toolCall: ToolCallInfo) => void;
+  setToolResult: (toolCallId: string, result: unknown) => void;
 
   // Conversations
   setConversations: (conversations: Conversation[]) => void;
@@ -70,6 +74,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
         m.id === oldId ? { ...m, id: newId } : m,
       ),
     })),
+
+  // Tool calls — attach to the last assistant message
+  addToolCall: (toolCall) =>
+    set((state) => {
+      const msgs = [...state.messages]
+      const last = msgs[msgs.length - 1]
+      if (last && last.role === "assistant") {
+        const existing = last.toolCalls ?? []
+        msgs[msgs.length - 1] = {
+          ...last,
+          toolCalls: [...existing, toolCall],
+        }
+      }
+      return { messages: msgs }
+    }),
+  setToolResult: (toolCallId, result) =>
+    set((state) => {
+      const msgs = state.messages.map((m) => {
+        if (m.role !== "assistant" || !m.toolCalls) return m
+        const hasCall = m.toolCalls.some((tc) => tc.toolCallId === toolCallId)
+        if (!hasCall) return m
+        return {
+          ...m,
+          toolCalls: m.toolCalls.map((tc) =>
+            tc.toolCallId === toolCallId
+              ? { ...tc, result, status: "complete" as const }
+              : tc,
+          ),
+        }
+      })
+      return { messages: msgs }
+    }),
 
   // Conversations
   setConversations: (conversations) => set({ conversations }),

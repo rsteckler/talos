@@ -1,4 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
+import { createLogger } from "../logger/index.js";
+
+const log = createLogger("api");
 
 export function errorHandler(
   err: unknown,
@@ -7,6 +10,6 @@ export function errorHandler(
   _next: NextFunction,
 ): void {
   const message = err instanceof Error ? err.message : "Internal server error";
-  console.error("Unhandled error:", err);
+  log.error("Unhandled error", { error: message });
   res.status(500).json({ error: message });
 }

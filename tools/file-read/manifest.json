@@ -1,0 +1,44 @@
+{
+  "id": "file-read",
+  "name": "File Read",
+  "description": "Read files and list directory contents on the host system.",
+  "version": "1.0.0",
+  "functions": [
+    {
+      "name": "read",
+      "description": "Read the contents of a file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute or relative path to the file."
+          },
+          "encoding": {
+            "type": "string",
+            "description": "File encoding. Defaults to 'utf-8'."
+          },
+          "maxLines": {
+            "type": "number",
+            "description": "Maximum number of lines to read. Reads entire file if not specified."
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "list",
+      "description": "List the contents of a directory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute or relative path to the directory."
+          }
+        },
+        "required": ["path"]
+      }
+    }
+  ]
+}

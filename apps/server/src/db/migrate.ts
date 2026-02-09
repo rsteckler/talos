@@ -37,6 +37,41 @@ export function runMigrations(): void {
       content TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS tool_configs (
+      tool_id TEXT PRIMARY KEY,
+      config TEXT NOT NULL DEFAULT '{}',
+      is_enabled INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS logs (
+      id TEXT PRIMARY KEY,
+      timestamp TEXT NOT NULL,
+      axis TEXT NOT NULL CHECK(axis IN ('user', 'dev')),
+      level TEXT NOT NULL,
+      area TEXT NOT NULL,
+      message TEXT NOT NULL,
+      data TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_logs_area ON logs(area);
+    CREATE INDEX IF NOT EXISTS idx_logs_axis_level ON logs(axis, level);
+
+    CREATE TABLE IF NOT EXISTS log_configs (
+      area TEXT PRIMARY KEY,
+      user_level TEXT NOT NULL DEFAULT 'medium',
+      dev_level TEXT NOT NULL DEFAULT 'debug',
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS log_settings (
+      id INTEGER PRIMARY KEY,
+      prune_days INTEGER NOT NULL DEFAULT 7,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Migrate existing providers table: expand CHECK constraint to include 'openrouter'
@@ -60,5 +95,13 @@ export function runMigrations(): void {
     raw.exec("PRAGMA foreign_keys = ON;");
   }
 
-  console.log("Database migrations complete");
+  // Migrate log_configs: update overly-restrictive defaults from initial deployment
+  raw.exec(`
+    UPDATE log_configs SET user_level = 'medium', dev_level = 'debug'
+    WHERE area = '_default' AND user_level = 'low' AND dev_level = 'silent';
+  `);
+
+  // Note: createLogger used here but initLogger() hasn't been called yet,
+  // so this falls back to console.log. That's fine for migration output.
+  console.log("[db] info: Database migrations complete");
 }

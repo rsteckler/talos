@@ -37,3 +37,34 @@ export const messages = sqliteTable("messages", {
   content: text("content").notNull(),
   createdAt: text("created_at").notNull(),
 });
+
+export const toolConfigs = sqliteTable("tool_configs", {
+  toolId: text("tool_id").primaryKey(),
+  config: text("config").notNull().default("{}"),
+  isEnabled: integer("is_enabled", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+export const logs = sqliteTable("logs", {
+  id: text("id").primaryKey(),
+  timestamp: text("timestamp").notNull(),
+  axis: text("axis", { enum: ["user", "dev"] }).notNull(),
+  level: text("level").notNull(),
+  area: text("area").notNull(),
+  message: text("message").notNull(),
+  data: text("data"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const logConfigs = sqliteTable("log_configs", {
+  area: text("area").primaryKey(),
+  userLevel: text("user_level").notNull().default("low"),
+  devLevel: text("dev_level").notNull().default("silent"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const logSettings = sqliteTable("log_settings", {
+  id: integer("id").primaryKey(),
+  pruneDays: integer("prune_days").notNull().default(7),
+  updatedAt: text("updated_at").notNull(),
+});

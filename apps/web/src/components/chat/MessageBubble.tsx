@@ -1,5 +1,6 @@
 import type { Message } from "@talos/shared/types"
 import { User, Bot } from "lucide-react"
+import { ToolCallDisplay } from "./ToolCallDisplay"
 
 interface MessageBubbleProps {
   message: Message;
@@ -31,6 +32,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         <p className="text-xs font-medium mb-1 text-zinc-400">
           {isUser ? "You" : "Talos"}
         </p>
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <div className="mb-2 border-b border-zinc-700 pb-2">
+            {message.toolCalls.map((tc) => (
+              <ToolCallDisplay key={tc.toolCallId} toolCall={tc} />
+            ))}
+          </div>
+        )}
         <div className="text-sm whitespace-pre-wrap break-words">
           {message.content}
         </div>

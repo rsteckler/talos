@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { MessageSquare, Wrench, Settings } from "lucide-react"
+import { MessageSquare, Wrench, Settings, ScrollText } from "lucide-react"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -17,6 +17,11 @@ const navItems = [
   {
     title: "Tools",
     icon: Wrench,
+  },
+  {
+    title: "Logs",
+    icon: ScrollText,
+    to: "/logs",
   },
   {
     title: "Settings",

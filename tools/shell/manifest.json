@@ -1,0 +1,30 @@
+{
+  "id": "shell",
+  "name": "Shell",
+  "description": "Execute shell commands on the host system.",
+  "version": "1.0.0",
+  "functions": [
+    {
+      "name": "execute",
+      "description": "Execute a shell command and return its output.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "The shell command to execute."
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Working directory for the command. Defaults to the server's data directory."
+          },
+          "timeout": {
+            "type": "number",
+            "description": "Timeout in milliseconds. Defaults to 30000 (30 seconds)."
+          }
+        },
+        "required": ["command"]
+      }
+    }
+  ]
+}

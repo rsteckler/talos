@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { ArrowLeft, Save, Loader2, Check } from "lucide-react"
+import { ArrowLeft, Save, Loader2, Check, ScrollText } from "lucide-react"
 import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select"
 import { useSettings, type Theme } from "@/contexts/SettingsContext"
 import { ProviderList } from "@/components/settings/ProviderList"
+import { ToolList } from "@/components/settings/ToolList"
 import { soulApi } from "@/api/soul"
 
 export function SettingsPage() {
@@ -106,6 +107,35 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent>
               <ProviderList />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Tools</CardTitle>
+              <CardDescription>
+                Enable and configure tools that Talos can use during conversations.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ToolList />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Logging</CardTitle>
+              <CardDescription>
+                View logs, configure verbosity, and manage log retention.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/logs">
+                  <ScrollText className="mr-2 size-4" />
+                  Open Log Viewer
+                </Link>
+              </Button>
             </CardContent>
           </Card>
 

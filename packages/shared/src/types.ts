@@ -28,6 +28,7 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   created_at: string;
+  toolCalls?: ToolCallInfo[];
 }
 
 export interface Conversation {
@@ -92,21 +93,99 @@ export interface ApiError {
   error: string;
 }
 
+// --- Logging ---
+
+export type LogAxis = "user" | "dev";
+export type UserLogLevel = "silent" | "low" | "medium" | "high";
+export type DevLogLevel = "silent" | "debug" | "verbose";
+
+export interface LogEntry {
+  id: string;
+  timestamp: string;
+  axis: LogAxis;
+  level: string;
+  area: string;
+  message: string;
+  data?: unknown;
+}
+
+export interface LogConfig {
+  area: string;
+  userLevel: UserLogLevel;
+  devLevel: DevLogLevel;
+}
+
+export interface LogSettings {
+  pruneDays: number;
+}
+
 // --- Connection ---
 
 export type ConnectionStatus = "connected" | "disconnected" | "reconnecting";
+
+// --- Tools ---
+
+export interface ToolCredentialSpec {
+  name: string;
+  label: string;
+  description?: string;
+  required: boolean;
+}
+
+export interface ToolFunctionSpec {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>; // JSON Schema
+}
+
+export interface ToolManifest {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  credentials?: ToolCredentialSpec[];
+  functions: ToolFunctionSpec[];
+}
+
+export interface ToolInfo {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  isEnabled: boolean;
+  credentials: ToolCredentialSpec[];
+  functions: ToolFunctionSpec[];
+  hasRequiredCredentials: boolean;
+}
+
+export interface ToolConfig {
+  toolId: string;
+  config: Record<string, string>;
+  isEnabled: boolean;
+}
+
+export interface ToolCallInfo {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  result?: unknown;
+  status: "calling" | "complete" | "error";
+}
 
 // --- WebSocket Protocol ---
 
 export type ClientMessage =
   | { type: "chat"; conversationId: string; content: string }
-  | { type: "cancel"; conversationId: string };
+  | { type: "cancel"; conversationId: string }
+  | { type: "subscribe_logs" }
+  | { type: "unsubscribe_logs" };
 
 export type ServerMessage =
   | { type: "chunk"; conversationId: string; content: string }
   | { type: "end"; conversationId: string; messageId: string }
   | { type: "error"; conversationId?: string; error: string }
-  | { type: "tool_call"; conversationId: string; toolName: string; args: Record<string, unknown> }
-  | { type: "tool_result"; conversationId: string; toolName: string; result: unknown }
+  | { type: "tool_call"; conversationId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
+  | { type: "tool_result"; conversationId: string; toolCallId: string; toolName: string; result: unknown }
   | { type: "status"; status: AgentStatus }
-  | { type: "inbox"; item: InboxItem };
+  | { type: "inbox"; item: InboxItem }
+  | { type: "log"; entry: LogEntry };

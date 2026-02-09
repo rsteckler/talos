@@ -2,12 +2,15 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "node:http";
 import type { ClientMessage, ServerMessage } from "@talos/shared/types";
 import { streamChat } from "../agent/core.js";
+import { createLogger, addLogSubscriber, removeLogSubscriber } from "../logger/index.js";
+
+const log = createLogger("ws");
 
 export function attachWebSocket(server: Server): void {
   const wss = new WebSocketServer({ server });
 
   wss.on("connection", (ws) => {
-    console.log("[WS] Client connected");
+    log.dev.debug("Client connected");
 
     const abortControllers = new Map<string, AbortController>();
 
@@ -22,16 +25,26 @@ export function attachWebSocket(server: Server): void {
 
       switch (msg.type) {
         case "chat":
+          log.user.medium(`Chat received: "${msg.content.slice(0, 50)}"`, { conversationId: msg.conversationId });
           handleChat(ws, msg.conversationId, msg.content, abortControllers);
           break;
         case "cancel":
           handleCancel(msg.conversationId, abortControllers);
           break;
+        case "subscribe_logs":
+          addLogSubscriber(ws);
+          log.dev.debug("Client subscribed to logs");
+          break;
+        case "unsubscribe_logs":
+          removeLogSubscriber(ws);
+          log.dev.debug("Client unsubscribed from logs");
+          break;
       }
     });
 
     ws.on("close", () => {
-      console.log("[WS] Client disconnected");
+      log.dev.debug("Client disconnected");
+      removeLogSubscriber(ws);
       for (const controller of abortControllers.values()) {
         controller.abort();
       }
@@ -39,7 +52,7 @@ export function attachWebSocket(server: Server): void {
     });
   });
 
-  console.log("[WS] WebSocket server attached");
+  log.info("WebSocket server attached");
 }
 
 function sendMessage(ws: WebSocket, msg: ServerMessage): void {
@@ -69,6 +82,27 @@ function handleChat(
       }
       sendMessage(ws, { type: "chunk", conversationId, content: chunk });
     },
+    onToolCall: (toolCallId, toolName, args) => {
+      sendMessage(ws, { type: "status", status: "tool_calling" });
+      sendMessage(ws, {
+        type: "tool_call",
+        conversationId,
+        toolCallId,
+        toolName,
+        args,
+      });
+      // Reset sentFirstChunk so next text after tool results gets "responding" status
+      sentFirstChunk = false;
+    },
+    onToolResult: (toolCallId, toolName, result) => {
+      sendMessage(ws, {
+        type: "tool_result",
+        conversationId,
+        toolCallId,
+        toolName,
+        result,
+      });
+    },
     onEnd: (messageId) => {
       abortControllers.delete(conversationId);
       sendMessage(ws, { type: "end", conversationId, messageId });
@@ -86,7 +120,7 @@ function handleChat(
     signal: controller.signal,
   }).catch((err: unknown) => {
     // Safety net for any unhandled rejection in streamChat
-    console.error("[WS] Unhandled streamChat error:", err);
+    log.error("Unhandled streamChat error", { error: err instanceof Error ? err.message : String(err) });
     abortControllers.delete(conversationId);
     sendMessage(ws, {
       type: "error",

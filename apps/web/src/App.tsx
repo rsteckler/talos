@@ -5,6 +5,7 @@ import { SettingsProvider } from "@/contexts/SettingsContext"
 import { OrbProvider } from "@/contexts/OrbContext"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { SettingsPage } from "@/pages/SettingsPage"
+import { LogsPage } from "@/pages/LogsPage"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useInboxStore, useProviderStore, useChatStore } from "@/stores"
 import { mockInboxItems } from "@/lib/mockData"
@@ -35,6 +36,7 @@ function AppContent() {
         }
       />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/logs" element={<LogsPage />} />
     </Routes>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react"
-import { useConnectionStore, useChatStore, useInboxStore } from "@/stores"
+import { useConnectionStore, useChatStore, useInboxStore, useLogStore } from "@/stores"
 import type { ClientMessage, ServerMessage } from "@talos/shared/types"
 
 const WS_URL = "ws://localhost:3001"
@@ -154,8 +154,30 @@ function handleMessage(message: ServerMessage) {
       useConnectionStore.getState().setAgentStatus(message.status)
       break
     case "tool_call":
+      // Ensure there's an assistant message to attach tool calls to
+      if (!streamingPlaceholderId) {
+        streamingPlaceholderId = `streaming-${crypto.randomUUID()}`
+        store.addMessage({
+          id: streamingPlaceholderId,
+          conversationId: message.conversationId,
+          role: "assistant",
+          content: "",
+          created_at: new Date().toISOString(),
+        })
+        store.setStreaming(true)
+      }
+      store.addToolCall({
+        toolCallId: message.toolCallId,
+        toolName: message.toolName,
+        args: message.args,
+        status: "calling",
+      })
+      break
     case "tool_result":
-      // Will be handled when tool UI is built
+      store.setToolResult(message.toolCallId, message.result)
+      break
+    case "log":
+      useLogStore.getState().addStreamedEntry(message.entry)
       break
   }
 }
