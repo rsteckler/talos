@@ -1,5 +1,5 @@
 import { request } from "./client";
-import type { Conversation, Message } from "@talos/shared/types";
+import type { Conversation, ConversationSummary, Message } from "@talos/shared/types";
 
 interface ConversationWithMessages extends Conversation {
   messages: Message[];
@@ -21,4 +21,14 @@ export const conversationsApi = {
     request<{ success: boolean }>(`/conversations/${id}`, {
       method: "DELETE",
     }),
+
+  search: (params: { search?: string; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params.search) qs.set("search", params.search);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    return request<{ conversations: ConversationSummary[]; total: number; page: number; limit: number }>(
+      `/conversations/search?${qs.toString()}`,
+    );
+  },
 };

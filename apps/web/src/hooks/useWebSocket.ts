@@ -209,5 +209,8 @@ function handleMessage(message: ServerMessage) {
       useLogStore.getState().addStreamedEntry(message.entry)
       useChatStore.getState().addChatLog(message.entry)
       break
+    case "conversation_title_update":
+      useChatStore.getState().updateConversationTitle(message.conversationId, message.title)
+      break
   }
 }

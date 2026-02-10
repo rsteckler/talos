@@ -1,9 +1,10 @@
 import { streamText, stepCountIs } from "ai";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, sql, and } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
 import { buildToolSet } from "../tools/index.js";
 import { createLogger } from "../logger/index.js";
+import { generateConversationTitle } from "./titleGenerator.js";
 import type { ModelMessage } from "ai";
 import type { TokenUsage } from "@talos/shared/types";
 import type { ApprovalGate } from "../tools/index.js";
@@ -216,6 +217,22 @@ export async function streamChat(
       .set({ updatedAt: new Date().toISOString() })
       .where(eq(schema.conversations.id, conversationId))
       .run();
+
+    // Generate a title after the first assistant message in a conversation
+    const assistantCount = db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.messages)
+      .where(and(
+        eq(schema.messages.conversationId, conversationId),
+        eq(schema.messages.role, "assistant"),
+      ))
+      .get();
+
+    if (assistantCount?.count === 1) {
+      generateConversationTitle(conversationId, userContent, fullContent).catch(() => {
+        // Fire-and-forget — errors already logged inside generateConversationTitle
+      });
+    }
 
     log.dev.debug("Token usage", totalUsage);
     onEnd(assistantMsgId, hasUsage ? totalUsage : undefined);

@@ -47,6 +47,7 @@ interface ChatState {
   addConversation: (conversation: Conversation) => void;
   removeConversation: (id: string) => void;
   setActiveConversation: (id: string | null) => void;
+  updateConversationTitle: (id: string, title: string) => void;
 
   // Async actions
   fetchConversations: () => Promise<void>;
@@ -178,6 +179,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       conversations: state.conversations.filter((c) => c.id !== id),
     })),
   setActiveConversation: (id) => set({ activeConversationId: id, inboxContext: null }),
+  updateConversationTitle: (id, title) =>
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === id ? { ...c, title } : c,
+      ),
+    })),
 
   // Async actions
   fetchConversations: async () => {

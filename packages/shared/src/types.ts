@@ -90,6 +90,10 @@ export interface Conversation {
   updated_at: string;
 }
 
+export interface ConversationSummary extends Conversation {
+  snippet?: string;
+}
+
 // --- Providers & Models ---
 
 export type ProviderType = "openai" | "anthropic" | "google" | "openrouter";
@@ -304,4 +308,5 @@ export type ServerMessage =
   | { type: "tool_approval_request"; conversationId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
   | { type: "status"; status: AgentStatus }
   | { type: "inbox"; item: InboxItem }
-  | { type: "log"; entry: LogEntry };
+  | { type: "log"; entry: LogEntry }
+  | { type: "conversation_title_update"; conversationId: string; title: string };

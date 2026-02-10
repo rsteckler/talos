@@ -1,5 +1,6 @@
+import { useState } from "react"
 import { Link } from "react-router-dom"
-import { Settings, ScrollText } from "lucide-react"
+import { Settings, ScrollText, History } from "lucide-react"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -7,6 +8,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar"
+import { ChatHistoryDialog } from "@/components/chat/ChatHistoryDialog"
 
 const navItems = [
   {
@@ -22,10 +24,19 @@ const navItems = [
 ]
 
 export function NavMenu() {
+  const [historyOpen, setHistoryOpen] = useState(false)
+
   return (
+    <>
     <SidebarGroup>
       <SidebarGroupContent>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton tooltip="Chat Logs" onClick={() => setHistoryOpen(true)}>
+              <History />
+              <span>Chat Logs</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           {navItems.map((item) => (
             <SidebarMenuItem key={item.title}>
               {item.to ? (
@@ -46,5 +57,7 @@ export function NavMenu() {
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
+    <ChatHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
+    </>
   )
 }

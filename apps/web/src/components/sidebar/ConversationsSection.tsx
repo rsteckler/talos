@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronRight, MessageSquare, Plus, Trash2 } from "lucide-react"
+import { ChevronRight, MessageSquare, Plus, Trash2, History } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -16,7 +16,10 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { ChatHistoryDialog } from "@/components/chat/ChatHistoryDialog"
 import { useChatStore } from "@/stores"
+
+const SIDEBAR_CONVERSATION_LIMIT = 5
 
 export function ConversationsSection() {
   const { state } = useSidebar()
@@ -28,6 +31,9 @@ export function ConversationsSection() {
   const clearMessages = useChatStore((s) => s.clearMessages)
 
   const [deletingConvId, setDeletingConvId] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+
+  const visibleConversations = conversations.slice(0, SIDEBAR_CONVERSATION_LIMIT)
 
   const handleNewChat = () => {
     setActiveConversation(null)
@@ -68,7 +74,7 @@ export function ConversationsSection() {
                   <span>New Chat</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              {conversations.map((conv) => (
+              {visibleConversations.map((conv) => (
                 <SidebarMenuItem key={conv.id}>
                   <SidebarMenuButton
                     isActive={conv.id === activeConversationId}
@@ -88,6 +94,17 @@ export function ConversationsSection() {
                   </SidebarMenuAction>
                 </SidebarMenuItem>
               ))}
+              {conversations.length > SIDEBAR_CONVERSATION_LIMIT && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => setHistoryOpen(true)}
+                    className="text-muted-foreground"
+                  >
+                    <History className="size-4" />
+                    <span>See all chats</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
               {conversations.length === 0 && (
                 <SidebarMenuItem>
                   <SidebarMenuButton disabled>
@@ -109,6 +126,7 @@ export function ConversationsSection() {
         if (deletingConvId) deleteConversation(deletingConvId)
       }}
     />
+    <ChatHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
   </>
   )
 }

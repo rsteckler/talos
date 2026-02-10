@@ -22,6 +22,20 @@ export function broadcastInbox(item: InboxItem): void {
   }
 }
 
+/**
+ * Broadcast a conversation title update to ALL connected WebSocket clients.
+ * Called by the title generator after LLM generates a title.
+ */
+export function broadcastConversationTitleUpdate(conversationId: string, title: string): void {
+  if (!wssRef) return;
+  const msg = JSON.stringify({ type: "conversation_title_update", conversationId, title } satisfies ServerMessage);
+  for (const client of wssRef.clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(msg);
+    }
+  }
+}
+
 export function attachWebSocket(server: Server): void {
   const wss = new WebSocketServer({ server });
   wssRef = wss;
