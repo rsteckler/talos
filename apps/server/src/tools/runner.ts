@@ -87,6 +87,12 @@ export function buildToolSet(filterToolIds?: string[], approvalGate?: ApprovalGa
       continue;
     }
 
+    // Check OAuth connection if required
+    if (loaded.manifest.oauth && !storedConfig["refresh_token"]) {
+      log.dev.debug(`Skipping ${toolId}: OAuth not connected`);
+      continue;
+    }
+
     // Add prompt.md content
     if (loaded.promptMd) {
       toolPrompts.push(loaded.promptMd);

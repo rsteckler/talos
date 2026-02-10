@@ -49,7 +49,7 @@ talos/
 ├── tools/               # File-based tool plugins
 │   ├── shell/
 │   ├── web-search/
-│   └── file-read/
+│   └── file-operations/
 ├── website/             # Documentation (Docusaurus)
 └── pnpm-workspace.yaml
 ```

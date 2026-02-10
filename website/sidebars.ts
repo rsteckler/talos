@@ -25,6 +25,14 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "category",
+      label: "Guides",
+      items: [
+        "guides/google-workspace-setup",
+        "guides/google-maps-setup",
+      ],
+    },
+    {
+      type: "category",
       label: "Tool Development",
       items: [
         "tool-development/overview",

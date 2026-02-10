@@ -5,7 +5,7 @@ import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
 import { buildToolSet } from "../tools/runner.js";
 import { createLogger } from "../logger/index.js";
 import { broadcastInbox } from "../ws/index.js";
-import type { InboxItem } from "@talos/shared/types";
+import type { InboxItem, TokenUsage } from "@talos/shared/types";
 
 const log = createLogger("scheduler");
 
@@ -51,6 +51,35 @@ export async function executeTask(task: TaskRow): Promise<void> {
       ...(hasTools ? { tools, stopWhen: stepCountIs(10) } : {}),
     });
 
+    // Capture token usage
+    const inputTokens = result.usage.inputTokens ?? 0;
+    const outputTokens = result.usage.outputTokens ?? 0;
+    const taskUsage: TokenUsage = {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+    };
+
+    // For OpenRouter: attempt to fetch cost from generation stats
+    if (active.providerType === "openrouter") {
+      try {
+        const generationId = result.response.headers?.["x-openrouter-generation-id"];
+        if (generationId && active.apiKey) {
+          const genRes = await fetch(`https://openrouter.ai/api/v1/generation?id=${generationId}`, {
+            headers: { Authorization: `Bearer ${active.apiKey}` },
+          });
+          if (genRes.ok) {
+            const genData = await genRes.json() as { data?: { total_cost?: number } };
+            if (genData.data?.total_cost != null) {
+              taskUsage.cost = genData.data.total_cost;
+            }
+          }
+        }
+      } catch {
+        // Cost fetching is best-effort
+      }
+    }
+
     const completedAt = new Date().toISOString();
 
     // Update task_run as completed
@@ -59,6 +88,7 @@ export async function executeTask(task: TaskRow): Promise<void> {
         status: "completed",
         completedAt,
         result: result.text || null,
+        usage: taskUsage.totalTokens > 0 ? JSON.stringify(taskUsage) : null,
       })
       .where(eq(schema.taskRuns.id, runId))
       .run();

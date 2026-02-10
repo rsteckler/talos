@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react"
-import { ArrowLeft, Save, Loader2, Check, ScrollText } from "lucide-react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { ArrowLeft, Save, Loader2, Check, ScrollText, Upload, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,6 +16,10 @@ import { useSettings, type Theme } from "@/contexts/SettingsContext"
 import { ProviderList } from "@/components/settings/ProviderList"
 import { ToolList } from "@/components/settings/ToolList"
 import { soulApi } from "@/api/soul"
+import { themesApi } from "@/api/themes"
+import { ACCENT_COLORS } from "@/lib/accent-colors"
+import { cn } from "@/lib/utils"
+import type { ThemeMeta, ThemeFile } from "@talos/shared/types"
 
 export function SettingsPage() {
   const { settings, updateSettings } = useSettings()
@@ -25,6 +29,12 @@ export function SettingsPage() {
   const [soulSaving, setSoulSaving] = useState(false)
   const [soulSaved, setSoulSaved] = useState(false)
   const [soulError, setSoulError] = useState<string | null>(null)
+
+  // Theme state
+  const [themes, setThemes] = useState<ThemeMeta[]>([])
+  const [themesLoading, setThemesLoading] = useState(true)
+  const [themeError, setThemeError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     soulApi.get()
@@ -37,6 +47,22 @@ export function SettingsPage() {
         setSoulLoading(false)
       })
   }, [])
+
+  const loadThemes = useCallback(() => {
+    setThemesLoading(true)
+    themesApi.list()
+      .then((data) => {
+        setThemes(data)
+        setThemesLoading(false)
+      })
+      .catch(() => {
+        setThemesLoading(false)
+      })
+  }, [])
+
+  useEffect(() => {
+    loadThemes()
+  }, [loadThemes])
 
   const handleSoulSave = useCallback(async () => {
     setSoulSaving(true)
@@ -51,6 +77,68 @@ export function SettingsPage() {
       setSoulSaving(false)
     }
   }, [soulContent])
+
+  const handleAccentChange = (id: string | null) => {
+    updateSettings({ accentColor: id })
+  }
+
+  const handleThemeChange = (value: string) => {
+    if (value === "none") {
+      updateSettings({ customTheme: null })
+    } else {
+      updateSettings({ customTheme: value })
+    }
+  }
+
+  const handleThemeUpload = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setThemeError(null)
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text) as ThemeFile
+
+      if (!parsed.id || !parsed.name || !parsed.light || !parsed.dark) {
+        setThemeError("Invalid theme file: missing required fields (id, name, light, dark)")
+        return
+      }
+
+      await themesApi.upload(parsed)
+      loadThemes()
+      updateSettings({ customTheme: parsed.id })
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        setThemeError("Invalid JSON file")
+      } else {
+        setThemeError(err instanceof Error ? err.message : "Failed to upload theme")
+      }
+    } finally {
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+    }
+  }
+
+  const handleThemeDelete = async (id: string) => {
+    try {
+      await themesApi.remove(id)
+      if (settings.customTheme === id) {
+        updateSettings({ customTheme: null })
+      }
+      loadThemes()
+    } catch (err) {
+      setThemeError(err instanceof Error ? err.message : "Failed to delete theme")
+    }
+  }
+
+  const hasCustomTheme = !!settings.customTheme
+  const selectedThemeMeta = themes.find((t) => t.id === settings.customTheme)
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background">
@@ -74,10 +162,11 @@ export function SettingsPage() {
                 Customize how Talos looks on your device.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              {/* Mode */}
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label htmlFor="theme">Theme</Label>
+                  <Label htmlFor="theme">Mode</Label>
                   <p className="text-sm text-muted-foreground">
                     Select your preferred color scheme.
                   </p>
@@ -95,6 +184,117 @@ export function SettingsPage() {
                     <SelectItem value="system">System</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Accent Color */}
+              <div className="space-y-3">
+                <div className="space-y-0.5">
+                  <Label>Accent Color</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {hasCustomTheme
+                      ? "Disabled while a custom theme is active."
+                      : "Tint the primary color across the interface."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {/* Default (no accent) */}
+                  <button
+                    type="button"
+                    disabled={hasCustomTheme}
+                    onClick={() => handleAccentChange(null)}
+                    className={cn(
+                      "relative size-8 rounded-full border-2 transition-colors",
+                      "bg-gradient-to-br from-zinc-300 to-zinc-600",
+                      !hasCustomTheme && !settings.accentColor
+                        ? "border-foreground"
+                        : "border-transparent hover:border-muted-foreground/50",
+                      hasCustomTheme && "opacity-40 cursor-not-allowed",
+                    )}
+                    title="Default"
+                  >
+                    {!hasCustomTheme && !settings.accentColor && (
+                      <Check className="absolute inset-0 m-auto size-3.5 text-white" />
+                    )}
+                  </button>
+                  {Object.entries(ACCENT_COLORS).map(([id, def]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={hasCustomTheme}
+                      onClick={() => handleAccentChange(id)}
+                      className={cn(
+                        "relative size-8 rounded-full border-2 transition-colors",
+                        !hasCustomTheme && settings.accentColor === id
+                          ? "border-foreground"
+                          : "border-transparent hover:border-muted-foreground/50",
+                        hasCustomTheme && "opacity-40 cursor-not-allowed",
+                      )}
+                      style={{ backgroundColor: def.swatch }}
+                      title={def.label}
+                    >
+                      {!hasCustomTheme && settings.accentColor === id && (
+                        <Check className="absolute inset-0 m-auto size-3.5 text-white" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Theme */}
+              <div className="space-y-3">
+                <div className="space-y-0.5">
+                  <Label>Custom Theme</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Apply a complete color theme or upload your own.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={settings.customTheme ?? "none"}
+                    onValueChange={handleThemeChange}
+                    disabled={themesLoading}
+                  >
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {themes.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleThemeUpload}
+                    title="Upload theme"
+                  >
+                    <Upload className="size-4" />
+                  </Button>
+                  {selectedThemeMeta && !selectedThemeMeta.builtIn && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleThemeDelete(selectedThemeMeta.id)}
+                      title="Delete theme"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
+                </div>
+                {themeError && (
+                  <p className="text-sm text-destructive">{themeError}</p>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileSelected}
+                  className="hidden"
+                />
               </div>
             </CardContent>
           </Card>

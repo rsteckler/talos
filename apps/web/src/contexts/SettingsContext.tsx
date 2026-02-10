@@ -1,15 +1,22 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useState, useRef, useCallback, type ReactNode } from "react"
+import type { ThemeFile } from "@talos/shared/types"
+import { themesApi } from "@/api/themes"
+import { applyCustomTheme, clearCustomTheme, applyAccentColor, clearAccentColor } from "@/lib/theme-applier"
 
 export type Theme = "light" | "dark" | "system"
 
 export interface Settings {
   theme: Theme
   showLogsInChat: boolean
+  accentColor: string | null
+  customTheme: string | null
 }
 
 const defaultSettings: Settings = {
   theme: "system",
   showLogsInChat: false,
+  accentColor: null,
+  customTheme: null,
 }
 
 interface SettingsContextValue {
@@ -37,40 +44,90 @@ function saveSettings(settings: Settings): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
 }
 
-function applyTheme(theme: Theme): void {
-  const root = document.documentElement
-  const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+function isDarkMode(theme: Theme): boolean {
+  if (theme === "dark") return true
+  if (theme === "light") return false
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+}
 
-  if (theme === "dark" || (theme === "system" && systemDark)) {
-    root.classList.add("dark")
+function applyDarkClass(dark: boolean): void {
+  if (dark) {
+    document.documentElement.classList.add("dark")
   } else {
-    root.classList.remove("dark")
+    document.documentElement.classList.remove("dark")
   }
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(loadSettings)
+  const [themeData, setThemeData] = useState<ThemeFile | null>(null)
+  const fetchedThemeId = useRef<string | null>(null)
 
+  // Fetch theme data when customTheme changes
   useEffect(() => {
-    applyTheme(settings.theme)
-  }, [settings.theme])
-
-  useEffect(() => {
-    if (settings.theme === "system") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
-      const handler = () => applyTheme("system")
-      mediaQuery.addEventListener("change", handler)
-      return () => mediaQuery.removeEventListener("change", handler)
+    if (!settings.customTheme) {
+      setThemeData(null)
+      fetchedThemeId.current = null
+      return
     }
-  }, [settings.theme])
 
-  const updateSettings = (updates: Partial<Settings>) => {
+    if (fetchedThemeId.current === settings.customTheme) return
+
+    themesApi.get(settings.customTheme).then((data) => {
+      fetchedThemeId.current = data.id
+      setThemeData(data)
+    }).catch(() => {
+      // Theme not found, clear selection
+      setThemeData(null)
+      fetchedThemeId.current = null
+    })
+  }, [settings.customTheme])
+
+  // Apply appearance whenever mode, theme data, or accent changes
+  useEffect(() => {
+    const dark = isDarkMode(settings.theme)
+    applyDarkClass(dark)
+
+    // Clear both first to avoid stale vars
+    clearCustomTheme()
+    clearAccentColor()
+
+    if (themeData) {
+      applyCustomTheme(themeData, dark)
+    } else if (settings.accentColor) {
+      applyAccentColor(settings.accentColor, dark)
+    }
+  }, [settings.theme, settings.accentColor, themeData])
+
+  // Listen for system theme changes
+  useEffect(() => {
+    if (settings.theme !== "system") return
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
+    const handler = () => {
+      const dark = mediaQuery.matches
+      applyDarkClass(dark)
+
+      clearCustomTheme()
+      clearAccentColor()
+
+      if (themeData) {
+        applyCustomTheme(themeData, dark)
+      } else if (settings.accentColor) {
+        applyAccentColor(settings.accentColor, dark)
+      }
+    }
+    mediaQuery.addEventListener("change", handler)
+    return () => mediaQuery.removeEventListener("change", handler)
+  }, [settings.theme, settings.accentColor, themeData])
+
+  const updateSettings = useCallback((updates: Partial<Settings>) => {
     setSettings((prev) => {
       const next = { ...prev, ...updates }
       saveSettings(next)
       return next
     })
-  }
+  }, [])
 
   return (
     <SettingsContext.Provider value={{ settings, updateSettings }}>

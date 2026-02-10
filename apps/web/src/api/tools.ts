@@ -23,4 +23,10 @@ export const toolsApi = {
       method: "POST",
       body: JSON.stringify({ allow }),
     }),
+
+  oauthStatus: (provider: string) =>
+    request<{ connected: boolean }>(`/oauth/${provider}/status`),
+
+  oauthDisconnect: (provider: string) =>
+    request<ToolInfo>(`/oauth/${provider}/disconnect`, { method: "POST" }),
 }

@@ -1,0 +1,70 @@
+{
+  "id": "file-operations",
+  "name": "File Operations",
+  "description": "Read, write, and list files and directories on the host system.",
+  "version": "2.0.0",
+  "functions": [
+    {
+      "name": "read",
+      "description": "Read the contents of a file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute or relative path to the file."
+          },
+          "encoding": {
+            "type": "string",
+            "description": "File encoding. Defaults to 'utf-8'."
+          },
+          "maxLines": {
+            "type": "number",
+            "description": "Maximum number of lines to read. Reads entire file if not specified."
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "write",
+      "description": "Write content to a file. Creates the file if it does not exist. Creates parent directories as needed.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute or relative path to the file."
+          },
+          "content": {
+            "type": "string",
+            "description": "Content to write to the file."
+          },
+          "encoding": {
+            "type": "string",
+            "description": "File encoding. Defaults to 'utf-8'."
+          },
+          "append": {
+            "type": "boolean",
+            "description": "If true, append to the file instead of overwriting. Defaults to false."
+          }
+        },
+        "required": ["path", "content"]
+      }
+    },
+    {
+      "name": "list",
+      "description": "List the contents of a directory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute or relative path to the directory."
+          }
+        },
+        "required": ["path"]
+      }
+    }
+  ]
+}

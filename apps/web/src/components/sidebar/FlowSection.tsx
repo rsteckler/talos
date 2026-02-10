@@ -14,7 +14,7 @@ import {
   SidebarMenuBadge,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { useInboxStore } from "@/stores"
+import { useChatStore, useInboxStore } from "@/stores"
 import type { InboxItem } from "@talos/shared/types"
 
 function typeIcon(type: InboxItem["type"]) {
@@ -47,6 +47,9 @@ export function FlowSection() {
   const unreadCount = useInboxStore((s) => s.unreadCount)
   const isLoading = useInboxStore((s) => s.isLoading)
   const markAsRead = useInboxStore((s) => s.markAsRead)
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation)
+  const clearMessages = useChatStore((s) => s.clearMessages)
+  const setInboxContext = useChatStore((s) => s.setInboxContext)
 
   if (state === "collapsed") {
     return (
@@ -104,6 +107,9 @@ export function FlowSection() {
                     <SidebarMenuButton
                       onClick={() => {
                         if (!item.is_read) markAsRead(item.id)
+                        setActiveConversation(null)
+                        clearMessages()
+                        setInboxContext(item)
                       }}
                       className="h-auto py-2"
                     >

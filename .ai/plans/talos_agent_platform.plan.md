@@ -32,7 +32,7 @@ isProject: false
 
 Talos is a self-hosted AI agent that acts as your "chief of staff." It supports bring-your-own-key (BYOK) model providers, scheduled/triggered tasks, and extensible tools. The user interacts via chat (sync) and receives results via an inbox (async).
 
-**Progress:** Phase 7 complete — all phases done. See Implementation Notes under each phase for what was built, decisions, deviations, and notes for future agents.
+**Progress:** Phase 7 complete — all phases done. Post-phase enhancements ongoing (theme system, chat theming). See Implementation Notes under each phase and the Post-Phase Enhancements section for what was built.
 
 ---
 
@@ -1027,6 +1027,76 @@ interface InboxUpdate {
 - **Docusaurus config:** `website/docusaurus.config.ts` — dark mode default, docs at root route, no blog.
 - **ConfirmDialog usage:** Import from `@/components/ui/confirm-dialog`. Manage open state externally, pass `onConfirm` callback. Dialog closes itself after confirm via `onOpenChange(false)`.
 - **Checking concurrent tasks:** `scheduler.isTaskRunning(taskId)` returns boolean. The `runningTasks` set is module-level — no persistence across server restarts (tasks resume from scratch on restart).
+
+---
+
+## Post-Phase Enhancements
+
+Features added after Phase 7 completion that extend the platform outside the original phase plan.
+
+### Theme System
+
+**What was built:**
+- **Shared types (`packages/shared/src/types.ts`):** Added `ThemeColors` (all 27 CSS variable keys), `ThemeMeta` (id, name, author, description, builtIn), `ThemeFile` (id, name, author, description, light/dark `ThemeColors`).
+- **Built-in themes (`apps/server/themes/`):** 8 committed JSON theme files — Tokyo Night, Catppuccin Mocha, Nord, Gruvbox, Dracula, Solarized, Rosé Pine, Sunset. Each defines all 27 color variables for both light and dark modes as HSL triplets (no `hsl()` wrapper, matching `index.css` convention).
+- **Server theme API (`apps/server/src/api/themes.ts`):** Express Router with 4 endpoints:
+  - `GET /api/themes` — lists built-in (`apps/server/themes/`) + user (`apps/server/data/themes/`) themes, returns `ThemeMeta[]`
+  - `GET /api/themes/:id` — returns full `ThemeFile`, looks up built-in first then user dir
+  - `POST /api/themes` — upload user theme (JSON body), Zod-validated (id must be lowercase alphanumeric with hyphens, all 27 color keys required per mode), writes to `data/themes/`, 409 if conflicts with built-in
+  - `DELETE /api/themes/:id` — delete user theme only, 403 for built-in
+- **Frontend theme API (`apps/web/src/api/themes.ts`):** `themesApi` with `list`, `get`, `upload`, `remove`. Re-exported from `api/index.ts`.
+- **Accent color presets (`apps/web/src/lib/accent-colors.ts`):** 7 client-only accent colors (cyan, violet, amber, green, rose, orange, blue) plus "default" (null). Each defines overrides for `--primary`, `--primary-foreground`, `--ring`, `--sidebar-primary`, `--sidebar-primary-foreground`, `--sidebar-ring` in both light and dark variants.
+- **Theme applier (`apps/web/src/lib/theme-applier.ts`):** Four functions using `document.documentElement.style.setProperty/removeProperty`:
+  - `applyCustomTheme(theme, isDark)` — sets all 27 CSS vars as inline styles on root
+  - `clearCustomTheme()` — removes all 27 inline CSS vars
+  - `applyAccentColor(id, isDark)` — sets 6 accent-specific vars
+  - `clearAccentColor()` — removes 6 accent vars
+- **Settings context (`apps/web/src/contexts/SettingsContext.tsx`):** Added `accentColor: string | null` and `customTheme: string | null` to `Settings`. Fetches `ThemeFile` when `customTheme` changes (cached by ID). On mode/theme/accent change: clears both, then applies custom theme or accent. System media query listener re-applies on OS theme change.
+- **Settings page UI (`apps/web/src/pages/SettingsPage.tsx`):** Expanded Appearance card with three rows:
+  1. **Mode** — existing Light/Dark/System select (renamed label from "Theme" to "Mode")
+  2. **Accent Color** — row of circular color swatches with check indicator and ring on selection. Disabled (grayed out) when custom theme is active.
+  3. **Custom Theme** — Select dropdown (None + fetched themes), Upload button (reads `.json` file, validates, POSTs), Delete button shown only for user themes (not built-in).
+
+### Chat Interface Theming
+
+Replaced all hardcoded `zinc-*`, `black`, and `cyan-*` color classes with CSS variable-based theme tokens across the chat interface, so custom themes and accent colors apply consistently.
+
+- **`ChatArea.tsx`:** `bg-black` → `bg-background`, `border-zinc-800 bg-zinc-950/50` → `border-border bg-card/50`, all `text-zinc-*` → `text-foreground`/`text-muted-foreground`, input bar `border-zinc-700 bg-zinc-900/95` → `border-border bg-card/95`, send button `bg-cyan-600` → `bg-primary`, "Add a provider" link `text-cyan-500` → `text-primary`.
+- **`MessageBubble.tsx`:** User avatar `bg-cyan-600` → `bg-primary`, user icon `text-white` → `text-primary-foreground`, bot avatar `bg-zinc-700` → `bg-muted`, bot icon `text-zinc-300` → `text-muted-foreground`, user bubble `bg-cyan-600/20 text-zinc-100` → `bg-primary/20 text-foreground`, bot bubble `bg-zinc-800 text-zinc-200` → `bg-muted text-foreground`, name label `text-zinc-400` → `text-muted-foreground`, tool call divider `border-zinc-700` → `border-border`, usage text `text-zinc-500` → `text-muted-foreground`.
+- **`InboxContextCard.tsx`:** Left border `border-cyan-500` → `border-primary`, background `bg-zinc-900/80` → `bg-card/80`, type icons `text-cyan-400` → `text-primary`, title `text-zinc-100` → `text-foreground`, timestamp and content `text-zinc-500`/`text-zinc-400` → `text-muted-foreground`, dismiss button hover `hover:bg-zinc-800` → `hover:bg-accent`.
+- **`select.tsx` (shadcn):** Replaced `bg-white dark:bg-zinc-950` with `bg-popover` on both `SelectContent` and its viewport so custom themes override the dropdown background.
+
+**Architecture:**
+Three independent, composable layers:
+1. **Mode** (Light/Dark/System) — existing `.dark` class toggle, unchanged
+2. **Accent colors** — client-only presets overriding `--primary`, `--ring`, `--sidebar-primary` etc. for both modes
+3. **Custom themes** — JSON files served by the server, override ALL 27 color CSS variables for both light and dark
+
+When a custom theme is active, accent color selection is disabled (theme controls everything). Theme/accent CSS variables are applied as inline styles on `document.documentElement`, which override the `@layer base` defaults in `index.css`.
+
+**Theme JSON format:**
+```json
+{
+  "id": "theme-id",
+  "name": "Theme Name",
+  "author": "Author",
+  "description": "Description",
+  "light": { "background": "H S% L%", ...27 keys... },
+  "dark": { "background": "H S% L%", ...27 keys... }
+}
+```
+Required color keys per mode: `background`, `foreground`, `card`, `card-foreground`, `popover`, `popover-foreground`, `primary`, `primary-foreground`, `secondary`, `secondary-foreground`, `muted`, `muted-foreground`, `accent`, `accent-foreground`, `destructive`, `destructive-foreground`, `border`, `input`, `ring`, `sidebar-background`, `sidebar-foreground`, `sidebar-primary`, `sidebar-primary-foreground`, `sidebar-accent`, `sidebar-accent-foreground`, `sidebar-border`, `sidebar-ring`.
+
+**Key decisions:**
+- **No database for themes:** Themes are plain JSON files on disk. Built-in themes are committed to git in `apps/server/themes/`. User-uploaded themes go to `apps/server/data/themes/` (gitignored). Simpler than DB storage and easy to share/version.
+- **Inline styles override CSS layers:** `document.documentElement.style.setProperty('--primary', value)` has higher specificity than `@layer base { :root { --primary: ... } }`, so no CSS changes needed to make theming work.
+- **Accent disabled during custom theme:** A custom theme defines all colors including primary, so accent overrides would conflict. UI shows swatches as grayed-out with explanatory text when a custom theme is selected.
+- **Server validates theme uploads with Zod:** ID must be lowercase alphanumeric with hyphens, all 27 color keys required. Prevents malformed themes from breaking the UI.
+
+**Handy for future work:**
+- **Adding built-in themes:** Drop a `.json` file in `apps/server/themes/` following the format above. It appears in the dropdown automatically.
+- **Theming new components:** Use `bg-background`, `text-foreground`, `bg-card`, `bg-muted`, `text-muted-foreground`, `border-border`, `bg-primary`, `text-primary-foreground` etc. instead of hardcoded `zinc-*`/`black`/`white` classes. These all respond to theme/accent changes.
+- **Theme file upload:** Settings > Appearance > Custom Theme > Upload button. Accepts `.json` files matching the format above.
 
 ---
 

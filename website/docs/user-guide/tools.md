@@ -8,7 +8,7 @@ Tools extend Talos's capabilities by giving the LLM the ability to execute actio
 
 ## Bundled Tools
 
-Talos ships with three built-in tools:
+Talos ships with several built-in tools:
 
 ### Shell
 
@@ -24,12 +24,28 @@ Search the web using the Tavily API.
 - **Function:** `search(query, max_results?)`
 - **Requires:** Tavily API key (configured in Settings)
 
-### File Read
+### File Operations
 
-Read files and list directories on the host system.
+Read, write, and list files and directories on the host system.
 
-- **Functions:** `read(path, encoding?, maxLines?)`, `list(path)`
+- **Functions:** `read(path, encoding?, maxLines?)`, `write(path, content, encoding?, append?)`, `list(path)`
 - **No credentials required**
+
+### Google Workspace
+
+Access Gmail, Calendar, Drive, Sheets, Docs, and Slides.
+
+- **Functions:** `gmail_search`, `gmail_read`, `gmail_send`, `gmail_reply`, `gmail_archive`, `calendar_list_events`, `calendar_create_event`, `drive_list`, `drive_read`, `sheets_read`, `sheets_write`, `docs_read`, `slides_read`
+- **Requires:** Google Cloud OAuth Client ID and Client Secret, plus OAuth connection
+- **Setup guide:** [Google Workspace Setup](../guides/google-workspace-setup)
+
+### Google Maps
+
+Search places, get directions, calculate distances, and geocode addresses.
+
+- **Functions:** `places_search`, `place_details`, `places_nearby`, `directions`, `distance_matrix`, `geocode`, `reverse_geocode`, `place_autocomplete`
+- **Requires:** Google Maps API Key (configured in Settings)
+- **Setup guide:** [Google Maps Setup](../guides/google-maps-setup)
 
 ## Enabling Tools
 

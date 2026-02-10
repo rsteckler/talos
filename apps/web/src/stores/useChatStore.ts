@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Message, Conversation, ToolCallInfo, TokenUsage, LogEntry } from "@talos/shared/types"
+import type { Message, Conversation, ToolCallInfo, TokenUsage, LogEntry, InboxItem } from "@talos/shared/types"
 import { conversationsApi } from "@/api/conversations"
 
 const MAX_CHAT_LOGS = 500
@@ -11,6 +11,10 @@ interface ChatState {
   chatLogs: LogEntry[];
   inputValue: string;
   isStreaming: boolean;
+  inboxContext: InboxItem | null;
+
+  // Inbox context
+  setInboxContext: (item: InboxItem | null) => void;
 
   // Input
   setInputValue: (value: string) => void;
@@ -58,6 +62,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   chatLogs: [],
   inputValue: "",
   isStreaming: false,
+  inboxContext: null,
+
+  // Inbox context
+  setInboxContext: (item) => set({ inboxContext: item }),
 
   // Input
   setInputValue: (value) => set({ inputValue: value }),
@@ -169,7 +177,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       conversations: state.conversations.filter((c) => c.id !== id),
     })),
-  setActiveConversation: (id) => set({ activeConversationId: id }),
+  setActiveConversation: (id) => set({ activeConversationId: id, inboxContext: null }),
 
   // Async actions
   fetchConversations: async () => {
@@ -204,6 +212,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({
         activeConversationId: id,
         messages: data.messages,
+        inboxContext: null,
       })
     } catch (err) {
       console.error("[ChatStore] Failed to load conversation:", err)

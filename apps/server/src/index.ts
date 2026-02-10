@@ -10,6 +10,8 @@ import { logRouter } from "./api/logs.js";
 import { taskRouter } from "./api/tasks.js";
 import { inboxRouter } from "./api/inbox.js";
 import { webhookRouter } from "./api/webhooks.js";
+import { themeRouter } from "./api/themes.js";
+import { oauthRouter } from "./api/oauth.js";
 import { errorHandler } from "./api/errorHandler.js";
 import { attachWebSocket } from "./ws/index.js";
 import { loadAllTools } from "./tools/index.js";
@@ -43,6 +45,8 @@ app.use("/api", logRouter);
 app.use("/api", taskRouter);
 app.use("/api", inboxRouter);
 app.use("/api", webhookRouter);
+app.use("/api", themeRouter);
+app.use("/api", oauthRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);

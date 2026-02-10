@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Settings2, Loader2 } from "lucide-react"
+import { Settings2, Loader2, Unplug } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { useToolStore } from "@/stores/useToolStore"
@@ -7,7 +7,7 @@ import { ToolConfigDialog } from "./ToolConfigDialog"
 import type { ToolInfo } from "@talos/shared/types"
 
 export function ToolList() {
-  const { tools, loading, fetchTools, enableTool, disableTool, setAllowWithoutAsking } = useToolStore()
+  const { tools, loading, fetchTools, enableTool, disableTool, setAllowWithoutAsking, connectOAuth, disconnectOAuth } = useToolStore()
   const [configTool, setConfigTool] = useState<ToolInfo | null>(null)
 
   useEffect(() => {
@@ -59,6 +59,35 @@ export function ToolList() {
                 <p className="text-xs text-amber-500 mt-0.5">
                   Credentials required
                 </p>
+              )}
+              {tool.oauth && (
+                <div className="flex items-center gap-2 mt-1.5">
+                  {tool.oauthConnected ? (
+                    <>
+                      <span className="text-xs text-emerald-500 font-medium">Connected</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                        onClick={() => disconnectOAuth(tool.id)}
+                      >
+                        <Unplug className="size-3 mr-1" />
+                        Disconnect
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      disabled={!tool.hasRequiredCredentials}
+                      onClick={() => connectOAuth(tool.id)}
+                      title={!tool.hasRequiredCredentials ? "Enter credentials first" : undefined}
+                    >
+                      Connect Google
+                    </Button>
+                  )}
+                </div>
               )}
               {tool.isEnabled && (
                 <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer">

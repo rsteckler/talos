@@ -177,9 +177,10 @@ function handleMessage(message: ServerMessage) {
       })
       break
     case "tool_approval_request":
-      // The tool_call event already added this entry with "calling" status.
-      // Update it to "pending_approval" to show the approval prompt.
-      // If no placeholder exists yet (defensive), create one and add the tool call.
+      // Due to AI SDK stream internals, tool_approval_request can arrive
+      // BEFORE the tool_call message (execute() fires synchronously after
+      // the tool-call chunk is queued but before the for-await consumer
+      // reads it). Handle both orderings:
       if (!streamingPlaceholderId) {
         streamingPlaceholderId = `streaming-${crypto.randomUUID()}`
         store.addMessage({
@@ -190,15 +191,16 @@ function handleMessage(message: ServerMessage) {
           created_at: new Date().toISOString(),
         })
         store.setStreaming(true)
-        store.addToolCall({
-          toolCallId: message.toolCallId,
-          toolName: message.toolName,
-          args: message.args,
-          status: "pending_approval",
-        })
-      } else {
-        store.updateToolCallStatus(message.toolCallId, "pending_approval")
       }
+      // Add the tool call at pending_approval status. If it already exists
+      // (tool_call arrived first), addToolCall deduplicates, so also update.
+      store.addToolCall({
+        toolCallId: message.toolCallId,
+        toolName: message.toolName,
+        args: message.args,
+        status: "pending_approval",
+      })
+      store.updateToolCallStatus(message.toolCallId, "pending_approval")
       break
     case "tool_result":
       store.setToolResult(message.toolCallId, message.result)

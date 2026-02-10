@@ -72,6 +72,7 @@ router.get("/conversations/:id", (req, res) => {
         role: m.role,
         content: m.content,
         created_at: m.createdAt,
+        usage: m.usage ? JSON.parse(m.usage) : undefined,
       })),
     },
   });

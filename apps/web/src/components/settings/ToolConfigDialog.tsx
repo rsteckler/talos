@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2, ExternalLink } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -61,6 +61,28 @@ export function ToolConfigDialog({ tool, onClose }: ToolConfigDialogProps) {
           <DialogDescription>
             Enter the credentials required by this tool. Leave fields empty to keep existing values.
           </DialogDescription>
+          {tool.oauth?.provider === "google" && (
+            <a
+              href="/docs/guides/google-workspace-setup"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+            >
+              How to get Google OAuth credentials
+              <ExternalLink className="size-3" />
+            </a>
+          )}
+          {tool.id === "google-maps" && (
+            <a
+              href="/docs/guides/google-maps-setup"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+            >
+              How to get a Google Maps API key
+              <ExternalLink className="size-3" />
+            </a>
+          )}
         </DialogHeader>
         <div className="space-y-4 py-2">
           {tool.credentials.map((cred) => (

@@ -25,6 +25,10 @@ function toToolInfo(toolId: string): ToolInfo | null {
   const requiredCreds = credentials.filter((c) => c.required);
   const hasRequiredCredentials = requiredCreds.every((c) => !!storedConfig[c.name]);
 
+  const oauthConnected = loaded.manifest.oauth
+    ? !!storedConfig["refresh_token"]
+    : undefined;
+
   return {
     id: loaded.manifest.id,
     name: loaded.manifest.name,
@@ -33,6 +37,8 @@ function toToolInfo(toolId: string): ToolInfo | null {
     isEnabled: configRow?.isEnabled ?? false,
     allowWithoutAsking: configRow?.allowWithoutAsking ?? false,
     credentials,
+    oauth: loaded.manifest.oauth,
+    oauthConnected,
     functions: loaded.manifest.functions,
     hasRequiredCredentials,
   };
