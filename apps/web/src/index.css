@@ -75,3 +75,30 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .scrollbar-thumb-only {
+    overflow-y: scroll;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+  .scrollbar-thumb-only::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-thumb-only::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thumb-only::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+  }
+  .scrollbar-thumb-only::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+  .scrollbar-thumb-only::-webkit-scrollbar-button {
+    display: none;
+    height: 0;
+    width: 0;
+    appearance: none;
+  }
+}

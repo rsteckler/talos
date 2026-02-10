@@ -4,10 +4,12 @@ export type Theme = "light" | "dark" | "system"
 
 export interface Settings {
   theme: Theme
+  showLogsInChat: boolean
 }
 
 const defaultSettings: Settings = {
   theme: "system",
+  showLogsInChat: false,
 }
 
 interface SettingsContextValue {

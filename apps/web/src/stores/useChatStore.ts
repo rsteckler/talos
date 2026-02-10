@@ -1,11 +1,14 @@
 import { create } from "zustand"
-import type { Message, Conversation, ToolCallInfo } from "@talos/shared/types"
+import type { Message, Conversation, ToolCallInfo, TokenUsage, LogEntry } from "@talos/shared/types"
 import { conversationsApi } from "@/api/conversations"
+
+const MAX_CHAT_LOGS = 500
 
 interface ChatState {
   conversations: Conversation[];
   activeConversationId: string | null;
   messages: Message[];
+  chatLogs: LogEntry[];
   inputValue: string;
   isStreaming: boolean;
 
@@ -23,9 +26,16 @@ interface ChatState {
   clearMessages: () => void;
   updateMessageId: (oldId: string, newId: string) => void;
 
+  // Token usage
+  setMessageUsage: (messageId: string, usage: TokenUsage) => void;
+
   // Tool calls
   addToolCall: (toolCall: ToolCallInfo) => void;
   setToolResult: (toolCallId: string, result: unknown) => void;
+
+  // Chat logs
+  addChatLog: (entry: LogEntry) => void;
+  clearChatLogs: () => void;
 
   // Conversations
   setConversations: (conversations: Conversation[]) => void;
@@ -44,6 +54,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   activeConversationId: null,
   messages: [],
+  chatLogs: [],
   inputValue: "",
   isStreaming: false,
 
@@ -72,6 +83,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       messages: state.messages.map((m) =>
         m.id === oldId ? { ...m, id: newId } : m,
+      ),
+    })),
+
+  // Token usage
+  setMessageUsage: (messageId, usage) =>
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === messageId ? { ...m, usage } : m,
       ),
     })),
 
@@ -106,6 +125,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       })
       return { messages: msgs }
     }),
+
+  // Chat logs
+  addChatLog: (entry) =>
+    set((state) => {
+      const next = [...state.chatLogs, entry]
+      if (next.length > MAX_CHAT_LOGS) {
+        next.splice(0, next.length - MAX_CHAT_LOGS)
+      }
+      return { chatLogs: next }
+    }),
+  clearChatLogs: () => set({ chatLogs: [] }),
 
   // Conversations
   setConversations: (conversations) => set({ conversations }),

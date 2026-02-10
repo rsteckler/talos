@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectContent,
@@ -136,6 +137,32 @@ export function SettingsPage() {
                   Open Log Viewer
                 </Link>
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Debug</CardTitle>
+              <CardDescription>
+                Developer tools for troubleshooting.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="show-logs-in-chat">Show logs in chat</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Display server logs inline with chat messages.
+                  </p>
+                </div>
+                <Switch
+                  id="show-logs-in-chat"
+                  checked={settings.showLogsInChat}
+                  onCheckedChange={(checked) =>
+                    updateSettings({ showLogsInChat: checked })
+                  }
+                />
+              </div>
             </CardContent>
           </Card>
 

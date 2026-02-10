@@ -7,7 +7,6 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar"
-import { ConnectionStatus } from "@/components/sidebar/ConnectionStatus"
 
 const navItems = [
   {
@@ -45,7 +44,6 @@ export function NavMenu() {
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
-        <ConnectionStatus />
       </SidebarGroupContent>
     </SidebarGroup>
   )

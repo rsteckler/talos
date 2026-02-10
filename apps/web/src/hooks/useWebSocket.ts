@@ -126,6 +126,9 @@ function handleMessage(message: ServerMessage) {
     case "end":
       if (streamingPlaceholderId) {
         store.updateMessageId(streamingPlaceholderId, message.messageId)
+        if (message.usage) {
+          store.setMessageUsage(message.messageId, message.usage)
+        }
         streamingPlaceholderId = null
       }
       store.setStreaming(false)
@@ -178,6 +181,7 @@ function handleMessage(message: ServerMessage) {
       break
     case "log":
       useLogStore.getState().addStreamedEntry(message.entry)
+      useChatStore.getState().addChatLog(message.entry)
       break
   }
 }

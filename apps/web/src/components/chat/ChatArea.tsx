@@ -1,10 +1,18 @@
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useMemo, useState } from "react"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { useChatStore, useProviderStore, useConnectionStore } from "@/stores"
 import { MessageBubble } from "@/components/chat/MessageBubble"
-import { Send, Loader2, AlertCircle } from "lucide-react"
+import { InlineChatLog } from "@/components/chat/InlineChatLog"
+import { ChatLogFilterDialog } from "@/components/chat/ChatLogFilterDialog"
+import { useSettings } from "@/contexts/SettingsContext"
+import { Send, Loader2, AlertCircle, ScrollText } from "lucide-react"
 import type { FormEvent } from "react"
+import type { Message, LogEntry } from "@talos/shared/types"
+
+type TimelineItem =
+  | { kind: "message"; data: Message }
+  | { kind: "log"; data: LogEntry }
 
 export function ChatArea() {
   const activeModel = useProviderStore((s) => s.activeModel)
@@ -13,17 +21,54 @@ export function ChatArea() {
   const clearInput = useChatStore((s) => s.clearInput)
   const addMessage = useChatStore((s) => s.addMessage)
   const messages = useChatStore((s) => s.messages)
+  const chatLogs = useChatStore((s) => s.chatLogs)
+  const clearChatLogs = useChatStore((s) => s.clearChatLogs)
   const isStreaming = useChatStore((s) => s.isStreaming)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const createConversation = useChatStore((s) => s.createConversation)
   const send = useConnectionStore((s) => s.send)
+  const sendFn = useConnectionStore((s) => s.sendFn)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const { settings } = useSettings()
 
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Subscribe/unsubscribe to WS log streaming when showLogsInChat is enabled
+  useEffect(() => {
+    if (settings.showLogsInChat && sendFn) {
+      sendFn({ type: "subscribe_logs" })
+      return () => {
+        sendFn({ type: "unsubscribe_logs" })
+      }
+    }
+  }, [settings.showLogsInChat, sendFn])
+
+  // Clear chat logs when switching conversations
+  useEffect(() => {
+    clearChatLogs()
+  }, [activeConversationId, clearChatLogs])
+
+  // Build merged timeline of messages and logs
+  const timeline = useMemo<TimelineItem[]>(() => {
+    if (!settings.showLogsInChat || chatLogs.length === 0) {
+      return messages.map((data) => ({ kind: "message" as const, data }))
+    }
+    const items: TimelineItem[] = [
+      ...messages.map((data) => ({ kind: "message" as const, data })),
+      ...chatLogs.map((data) => ({ kind: "log" as const, data })),
+    ]
+    items.sort((a, b) => {
+      const tsA = a.kind === "message" ? a.data.created_at : a.data.timestamp
+      const tsB = b.kind === "message" ? b.data.created_at : b.data.timestamp
+      return tsA.localeCompare(tsB)
+    })
+    return items
+  }, [messages, chatLogs, settings.showLogsInChat])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+  }, [timeline])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -60,8 +105,27 @@ export function ChatArea() {
 
   const hasProvider = activeModel.model !== null
 
+  const sessionUsage = useMemo(() => {
+    let inputTokens = 0
+    let outputTokens = 0
+    let totalTokens = 0
+    let cost: number | undefined
+    for (const msg of messages) {
+      if (msg.usage) {
+        inputTokens += msg.usage.inputTokens
+        outputTokens += msg.usage.outputTokens
+        totalTokens += msg.usage.totalTokens
+        if (msg.usage.cost != null) {
+          cost = (cost ?? 0) + msg.usage.cost
+        }
+      }
+    }
+    if (totalTokens === 0) return null
+    return { inputTokens, outputTokens, totalTokens, cost }
+  }, [messages])
+
   return (
-    <div className="flex h-full flex-col bg-black">
+    <div className="flex min-h-0 flex-1 flex-col bg-black">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-zinc-800 px-4 bg-zinc-950/50">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-2 h-4" />
@@ -71,9 +135,24 @@ export function ChatArea() {
             {activeModel.model.displayName}
           </span>
         )}
+        {sessionUsage && (
+          <span className="ml-auto text-xs text-zinc-500">
+            {sessionUsage.totalTokens.toLocaleString()} tokens
+            {sessionUsage.cost != null && ` · $${sessionUsage.cost.toFixed(4)}`}
+          </span>
+        )}
+        {settings.showLogsInChat && (
+          <button
+            onClick={() => setFilterDialogOpen(true)}
+            className={`${sessionUsage ? "" : "ml-auto "}rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300`}
+            title="Chat log filters"
+          >
+            <ScrollText className="size-4" />
+          </button>
+        )}
       </header>
-      <div className="flex flex-1 flex-col">
-        <div className="flex-1 overflow-auto p-4">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex-1 scrollbar-thumb-only p-4">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-zinc-500">
               {!hasProvider ? (
@@ -93,9 +172,13 @@ export function ChatArea() {
             </div>
           ) : (
             <div className="mx-auto max-w-3xl space-y-4">
-              {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
-              ))}
+              {timeline.map((item) =>
+                item.kind === "message" ? (
+                  <MessageBubble key={item.data.id} message={item.data} />
+                ) : (
+                  <InlineChatLog key={item.data.id} entry={item.data} />
+                ),
+              )}
               {isStreaming && (
                 <div className="flex items-center gap-2 text-zinc-500 text-sm pl-11">
                   <Loader2 className="size-3 animate-spin" />
@@ -131,6 +214,10 @@ export function ChatArea() {
           </form>
         </div>
       </div>
+      <ChatLogFilterDialog
+        open={filterDialogOpen}
+        onOpenChange={setFilterDialogOpen}
+      />
     </div>
   )
 }
