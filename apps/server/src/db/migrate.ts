@@ -139,6 +139,13 @@ export function runMigrations(): void {
     WHERE area = '_default' AND user_level = 'low' AND dev_level = 'silent';
   `);
 
+  // Add usage column to messages and task_runs (stores JSON)
+  try { raw.exec("ALTER TABLE messages ADD COLUMN usage TEXT;"); } catch { /* column already exists */ }
+  try { raw.exec("ALTER TABLE task_runs ADD COLUMN usage TEXT;"); } catch { /* column already exists */ }
+
+  // Add allow_without_asking column to tool_configs
+  try { raw.exec("ALTER TABLE tool_configs ADD COLUMN allow_without_asking INTEGER NOT NULL DEFAULT 0;"); } catch { /* column already exists */ }
+
   // Note: createLogger used here but initLogger() hasn't been called yet,
   // so this falls back to console.log. That's fine for migration output.
   console.log("[db] info: Database migrations complete");

@@ -176,6 +176,30 @@ function handleMessage(message: ServerMessage) {
         status: "calling",
       })
       break
+    case "tool_approval_request":
+      // The tool_call event already added this entry with "calling" status.
+      // Update it to "pending_approval" to show the approval prompt.
+      // If no placeholder exists yet (defensive), create one and add the tool call.
+      if (!streamingPlaceholderId) {
+        streamingPlaceholderId = `streaming-${crypto.randomUUID()}`
+        store.addMessage({
+          id: streamingPlaceholderId,
+          conversationId: message.conversationId,
+          role: "assistant",
+          content: "",
+          created_at: new Date().toISOString(),
+        })
+        store.setStreaming(true)
+        store.addToolCall({
+          toolCallId: message.toolCallId,
+          toolName: message.toolName,
+          args: message.args,
+          status: "pending_approval",
+        })
+      } else {
+        store.updateToolCallStatus(message.toolCallId, "pending_approval")
+      }
+      break
     case "tool_result":
       store.setToolResult(message.toolCallId, message.result)
       break

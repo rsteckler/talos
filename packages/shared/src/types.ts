@@ -35,6 +35,7 @@ export interface TaskRun {
   completed_at: string | null;
   result: string | null;
   error: string | null;
+  usage?: TokenUsage;
 }
 
 export interface TaskCreateRequest {
@@ -61,6 +62,15 @@ export interface InboxItem {
   created_at: string;
 }
 
+// --- Token Usage ---
+
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cost?: number; // USD — only set for OpenRouter
+}
+
 // --- Chat ---
 
 export interface Message {
@@ -70,6 +80,7 @@ export interface Message {
   content: string;
   created_at: string;
   toolCalls?: ToolCallInfo[];
+  usage?: TokenUsage;
 }
 
 export interface Conversation {
@@ -194,6 +205,7 @@ export interface ToolInfo {
   description: string;
   version: string;
   isEnabled: boolean;
+  allowWithoutAsking: boolean;
   credentials: ToolCredentialSpec[];
   functions: ToolFunctionSpec[];
   hasRequiredCredentials: boolean;
@@ -210,7 +222,7 @@ export interface ToolCallInfo {
   toolName: string;
   args: Record<string, unknown>;
   result?: unknown;
-  status: "calling" | "complete" | "error";
+  status: "pending_approval" | "calling" | "complete" | "error" | "denied";
 }
 
 // --- WebSocket Protocol ---
@@ -218,15 +230,18 @@ export interface ToolCallInfo {
 export type ClientMessage =
   | { type: "chat"; conversationId: string; content: string }
   | { type: "cancel"; conversationId: string }
+  | { type: "tool_approve"; toolCallId: string }
+  | { type: "tool_deny"; toolCallId: string }
   | { type: "subscribe_logs" }
   | { type: "unsubscribe_logs" };
 
 export type ServerMessage =
   | { type: "chunk"; conversationId: string; content: string }
-  | { type: "end"; conversationId: string; messageId: string }
+  | { type: "end"; conversationId: string; messageId: string; usage?: TokenUsage }
   | { type: "error"; conversationId?: string; error: string }
   | { type: "tool_call"; conversationId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
   | { type: "tool_result"; conversationId: string; toolCallId: string; toolName: string; result: unknown }
+  | { type: "tool_approval_request"; conversationId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
   | { type: "status"; status: AgentStatus }
   | { type: "inbox"; item: InboxItem }
   | { type: "log"; entry: LogEntry };

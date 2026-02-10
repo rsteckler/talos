@@ -7,7 +7,7 @@ import { ToolConfigDialog } from "./ToolConfigDialog"
 import type { ToolInfo } from "@talos/shared/types"
 
 export function ToolList() {
-  const { tools, loading, fetchTools, enableTool, disableTool } = useToolStore()
+  const { tools, loading, fetchTools, enableTool, disableTool, setAllowWithoutAsking } = useToolStore()
   const [configTool, setConfigTool] = useState<ToolInfo | null>(null)
 
   useEffect(() => {
@@ -59,6 +59,16 @@ export function ToolList() {
                 <p className="text-xs text-amber-500 mt-0.5">
                   Credentials required
                 </p>
+              )}
+              {tool.isEnabled && (
+                <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer">
+                  <Switch
+                    checked={tool.allowWithoutAsking}
+                    onCheckedChange={(checked) => setAllowWithoutAsking(tool.id, checked)}
+                    className="scale-75 origin-left"
+                  />
+                  <span className="text-xs text-muted-foreground">Allow without asking</span>
+                </label>
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">

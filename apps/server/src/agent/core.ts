@@ -5,15 +5,18 @@ import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
 import { buildToolSet } from "../tools/index.js";
 import { createLogger } from "../logger/index.js";
 import type { ModelMessage } from "ai";
+import type { TokenUsage } from "@talos/shared/types";
+import type { ApprovalGate } from "../tools/index.js";
 
 const log = createLogger("agent");
 
 interface StreamCallbacks {
   onChunk: (content: string) => void;
-  onEnd: (messageId: string) => void;
+  onEnd: (messageId: string, usage?: TokenUsage) => void;
   onError: (error: string) => void;
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown) => void;
+  approvalGate?: ApprovalGate;
   signal?: AbortSignal;
 }
 
@@ -22,7 +25,7 @@ export async function streamChat(
   userContent: string,
   callbacks: StreamCallbacks,
 ): Promise<void> {
-  const { onChunk, onEnd, onError, onToolCall, onToolResult, signal } = callbacks;
+  const { onChunk, onEnd, onError, onToolCall, onToolResult, approvalGate, signal } = callbacks;
 
   const active = getActiveProvider();
   if (!active) {
@@ -66,7 +69,7 @@ export async function streamChat(
       .run();
 
     // Build tool set from enabled tools
-    const { tools, toolPrompts } = buildToolSet();
+    const { tools, toolPrompts } = buildToolSet(undefined, approvalGate);
     const hasTools = Object.keys(tools).length > 0;
 
     // Append tool prompts to system prompt
@@ -87,8 +90,9 @@ export async function streamChat(
     let stepCount = 0;
     let toolCallCount = 0;
     let lastFinishReason = "";
+    const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
-    // Stream helper — runs the LLM and collects text
+    // Stream helper — runs the LLM, collects text, and accumulates token usage
     const runStream = async (useTools: boolean) => {
       const streamResult = streamText({
         model: active.model,
@@ -123,6 +127,33 @@ export async function streamChat(
           case "error":
             log.error("LLM stream error", { error: part.error });
             break;
+        }
+      }
+
+      // Accumulate token usage from this stream
+      const usage = await streamResult.usage;
+      totalUsage.inputTokens += usage.inputTokens ?? 0;
+      totalUsage.outputTokens += usage.outputTokens ?? 0;
+      totalUsage.totalTokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+
+      // For OpenRouter: attempt to fetch cost from generation stats
+      if (active.providerType === "openrouter") {
+        try {
+          const response = await streamResult.response;
+          const generationId = response.headers?.["x-openrouter-generation-id"];
+          if (generationId && active.apiKey) {
+            const genRes = await fetch(`https://openrouter.ai/api/v1/generation?id=${generationId}`, {
+              headers: { Authorization: `Bearer ${active.apiKey}` },
+            });
+            if (genRes.ok) {
+              const genData = await genRes.json() as { data?: { total_cost?: number } };
+              if (genData.data?.total_cost != null) {
+                totalUsage.cost = (totalUsage.cost ?? 0) + genData.data.total_cost;
+              }
+            }
+          }
+        } catch {
+          // Cost fetching is best-effort — never block the response
         }
       }
     };
@@ -166,14 +197,16 @@ export async function streamChat(
       return;
     }
 
-    // Persist assistant message
+    // Persist assistant message (with usage if available)
     const assistantMsgId = crypto.randomUUID();
+    const hasUsage = totalUsage.totalTokens > 0;
     db.insert(schema.messages)
       .values({
         id: assistantMsgId,
         conversationId,
         role: "assistant",
         content: fullContent,
+        usage: hasUsage ? JSON.stringify(totalUsage) : null,
         createdAt: new Date().toISOString(),
       })
       .run();
@@ -184,7 +217,8 @@ export async function streamChat(
       .where(eq(schema.conversations.id, conversationId))
       .run();
 
-    onEnd(assistantMsgId);
+    log.dev.debug("Token usage", totalUsage);
+    onEnd(assistantMsgId, hasUsage ? totalUsage : undefined);
   } catch (err: unknown) {
     if (signal?.aborted) {
       onError("Stream cancelled");

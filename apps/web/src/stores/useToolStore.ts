@@ -10,6 +10,7 @@ interface ToolState {
   enableTool: (id: string) => Promise<void>;
   disableTool: (id: string) => Promise<void>;
   updateConfig: (id: string, config: Record<string, string>) => Promise<void>;
+  setAllowWithoutAsking: (id: string, allow: boolean) => Promise<void>;
 }
 
 export const useToolStore = create<ToolState>((set) => ({
@@ -58,6 +59,17 @@ export const useToolStore = create<ToolState>((set) => ({
       }))
     } catch (err) {
       console.error("[ToolStore] Failed to update tool config:", err)
+    }
+  },
+
+  setAllowWithoutAsking: async (id, allow) => {
+    try {
+      const updated = await toolsApi.setAllowWithoutAsking(id, allow)
+      set((state) => ({
+        tools: state.tools.map((t) => (t.id === id ? updated : t)),
+      }))
+    } catch (err) {
+      console.error("[ToolStore] Failed to update allow without asking:", err)
     }
   },
 }))

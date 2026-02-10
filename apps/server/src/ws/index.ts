@@ -30,6 +30,7 @@ export function attachWebSocket(server: Server): void {
     log.dev.debug("Client connected");
 
     const abortControllers = new Map<string, AbortController>();
+    const pendingApprovals = new Map<string, { resolve: (approved: boolean) => void }>();
 
     ws.on("message", (raw) => {
       let msg: ClientMessage;
@@ -43,11 +44,27 @@ export function attachWebSocket(server: Server): void {
       switch (msg.type) {
         case "chat":
           log.user.medium(`Chat received: "${msg.content.slice(0, 50)}"`, { conversationId: msg.conversationId });
-          handleChat(ws, msg.conversationId, msg.content, abortControllers);
+          handleChat(ws, msg.conversationId, msg.content, abortControllers, pendingApprovals);
           break;
         case "cancel":
           handleCancel(msg.conversationId, abortControllers);
           break;
+        case "tool_approve": {
+          const pending = pendingApprovals.get(msg.toolCallId);
+          if (pending) {
+            pendingApprovals.delete(msg.toolCallId);
+            pending.resolve(true);
+          }
+          break;
+        }
+        case "tool_deny": {
+          const pending = pendingApprovals.get(msg.toolCallId);
+          if (pending) {
+            pendingApprovals.delete(msg.toolCallId);
+            pending.resolve(false);
+          }
+          break;
+        }
         case "subscribe_logs":
           addLogSubscriber(ws);
           log.dev.debug("Client subscribed to logs");
@@ -66,6 +83,11 @@ export function attachWebSocket(server: Server): void {
         controller.abort();
       }
       abortControllers.clear();
+      // Deny all pending approvals on disconnect
+      for (const [, pending] of pendingApprovals) {
+        pending.resolve(false);
+      }
+      pendingApprovals.clear();
     });
   });
 
@@ -83,6 +105,7 @@ function handleChat(
   conversationId: string,
   content: string,
   abortControllers: Map<string, AbortController>,
+  pendingApprovals: Map<string, { resolve: (approved: boolean) => void }>,
 ): void {
   const controller = new AbortController();
   abortControllers.set(conversationId, controller);
@@ -90,6 +113,23 @@ function handleChat(
   sendMessage(ws, { type: "status", status: "thinking" });
 
   let sentFirstChunk = false;
+
+  const approvalGate = (toolCallId: string, toolName: string, args: Record<string, unknown>): Promise<boolean> => {
+    return new Promise<boolean>((resolve) => {
+      // Send approval request to client
+      sendMessage(ws, {
+        type: "tool_approval_request",
+        conversationId,
+        toolCallId,
+        toolName,
+        args,
+      });
+
+      // Waits indefinitely for user response.
+      // Cleaned up on disconnect (denied) or cancel (aborted).
+      pendingApprovals.set(toolCallId, { resolve });
+    });
+  };
 
   streamChat(conversationId, content, {
     onChunk: (chunk) => {
@@ -120,9 +160,9 @@ function handleChat(
         result,
       });
     },
-    onEnd: (messageId) => {
+    onEnd: (messageId, usage) => {
       abortControllers.delete(conversationId);
-      sendMessage(ws, { type: "end", conversationId, messageId });
+      sendMessage(ws, { type: "end", conversationId, messageId, usage });
       sendMessage(ws, { type: "status", status: "idle" });
     },
     onError: (error) => {
@@ -134,6 +174,7 @@ function handleChat(
       });
       sendMessage(ws, { type: "status", status: "idle" });
     },
+    approvalGate,
     signal: controller.signal,
   }).catch((err: unknown) => {
     // Safety net for any unhandled rejection in streamChat

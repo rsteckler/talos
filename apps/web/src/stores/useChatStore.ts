@@ -32,6 +32,7 @@ interface ChatState {
   // Tool calls
   addToolCall: (toolCall: ToolCallInfo) => void;
   setToolResult: (toolCallId: string, result: unknown) => void;
+  updateToolCallStatus: (toolCallId: string, status: ToolCallInfo["status"]) => void;
 
   // Chat logs
   addChatLog: (entry: LogEntry) => void;
@@ -101,6 +102,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const last = msgs[msgs.length - 1]
       if (last && last.role === "assistant") {
         const existing = last.toolCalls ?? []
+        // Skip if this toolCallId already exists (tool_call and tool_approval_request can race)
+        if (existing.some((tc) => tc.toolCallId === toolCall.toolCallId)) {
+          return { messages: msgs }
+        }
         msgs[msgs.length - 1] = {
           ...last,
           toolCalls: [...existing, toolCall],
@@ -119,6 +124,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
           toolCalls: m.toolCalls.map((tc) =>
             tc.toolCallId === toolCallId
               ? { ...tc, result, status: "complete" as const }
+              : tc,
+          ),
+        }
+      })
+      return { messages: msgs }
+    }),
+  updateToolCallStatus: (toolCallId, status) =>
+    set((state) => {
+      const msgs = state.messages.map((m) => {
+        if (m.role !== "assistant" || !m.toolCalls) return m
+        const hasCall = m.toolCalls.some((tc) => tc.toolCallId === toolCallId)
+        if (!hasCall) return m
+        return {
+          ...m,
+          toolCalls: m.toolCalls.map((tc) =>
+            tc.toolCallId === toolCallId
+              ? { ...tc, status }
               : tc,
           ),
         }

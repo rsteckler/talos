@@ -48,12 +48,15 @@ function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodObject<Record<st
   return z.object(shape);
 }
 
+export type ApprovalGate = (toolCallId: string, toolName: string, args: Record<string, unknown>) => Promise<boolean>;
+
 /**
  * Build an AI SDK ToolSet from all enabled, loaded tools.
  * Returns the toolset and any prompt.md content to append to the system prompt.
  * If filterToolIds is provided, only include those specific tool IDs.
+ * If approvalGate is provided, tools without allowWithoutAsking will await approval.
  */
-export function buildToolSet(filterToolIds?: string[]): { tools: ToolSet; toolPrompts: string[] } {
+export function buildToolSet(filterToolIds?: string[], approvalGate?: ApprovalGate): { tools: ToolSet; toolPrompts: string[] } {
   const loadedTools = getLoadedTools();
   const tools: ToolSet = {};
   const toolPrompts: string[] = [];
@@ -100,11 +103,21 @@ export function buildToolSet(filterToolIds?: string[]): { tools: ToolSet; toolPr
       }
 
       const inputSchema = jsonSchemaToZod(fnSpec.parameters);
+      const autoAllow = configRow.allowWithoutAsking;
 
       tools[toolName] = {
         description: fnSpec.description,
         inputSchema,
-        execute: async (args: Record<string, unknown>) => {
+        execute: async (args: Record<string, unknown>, { toolCallId }: { toolCallId: string }) => {
+          // Gate on approval if not auto-allowed
+          if (!autoAllow && approvalGate) {
+            const approved = await approvalGate(toolCallId, toolName, args);
+            if (!approved) {
+              log.user.medium(`Tool ${toolName} denied by user`);
+              return { denied: true, message: "User denied tool execution" };
+            }
+          }
+
           log.dev.debug(`Executing ${toolName}`, { args });
           try {
             const result = await handler(args, storedConfig);

@@ -31,6 +31,7 @@ function toToolInfo(toolId: string): ToolInfo | null {
     description: loaded.manifest.description,
     version: loaded.manifest.version,
     isEnabled: configRow?.isEnabled ?? false,
+    allowWithoutAsking: configRow?.allowWithoutAsking ?? false,
     credentials,
     functions: loaded.manifest.functions,
     hasRequiredCredentials,
@@ -169,6 +170,52 @@ router.post("/tools/:id/disable", (req, res) => {
         toolId,
         config: "{}",
         isEnabled: false,
+        createdAt: new Date().toISOString(),
+      })
+      .run();
+  }
+
+  const info = toToolInfo(toolId);
+  res.json({ data: info });
+});
+
+// POST /api/tools/:id/allow-without-asking
+const allowWithoutAskingSchema = z.object({
+  allow: z.boolean(),
+});
+
+router.post("/tools/:id/allow-without-asking", (req, res) => {
+  const toolId = req.params["id"]!;
+  const loaded = getLoadedTool(toolId);
+  if (!loaded) {
+    res.status(404).json({ error: "Tool not found" });
+    return;
+  }
+
+  const parsed = allowWithoutAskingSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request" });
+    return;
+  }
+
+  const existing = db
+    .select()
+    .from(schema.toolConfigs)
+    .where(eq(schema.toolConfigs.toolId, toolId))
+    .get();
+
+  if (existing) {
+    db.update(schema.toolConfigs)
+      .set({ allowWithoutAsking: parsed.data.allow })
+      .where(eq(schema.toolConfigs.toolId, toolId))
+      .run();
+  } else {
+    db.insert(schema.toolConfigs)
+      .values({
+        toolId,
+        config: "{}",
+        isEnabled: false,
+        allowWithoutAsking: parsed.data.allow,
         createdAt: new Date().toISOString(),
       })
       .run();

@@ -17,4 +17,10 @@ export const toolsApi = {
 
   disable: (id: string) =>
     request<ToolInfo>(`/tools/${id}/disable`, { method: "POST" }),
+
+  setAllowWithoutAsking: (id: string, allow: boolean) =>
+    request<ToolInfo>(`/tools/${id}/allow-without-asking`, {
+      method: "POST",
+      body: JSON.stringify({ allow }),
+    }),
 }

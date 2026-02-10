@@ -35,6 +35,7 @@ export const messages = sqliteTable("messages", {
     .references(() => conversations.id, { onDelete: "cascade" }),
   role: text("role", { enum: ["user", "assistant", "system"] }).notNull(),
   content: text("content").notNull(),
+  usage: text("usage"),
   createdAt: text("created_at").notNull(),
 });
 
@@ -42,6 +43,7 @@ export const toolConfigs = sqliteTable("tool_configs", {
   toolId: text("tool_id").primaryKey(),
   config: text("config").notNull().default("{}"),
   isEnabled: integer("is_enabled", { mode: "boolean" }).notNull().default(false),
+  allowWithoutAsking: integer("allow_without_asking", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull(),
 });
 
@@ -93,6 +95,7 @@ export const taskRuns = sqliteTable("task_runs", {
   completedAt: text("completed_at"),
   result: text("result"),
   error: text("error"),
+  usage: text("usage"),
 });
 
 export const inbox = sqliteTable("inbox", {
