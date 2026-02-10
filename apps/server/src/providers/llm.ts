@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { db, schema } from "../db/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SYSTEM_PATH = path.join(__dirname, "..", "agent", "SYSTEM.md");
 const SOUL_PATH = path.join(__dirname, "..", "..", "data", "SOUL.md");
 
 type ProviderRow = typeof schema.providers.$inferSelect;
@@ -65,15 +66,26 @@ export function getActiveProvider() {
     model,
     modelId: activeModel.modelId,
     providerType: providerRow.type,
+    apiKey: providerRow.apiKey,
   };
 }
 
 export function loadSystemPrompt(): string {
+  let system = "";
   try {
-    return fs.readFileSync(SOUL_PATH, "utf-8");
+    system = fs.readFileSync(SYSTEM_PATH, "utf-8");
   } catch {
-    return "You are Talos, a helpful AI assistant.";
+    // SYSTEM.md missing — continue without it
   }
+
+  let soul = "";
+  try {
+    soul = fs.readFileSync(SOUL_PATH, "utf-8");
+  } catch {
+    soul = "You are Talos, a helpful AI assistant.";
+  }
+
+  return system ? `${system}\n\n---\n\n${soul}` : soul;
 }
 
 export function readSoulFile(): string {
