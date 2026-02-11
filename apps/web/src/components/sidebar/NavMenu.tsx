@@ -32,9 +32,9 @@ export function NavMenu() {
       <SidebarGroupContent>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Chat Logs" onClick={() => setHistoryOpen(true)}>
+            <SidebarMenuButton tooltip="Chat History" onClick={() => setHistoryOpen(true)}>
               <History />
-              <span>Chat Logs</span>
+              <span>Chat History</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           {navItems.map((item) => (

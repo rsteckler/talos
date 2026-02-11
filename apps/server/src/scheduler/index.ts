@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import { CronExpressionParser } from "cron-parser";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { executeTask } from "./executor.js";
@@ -27,11 +28,8 @@ function computeNextRunAt(triggerType: string, triggerConfig: string): string | 
     const config = JSON.parse(triggerConfig) as Record<string, unknown>;
 
     if (triggerType === "cron" && typeof config["cron"] === "string") {
-      // node-cron doesn't expose a "next occurrence" API directly,
-      // but we can approximate using cron-parser logic.
-      // For simplicity, we'll just mark it as "scheduled" without exact time.
-      // The actual execution is handled by node-cron.
-      return null;
+      const expr = CronExpressionParser.parse(config["cron"] as string);
+      return expr.next().toDate().toISOString();
     }
 
     if (triggerType === "interval" && typeof config["interval_minutes"] === "number") {
@@ -83,10 +81,27 @@ function scheduleTask(task: TaskRow): void {
         })
         .finally(() => {
           runningTasks.delete(task.id);
+          const nextRunAt = computeNextRunAt(task.triggerType, task.triggerConfig);
+          if (nextRunAt) {
+            db.update(schema.tasks)
+              .set({ nextRunAt })
+              .where(eq(schema.tasks.id, task.id))
+              .run();
+          }
         });
     });
 
     jobs.set(task.id, { type: "cron", cronTask });
+
+    // Persist initial nextRunAt
+    const cronNextRunAt = computeNextRunAt(task.triggerType, task.triggerConfig);
+    if (cronNextRunAt) {
+      db.update(schema.tasks)
+        .set({ nextRunAt: cronNextRunAt })
+        .where(eq(schema.tasks.id, task.id))
+        .run();
+    }
+
     log.info(`Scheduled cron task "${task.name}" with expression "${expression}"`, { taskId: task.id });
   } else if (task.triggerType === "interval") {
     const minutes = config["interval_minutes"];
@@ -111,6 +126,11 @@ function scheduleTask(task: TaskRow): void {
         })
         .finally(() => {
           runningTasks.delete(task.id);
+          const nextRunAt = new Date(Date.now() + ms).toISOString();
+          db.update(schema.tasks)
+            .set({ nextRunAt })
+            .where(eq(schema.tasks.id, task.id))
+            .run();
         });
     }, ms);
 

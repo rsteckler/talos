@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/sidebar"
 import { TalosOrb } from "@/components/sidebar/TalosOrb"
 import { NavMenu } from "@/components/sidebar/NavMenu"
-import { ConversationsSection } from "@/components/sidebar/ConversationsSection"
 import { TasksSection } from "@/components/sidebar/TasksSection"
 import { FlowSection } from "@/components/sidebar/FlowSection"
 
@@ -19,12 +18,10 @@ export function AppSidebar() {
         <TalosOrb />
       </SidebarHeader>
       <SidebarSeparator />
-      <SidebarContent>
-        <TasksSection />
-        <SidebarSeparator />
+      <TasksSection />
+      <SidebarSeparator />
+      <SidebarContent className="scrollbar-thumb-only">
         <FlowSection />
-        <SidebarSeparator />
-        <ConversationsSection />
       </SidebarContent>
       <SidebarSeparator />
       <SidebarFooter>

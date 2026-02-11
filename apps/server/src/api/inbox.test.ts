@@ -50,7 +50,7 @@ describe("GET /api/inbox", () => {
     const res = await request("/api/inbox");
     const body = await res.json();
     expect(res.status).toBe(200);
-    expect(body.data).toEqual([]);
+    expect(body.data).toEqual({ items: [], total: 0 });
   });
 
   it("returns all inbox items", async () => {
@@ -59,7 +59,8 @@ describe("GET /api/inbox", () => {
 
     const res = await request("/api/inbox");
     const body = await res.json();
-    expect(body.data).toHaveLength(2);
+    expect(body.data.items).toHaveLength(2);
+    expect(body.data.total).toBe(2);
   });
 
   it("filters unread items with ?unread=true", async () => {
@@ -68,8 +69,9 @@ describe("GET /api/inbox", () => {
 
     const res = await request("/api/inbox?unread=true");
     const body = await res.json();
-    expect(body.data).toHaveLength(1);
-    expect(body.data[0].title).toBe("Unread");
+    expect(body.data.items).toHaveLength(1);
+    expect(body.data.items[0].title).toBe("Unread");
+    expect(body.data.total).toBe(1);
   });
 });
 
@@ -101,7 +103,7 @@ describe("DELETE /api/inbox/:id", () => {
     // Verify it's gone
     const listRes = await request("/api/inbox");
     const listBody = await listRes.json();
-    expect(listBody.data).toHaveLength(0);
+    expect(listBody.data.items).toHaveLength(0);
   });
 
   it("returns 404 for non-existent item", async () => {

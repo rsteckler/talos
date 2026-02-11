@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react"
-import { ChevronRight, ListTodo, Plus, Clock, RefreshCw, Globe, Play, Trash2, Loader2, Zap, History } from "lucide-react"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+import { ListTodo, Plus, Clock, RefreshCw, Globe, Play, Loader2, Zap, ExternalLink } from "lucide-react"
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -14,9 +9,6 @@ import {
   SidebarMenuButton,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { TaskDialog } from "@/components/tasks/TaskDialog"
 import { TaskManagerDialog } from "@/components/tasks/TaskManagerDialog"
 import { useTaskStore } from "@/stores"
@@ -29,7 +21,43 @@ const TRIGGER_ICONS: Record<string, typeof Clock> = {
   manual: Play,
 }
 
-const SIDEBAR_TASK_LIMIT = 3
+const SIDEBAR_TASK_LIMIT = 5
+
+/** Indeterminate trigger types that don't have a predictable next run */
+const INDETERMINATE_TRIGGERS = new Set(["webhook", "manual", "tool-provided"])
+
+function relativeTimeUntil(dateStr: string): string {
+  const ms = new Date(dateStr).getTime() - Date.now()
+  if (ms <= 0) return "now"
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) return `in ${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `in ${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `in ${hours}h`
+  const days = Math.floor(hours / 24)
+  return `in ${days}d`
+}
+
+function sortTasks(tasks: Task[]): Task[] {
+  const withTime: Task[] = []
+  const withoutTime: Task[] = []
+
+  for (const t of tasks) {
+    if (t.next_run_at && !INDETERMINATE_TRIGGERS.has(t.trigger_type)) {
+      withTime.push(t)
+    } else {
+      withoutTime.push(t)
+    }
+  }
+
+  withTime.sort((a, b) =>
+    new Date(a.next_run_at!).getTime() - new Date(b.next_run_at!).getTime()
+  )
+  withoutTime.sort((a, b) => a.name.localeCompare(b.name))
+
+  return [...withTime, ...withoutTime]
+}
 
 export function TasksSection() {
   const { state } = useSidebar()
@@ -37,54 +65,31 @@ export function TasksSection() {
   const isLoading = useTaskStore((s) => s.isLoading)
   const error = useTaskStore((s) => s.error)
   const fetchTasks = useTaskStore((s) => s.fetchTasks)
-  const deleteTask = useTaskStore((s) => s.deleteTask)
-  const triggerTask = useTaskStore((s) => s.triggerTask)
 
-  const tasks = [...allTasks]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, SIDEBAR_TASK_LIMIT)
+  const activeTasks = allTasks.filter((t) => t.is_active)
+  const tasks = sortTasks(activeTasks).slice(0, SIDEBAR_TASK_LIMIT)
 
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingTask, setEditingTask] = useState<Task | null>(null)
-  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
   const [managerOpen, setManagerOpen] = useState(false)
+  // Force re-render every 30s so relative times stay fresh
+  const [, setTick] = useState(0)
 
   useEffect(() => {
     fetchTasks()
   }, [fetchTasks])
 
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
   function handleCreate() {
-    setEditingTask(null)
     setDialogOpen(true)
-  }
-
-  function handleEdit(task: Task) {
-    setEditingTask(task)
-    setDialogOpen(true)
-  }
-
-  async function handleDelete(taskId: string) {
-    try {
-      setActionError(null)
-      await deleteTask(taskId)
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Failed to delete task")
-    }
-  }
-
-  async function handleTrigger(taskId: string) {
-    try {
-      setActionError(null)
-      await triggerTask(taskId)
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Failed to trigger task")
-    }
   }
 
   if (state === "collapsed") {
     return (
-      <SidebarGroup>
+      <SidebarGroup className="shrink-0">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton tooltip="Tasks">
@@ -98,120 +103,74 @@ export function TasksSection() {
 
   return (
     <>
-      <Collapsible defaultOpen className="group/collapsible">
-        <SidebarGroup>
-          <SidebarGroupLabel asChild>
-            <CollapsibleTrigger className="flex w-full items-center">
-              <ListTodo className="mr-2 size-4" />
-              <span>Tasks</span>
-              {allTasks.length > 0 && (
-                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">
-                  {allTasks.length}
-                </Badge>
-              )}
-              <ChevronRight className="ml-auto size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
-            </CollapsibleTrigger>
-          </SidebarGroupLabel>
-          <CollapsibleContent>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {isLoading && tasks.length === 0 ? (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton>
-                      <Loader2 className="size-3.5 animate-spin" />
-                      <span className="text-muted-foreground">Loading...</span>
+      <SidebarGroup className="shrink-0">
+        <SidebarGroupLabel className="flex w-full items-center">
+          <ListTodo className="mr-2 size-4" />
+          <span>Tasks</span>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              className="p-0.5 rounded hover:bg-muted"
+              title="New Task"
+              onClick={handleCreate}
+            >
+              <Plus className="size-3.5" />
+            </button>
+            <button
+              className="p-0.5 rounded hover:bg-muted"
+              title="Manage Tasks"
+              onClick={() => setManagerOpen(true)}
+            >
+              <ExternalLink className="size-3.5" />
+            </button>
+          </div>
+        </SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {isLoading && tasks.length === 0 ? (
+              <SidebarMenuItem>
+                <SidebarMenuButton>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span className="text-muted-foreground">Loading...</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ) : error && tasks.length === 0 ? (
+              <SidebarMenuItem>
+                <SidebarMenuButton>
+                  <span className="text-destructive text-xs">{error}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ) : tasks.length === 0 ? (
+              <SidebarMenuItem>
+                <SidebarMenuButton>
+                  <span className="text-muted-foreground">No active tasks</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ) : (
+              tasks.map((task) => {
+                const TriggerIcon = TRIGGER_ICONS[task.trigger_type] ?? Zap
+                return (
+                  <SidebarMenuItem key={task.id}>
+                    <SidebarMenuButton className="flex-1">
+                      <TriggerIcon className="size-3.5 shrink-0" />
+                      <span className="truncate flex-1">{task.name}</span>
+                      {task.next_run_at && !INDETERMINATE_TRIGGERS.has(task.trigger_type) ? (
+                        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground tabular-nums">
+                          {relativeTimeUntil(task.next_run_at)}
+                        </span>
+                      ) : null}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                ) : error && tasks.length === 0 ? (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton>
-                      <span className="text-destructive text-xs">{error}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ) : tasks.length === 0 ? (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton>
-                      <span className="text-muted-foreground">No tasks</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ) : (
-                  tasks.map((task) => {
-                    const TriggerIcon = TRIGGER_ICONS[task.trigger_type] ?? Zap
-                    return (
-                      <SidebarMenuItem key={task.id}>
-                        <div className="group/task relative flex w-full items-center">
-                          <SidebarMenuButton
-                            className="flex-1"
-                            onClick={() => handleEdit(task)}
-                          >
-                            <TriggerIcon className="size-3.5 shrink-0" />
-                            <span className="truncate">{task.name}</span>
-                            {!task.is_active && (
-                              <span className="ml-auto text-[10px] text-muted-foreground">off</span>
-                            )}
-                          </SidebarMenuButton>
-                          <div className="absolute right-1 opacity-0 group-hover/task:opacity-100 transition-opacity flex items-center gap-0.5">
-                            <button
-                              className="p-0.5 rounded hover:bg-muted"
-                              title="Run now"
-                              onClick={(e) => { e.stopPropagation(); handleTrigger(task.id) }}
-                            >
-                              <Play className="size-3" />
-                            </button>
-                            <button
-                              className="p-0.5 rounded hover:bg-muted"
-                              title="Delete"
-                              onClick={(e) => { e.stopPropagation(); setDeletingTaskId(task.id) }}
-                            >
-                              <Trash2 className="size-3" />
-                            </button>
-                          </div>
-                        </div>
-                      </SidebarMenuItem>
-                    )
-                  })
-                )}
-                {actionError && (
-                  <SidebarMenuItem>
-                    <span className="px-2 text-xs text-destructive">{actionError}</span>
-                  </SidebarMenuItem>
-                )}
-                {allTasks.length > SIDEBAR_TASK_LIMIT && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      onClick={() => setManagerOpen(true)}
-                      className="text-muted-foreground"
-                    >
-                      <History className="size-4" />
-                      <span>See all tasks</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-                <SidebarMenuItem>
-                  <SidebarMenuButton onClick={handleCreate}>
-                    <Plus className="size-3.5" />
-                    <span className="text-muted-foreground">Add Task</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </CollapsibleContent>
-        </SidebarGroup>
-      </Collapsible>
+                )
+              })
+            )}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
 
       <TaskDialog
-        task={editingTask}
+        task={null}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-      />
-      <ConfirmDialog
-        open={deletingTaskId !== null}
-        onOpenChange={(open) => { if (!open) setDeletingTaskId(null) }}
-        title="Delete Task"
-        description="Delete this task? This cannot be undone."
-        onConfirm={() => {
-          if (deletingTaskId) handleDelete(deletingTaskId)
-        }}
       />
       <TaskManagerDialog open={managerOpen} onOpenChange={setManagerOpen} />
     </>

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, count } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import type { InboxItem } from "@talos/shared/types";
 
@@ -21,11 +21,23 @@ function toInboxResponse(row: InboxRow): InboxItem {
 
 // GET /api/inbox
 router.get("/inbox", (req, res) => {
-  const rows = req.query["unread"] === "true"
-    ? db.select().from(schema.inbox).where(eq(schema.inbox.isRead, false)).orderBy(desc(schema.inbox.createdAt)).all()
-    : db.select().from(schema.inbox).orderBy(desc(schema.inbox.createdAt)).all();
+  const limit = Math.max(1, Math.min(100, Number(req.query["limit"]) || 20));
+  const offset = Math.max(0, Number(req.query["offset"]) || 0);
+  const unreadOnly = req.query["unread"] === "true";
 
-  res.json({ data: rows.map(toInboxResponse) });
+  let query = db.select().from(schema.inbox).orderBy(desc(schema.inbox.createdAt));
+  let countQuery = db.select({ value: count() }).from(schema.inbox);
+
+  if (unreadOnly) {
+    query = query.where(eq(schema.inbox.isRead, false)) as typeof query;
+    countQuery = countQuery.where(eq(schema.inbox.isRead, false)) as typeof countQuery;
+  }
+
+  const rows = query.limit(limit).offset(offset).all();
+  const totalRow = countQuery.get();
+  const total = totalRow?.value ?? 0;
+
+  res.json({ data: { items: rows.map(toInboxResponse), total } });
 });
 
 // PUT /api/inbox/:id/read

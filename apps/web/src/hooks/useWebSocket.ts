@@ -40,6 +40,8 @@ export function useWebSocket() {
         console.log("[WebSocket] Connected")
         setStatus("connected")
         resetReconnectAttempts()
+        // Always subscribe to logs for agent status display
+        ws.send(JSON.stringify({ type: "subscribe_logs" }))
       }
 
       ws.onmessage = (event) => {
@@ -155,6 +157,9 @@ function handleMessage(message: ServerMessage) {
       break
     case "status":
       useConnectionStore.getState().setAgentStatus(message.status)
+      if (message.status === "idle") {
+        useConnectionStore.getState().setLatestStatusLog(null)
+      }
       break
     case "tool_call":
       // Ensure there's an assistant message to attach tool calls to
@@ -208,6 +213,9 @@ function handleMessage(message: ServerMessage) {
     case "log":
       useLogStore.getState().addStreamedEntry(message.entry)
       useChatStore.getState().addChatLog(message.entry)
+      if (message.entry.axis === "user" && message.entry.level === "high") {
+        useConnectionStore.getState().setLatestStatusLog(message.entry.message)
+      }
       break
     case "conversation_title_update":
       useChatStore.getState().updateConversationTitle(message.conversationId, message.title)

@@ -8,12 +8,14 @@ interface ConnectionState {
   agentStatus: AgentStatus;
   reconnectAttempts: number;
   sendFn: SendFn | null;
+  latestStatusLog: string | null;
   setStatus: (status: ConnectionStatus) => void;
   setAgentStatus: (status: AgentStatus) => void;
   incrementReconnectAttempts: () => void;
   resetReconnectAttempts: () => void;
   setSendFn: (fn: SendFn) => void;
   send: (message: ClientMessage) => void;
+  setLatestStatusLog: (msg: string | null) => void;
 }
 
 export const useConnectionStore = create<ConnectionState>((set, get) => ({
@@ -21,6 +23,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   agentStatus: "idle",
   reconnectAttempts: 0,
   sendFn: null,
+  latestStatusLog: null,
   setStatus: (status) => set({ status }),
   setAgentStatus: (status) => set({ agentStatus: status }),
   incrementReconnectAttempts: () =>
@@ -35,4 +38,5 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       console.warn("[ConnectionStore] Cannot send — no WebSocket connection")
     }
   },
+  setLatestStatusLog: (msg) => set({ latestStatusLog: msg }),
 }))

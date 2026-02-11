@@ -1,6 +1,7 @@
 import type { Message } from "@talos/shared/types"
 import { User, Bot } from "lucide-react"
 import { ToolCallDisplay } from "./ToolCallDisplay"
+import { Markdown } from "./Markdown"
 
 interface MessageBubbleProps {
   message: Message;
@@ -39,9 +40,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             ))}
           </div>
         )}
-        <div className="text-sm whitespace-pre-wrap break-words">
+        <Markdown className="text-sm">
           {message.content}
-        </div>
+        </Markdown>
         {!isUser && message.usage && (
           <p className="mt-1.5 text-xs text-muted-foreground">
             {message.usage.inputTokens.toLocaleString()} in → {message.usage.outputTokens.toLocaleString()} out · {message.usage.totalTokens.toLocaleString()} tokens

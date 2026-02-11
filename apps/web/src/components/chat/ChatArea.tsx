@@ -30,7 +30,6 @@ export function ChatArea() {
   const inboxContext = useChatStore((s) => s.inboxContext)
   const setInboxContext = useChatStore((s) => s.setInboxContext)
   const send = useConnectionStore((s) => s.send)
-  const sendFn = useConnectionStore((s) => s.sendFn)
   const connectionStatus = useConnectionStore((s) => s.status)
   const { settings } = useSettings()
 
@@ -44,16 +43,6 @@ export function ChatArea() {
     ta.style.height = "auto"
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
   }, [])
-
-  // Subscribe/unsubscribe to WS log streaming when showLogsInChat is enabled
-  useEffect(() => {
-    if (settings.showLogsInChat && sendFn) {
-      sendFn({ type: "subscribe_logs" })
-      return () => {
-        sendFn({ type: "unsubscribe_logs" })
-      }
-    }
-  }, [settings.showLogsInChat, sendFn])
 
   // Clear chat logs when switching conversations
   useEffect(() => {
@@ -178,7 +167,7 @@ export function ChatArea() {
         )}
       </header>
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className="flex-1 scrollbar-thumb-only p-4 pb-20">
+        <div className="flex-1 font-chat scrollbar-thumb-only p-4 pb-20">
           {messages.length === 0 && !inboxContext ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
               {!hasProvider ? (

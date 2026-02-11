@@ -1,5 +1,6 @@
 import { X, ClipboardCheck, Calendar, Bell } from "lucide-react"
 import type { InboxItem } from "@talos/shared/types"
+import { Markdown } from "./Markdown"
 
 function typeIcon(type: InboxItem["type"]) {
   switch (type) {
@@ -53,9 +54,9 @@ export function InboxContextCard({ item, onDismiss }: InboxContextCardProps) {
               </button>
             </div>
           </div>
-          <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground scrollbar-thumb-only">
-            {item.content}
-          </pre>
+          <div className="mt-1.5 max-h-40 overflow-auto text-xs text-muted-foreground scrollbar-thumb-only">
+            <Markdown>{item.content}</Markdown>
+          </div>
         </div>
       </div>
     </div>

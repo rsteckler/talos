@@ -2,26 +2,36 @@ import { create } from "zustand"
 import { inboxApi } from "@/api/inbox"
 import type { InboxItem } from "@talos/shared/types"
 
+const PAGE_SIZE = 20
+
 interface InboxState {
   items: InboxItem[]
   unreadCount: number
+  total: number
+  hasMore: boolean
   isLoading: boolean
+  isFetchingMore: boolean
   addItem: (item: InboxItem) => void
   markAsRead: (id: string) => Promise<void>
   removeItem: (id: string) => Promise<void>
   setItems: (items: InboxItem[]) => void
   fetchInbox: () => Promise<void>
+  fetchMore: () => Promise<void>
 }
 
-export const useInboxStore = create<InboxState>((set) => ({
+export const useInboxStore = create<InboxState>((set, get) => ({
   items: [],
   unreadCount: 0,
+  total: 0,
+  hasMore: false,
   isLoading: false,
+  isFetchingMore: false,
 
   addItem: (item) =>
     set((state) => {
       const items = [item, ...state.items]
-      return { items, unreadCount: items.filter((i) => !i.is_read).length }
+      const total = state.total + 1
+      return { items, total, unreadCount: items.filter((i) => !i.is_read).length }
     }),
 
   markAsRead: async (id) => {
@@ -46,7 +56,8 @@ export const useInboxStore = create<InboxState>((set) => ({
     }
     set((state) => {
       const items = state.items.filter((item) => item.id !== id)
-      return { items, unreadCount: items.filter((i) => !i.is_read).length }
+      const total = Math.max(0, state.total - 1)
+      return { items, total, hasMore: total > items.length, unreadCount: items.filter((i) => !i.is_read).length }
     })
   },
 
@@ -56,10 +67,40 @@ export const useInboxStore = create<InboxState>((set) => ({
   fetchInbox: async () => {
     set({ isLoading: true })
     try {
-      const items = await inboxApi.list()
-      set({ items, unreadCount: items.filter((i) => !i.is_read).length, isLoading: false })
+      const { items, total } = await inboxApi.list({ limit: PAGE_SIZE, offset: 0 })
+      set({
+        items,
+        total,
+        hasMore: total > items.length,
+        unreadCount: items.filter((i) => !i.is_read).length,
+        isLoading: false,
+      })
     } catch {
       set({ isLoading: false })
+    }
+  },
+
+  fetchMore: async () => {
+    const { hasMore, isFetchingMore, items } = get()
+    if (!hasMore || isFetchingMore) return
+
+    set({ isFetchingMore: true })
+    try {
+      const { items: newItems, total } = await inboxApi.list({
+        limit: PAGE_SIZE,
+        offset: items.length,
+      })
+      set((state) => {
+        const allItems = [...state.items, ...newItems]
+        return {
+          items: allItems,
+          total,
+          hasMore: total > allItems.length,
+          isFetchingMore: false,
+        }
+      })
+    } catch {
+      set({ isFetchingMore: false })
     }
   },
 }))

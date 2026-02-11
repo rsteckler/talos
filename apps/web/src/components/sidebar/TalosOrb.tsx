@@ -17,6 +17,7 @@ const sidebarOrbConfig = {
 export function TalosOrb() {
   const orbRef = useOrb()
   const agentStatus = useConnectionStore((s) => s.agentStatus)
+  const latestStatusLog = useConnectionStore((s) => s.latestStatusLog)
   const prevStatusRef = useRef<AgentStatus>("idle")
 
   useEffect(() => {
@@ -63,7 +64,9 @@ export function TalosOrb() {
           </div>
           <div className="ml-auto flex flex-col gap-0.5 leading-none text-right">
             <span className="font-semibold">Talos</span>
-            <span className="text-xs text-muted-foreground">AI Chief of Staff</span>
+            <span className="text-[10px] font-mono text-muted-foreground/70 italic truncate max-w-[140px]">
+              {agentStatus === "idle" ? "Sleeping" : latestStatusLog ?? "Thinking…"}
+            </span>
           </div>
         </SidebarMenuButton>
       </SidebarMenuItem>
