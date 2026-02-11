@@ -16,11 +16,19 @@ Conversations are stored in SQLite and persist across server restarts.
 
 A new conversation is automatically created when you send the first message. You can also click **New Chat** in the sidebar.
 
-Conversations are auto-titled by the server using the first user message.
+Conversations are auto-titled by the LLM after the first assistant response. The server sends the opening messages to the LLM and asks for a concise title, which is then broadcast to the frontend in real time.
 
 ### Switching Conversations
 
-Click any conversation in the sidebar to load it. The full message history is fetched from the server.
+Click any conversation in the sidebar to load it. The full message history is fetched from the server. The sidebar shows the 3 most recent conversations.
+
+### Chat History Modal
+
+When you have more conversations than the sidebar limit, a **See all chats** link appears. Click it to open the chat history modal, which provides:
+
+- **Search** across all conversation titles
+- **Open** any conversation
+- **Delete** conversations with confirmation
 
 ### Deleting a Conversation
 
@@ -40,9 +48,10 @@ Responses stream token-by-token via WebSocket. The message flow:
 When tools are enabled, the LLM can invoke them during a conversation. The orchestration loop:
 
 1. LLM returns a `tool_call` response
-2. Server executes the tool locally via the Tool Runner
-3. Tool result is sent back to the LLM
-4. LLM generates a follow-up response (which may include more tool calls)
+2. If the tool requires approval, an inline approval prompt appears — you can approve or deny
+3. Server executes the tool locally via the Tool Runner
+4. Tool result is sent back to the LLM
+5. LLM generates a follow-up response (which may include more tool calls)
 
 This loop continues until the LLM returns a text-only response.
 

@@ -53,6 +53,15 @@ Search places, get directions, calculate distances, and geocode addresses.
 2. Toggle tools on/off
 3. For tools that require credentials (e.g., Web Search), click **Configure** and enter the required API key
 
+## Tool Permissions
+
+Some tools require user approval before execution. When the LLM calls a tool that needs approval, an inline prompt appears in the chat with the tool name and arguments. You can:
+
+- **Approve** — Execute the tool call
+- **Deny** — Block the execution and let the LLM know
+
+Tools like Shell always require approval by default. Other tools can declare their own permission requirements in their manifest.
+
 ## How Tools Work in Chat
 
 When tools are enabled, their JSON schemas are included in every LLM request. The LLM decides when to call a tool based on the conversation context.

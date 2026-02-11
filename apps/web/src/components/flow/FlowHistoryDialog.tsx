@@ -112,7 +112,11 @@ export function FlowHistoryDialog({ open, onOpenChange }: FlowHistoryDialogProps
                   )}
                   {typeIcon(item.type)}
                   <button
-                    onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                    onClick={() => {
+                      const expanding = expandedId !== item.id
+                      setExpandedId(expanding ? item.id : null)
+                      if (expanding && !item.is_read) markAsRead(item.id)
+                    }}
                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
                     {expandedId === item.id

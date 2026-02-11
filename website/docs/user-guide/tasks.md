@@ -8,12 +8,25 @@ Tasks are automated jobs that Talos executes on a schedule or on demand. Each ta
 
 ## Trigger Types
 
+### Built-in Triggers
+
 | Type       | Description                                    | Config Example                        |
 |------------|------------------------------------------------|---------------------------------------|
 | `cron`     | Runs on a cron schedule                        | `{"cron": "0 9 * * *"}`              |
 | `interval` | Runs every N minutes                           | `{"interval_minutes": 30}`            |
 | `webhook`  | Triggered via HTTP POST to a webhook endpoint  | `{}`                                  |
 | `manual`   | Only runs when manually triggered              | `{}`                                  |
+
+### Tool-Provided Triggers
+
+Tools can declare their own trigger types for event-driven tasks. These appear in the task creation dialog under **Tool Events** when the tool is enabled.
+
+For example, the Google Workspace tool provides a **New Gmail received** trigger (`google:gmail_new_email`) that polls your inbox for new emails. When new mail arrives, any tasks using this trigger fire automatically with the email details included in the prompt.
+
+Tool triggers:
+- Only poll when at least one active task uses them
+- Have configurable poll intervals (set in **Settings → Tools**)
+- Include event data (e.g., email subjects, senders) prepended to the task's action prompt
 
 ### Cron Syntax
 
@@ -67,10 +80,30 @@ If a task is already running when its next scheduled execution arrives, the sche
 
 ## Managing Tasks
 
+The sidebar shows the 3 most recent tasks. When you have more, a **See all tasks** link opens the task manager modal.
+
+### Sidebar
+
 - **Edit** — Click a task in the sidebar to open the edit dialog
 - **Run Now** — Hover over a task and click the play button
 - **Delete** — Hover over a task and click the trash icon (with confirmation)
-- **Enable/Disable** — Toggle the active switch in the edit dialog
+
+### Task Manager Modal
+
+The full task manager provides:
+
+- **Search** across all task names and descriptions
+- **Edit** any task (opens the task dialog)
+- **Run now** — trigger immediate execution
+- **Delete** with confirmation
+- **Create** new tasks via the "New Task" button
+- Active/inactive status badges and trigger type labels for each task
+
+### Task Dialog
+
+- **Enable/Disable** — Toggle the active switch
+- **Trigger type** — Select from built-in triggers or tool-provided triggers (grouped in the dropdown)
+- For tool triggers, an info note explains that the trigger fires automatically based on tool settings
 
 ## Run History
 

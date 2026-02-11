@@ -67,7 +67,7 @@ Scheduled and triggered tasks.
 | id            | text    | Primary key (UUID)                           |
 | name          | text    | Task name                                    |
 | description   | text    | Optional description                         |
-| triggerType   | text    | `cron`, `interval`, `webhook`, `manual`      |
+| triggerType   | text    | Open string: builtin (`cron`, `interval`, `webhook`, `manual`) or tool-provided (`toolId:triggerId`) |
 | triggerConfig | text    | JSON config (e.g., cron expression)          |
 | actionPrompt  | text    | Prompt sent to the LLM                       |
 | tools         | text    | JSON array of tool IDs, or null              |
@@ -106,14 +106,25 @@ Async results and notifications.
 
 ### toolConfigs
 
-Tool enablement and credential storage.
+Tool enablement, credential, and settings storage.
 
-| Column    | Type    | Notes                         |
-|-----------|---------|-------------------------------|
-| toolId    | text    | Primary key (tool manifest ID)|
-| config    | text    | JSON credentials              |
-| isEnabled | boolean | Whether the tool is active    |
-| createdAt | text    | ISO timestamp                 |
+| Column    | Type    | Notes                                        |
+|-----------|---------|----------------------------------------------|
+| toolId    | text    | Primary key (tool manifest ID)               |
+| config    | text    | JSON object with credentials and settings    |
+| isEnabled | boolean | Whether the tool is active                   |
+| createdAt | text    | ISO timestamp                                |
+
+### triggerState
+
+Persisted state for tool-provided trigger pollers.
+
+| Column     | Type | Notes                                    |
+|------------|------|------------------------------------------|
+| triggerId  | text | Primary key (e.g., `google:gmail_new_email`) |
+| state      | text | JSON state object (trigger-specific)     |
+| lastPollAt | text | ISO timestamp of last poll               |
+| updatedAt  | text | ISO timestamp                            |
 
 ### logs
 

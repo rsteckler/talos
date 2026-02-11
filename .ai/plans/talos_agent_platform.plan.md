@@ -32,7 +32,7 @@ isProject: false
 
 Talos is a self-hosted AI agent that acts as your "chief of staff." It supports bring-your-own-key (BYOK) model providers, scheduled/triggered tasks, and extensible tools. The user interacts via chat (sync) and receives results via an inbox (async).
 
-**Progress:** Phase 7 complete — all phases done. Post-phase enhancements ongoing (theme system, chat theming). See Implementation Notes under each phase and the Post-Phase Enhancements section for what was built.
+**Progress:** Phase 7 complete — all phases done. Post-phase enhancements ongoing: theme system, tool permissions, Google Workspace/Maps tools, trigger system, test infrastructure, sidebar UX improvements. See Implementation Notes under each phase and the Post-Phase Enhancements section for what was built.
 
 ---
 
@@ -1097,6 +1097,95 @@ Required color keys per mode: `background`, `foreground`, `card`, `card-foregrou
 - **Adding built-in themes:** Drop a `.json` file in `apps/server/themes/` following the format above. It appears in the dropdown automatically.
 - **Theming new components:** Use `bg-background`, `text-foreground`, `bg-card`, `bg-muted`, `text-muted-foreground`, `border-border`, `bg-primary`, `text-primary-foreground` etc. instead of hardcoded `zinc-*`/`black`/`white` classes. These all respond to theme/accent changes.
 - **Theme file upload:** Settings > Appearance > Custom Theme > Upload button. Accepts `.json` files matching the format above.
+
+### Inline Chat Logs
+
+Replaced the separate `/logs` page navigation with inline chat log display and improved scrollbar styling.
+
+- **Inline log viewer:** Logs are now viewable within the chat interface rather than requiring navigation to a separate page.
+- **Scrollbar styling:** Added `scrollbar-thumb-only` utility class for minimal scrollbar appearance (thumb only, no track) using Tailwind plugin.
+- **Connection status removed:** Removed the connection status indicator from the sidebar footer — replaced by orb state reflecting connectivity.
+
+### SYSTEM.md Base System Prompt
+
+Added a server-side `SYSTEM.md` file that provides base behavioral instructions for tool execution.
+
+- **File:** `apps/server/data/SYSTEM.md` — loaded alongside `SOUL.md` as part of the system prompt.
+- **Purpose:** Defines how the agent should behave when executing tools (e.g., always explain what you're doing, ask before destructive actions).
+- **API:** Served via existing soul/system prompt loading in `apps/server/src/providers/llm.ts`.
+
+### Tool Permission System
+
+Implemented an inline tool approval system so users can approve or deny tool calls before execution.
+
+- **Server:** Tool calls that require approval are paused and sent to the frontend via WebSocket as pending approval requests.
+- **Frontend:** `ToolApprovalPrompt` component renders inline in the chat with approve/deny buttons. User response sent back via WebSocket.
+- **Shared types:** Added `tool_approval_request` and `tool_approval_response` message types to the WebSocket protocol.
+- **Per-tool configuration:** Tools can declare in their manifest whether they require approval (e.g., shell commands always require approval, web search does not).
+
+### Google Workspace Tool & Google Maps Tool
+
+Expanded the tool ecosystem with two Google-powered tools using OAuth authentication.
+
+- **Google Workspace tool (`tools/google/`):** Gmail (search, read, send), Google Calendar (list events, create event), and Google Contacts (search). Uses OAuth 2.0 with refresh token flow. Manifest declares credentials with OAuth config and required scopes.
+- **Google Maps tool (`tools/google-maps/`):** Geocoding, directions, places search, and distance matrix via Google Maps API. Uses API key authentication.
+- **OAuth flow (`apps/server/src/api/oauth.ts`):** Server-side OAuth router handling the authorization code exchange and token refresh for Google services. Callback URL stored in tool config.
+- **Tool config dialog update:** `ToolConfigDialog.tsx` now handles OAuth credential types — shows "Connect" button that initiates the OAuth flow, displays connection status.
+
+### Chat History Modal & LLM Title Generation
+
+Improved conversation management with a history modal and automatic title generation.
+
+- **Chat history modal (`ChatHistoryDialog.tsx`):** Dialog accessible from sidebar "See all chats" link. Shows all conversations with search, delete, and open actions. Replaces the need to scroll through sidebar for older conversations.
+- **LLM title generation:** After the first assistant response in a new conversation, the server calls the LLM to generate a concise conversation title (instead of truncating the first message). Title broadcast to frontend via `conversation_title_update` WebSocket message.
+- **Sidebar conversation limit:** Sidebar shows only the 5 most recent conversations (later reduced to 3) with "See all chats" link when more exist.
+- **Server broadcast:** Added `broadcastConversationTitleUpdate(conversationId, title)` to `apps/server/src/ws/index.ts`.
+
+### Backend Test Infrastructure
+
+Added comprehensive test coverage with Vitest.
+
+- **Framework:** Vitest configured in `apps/server/vitest.config.ts` with path aliases matching the server tsconfig.
+- **Coverage:** 61 tests across API routes (providers, tasks, inbox, tools, logs), scheduler, executor, tool loader, and database operations.
+- **Test utilities:** In-memory SQLite database for test isolation, mock factories for providers/tasks/inbox items.
+- **Scripts:** `pnpm test` runs all tests, `pnpm test:server` runs server tests only.
+
+### Tool-Provided Trigger System
+
+Tools can now declare **trigger types** for tasks — background event sources that poll and wake the LLM when matching events occur.
+
+- **Trigger registry (`apps/server/src/triggers/registry.ts`):** Collects tool-declared triggers at load time. `registerTrigger()`, `getTrigger()`, `getAllTriggerTypes()`. Trigger IDs scoped as `{toolId}:{triggerId}`.
+- **Trigger poller (`apps/server/src/triggers/poller.ts`):** Background polling manager. Only runs pollers when active tasks reference a trigger. Concurrency guard prevents overlapping polls. State persisted to `trigger_state` DB table.
+- **DB changes:** New `trigger_state` table (triggerId PK, state JSON, lastPollAt, updatedAt). Removed CHECK constraint on `tasks.trigger_type` to allow open string values.
+- **Shared types:** `TriggerType` opened to `"cron" | "interval" | "webhook" | "manual" | (string & {})`. Added `ToolTriggerSpec`, `ToolSettingSpec`, `TriggerTypeInfo`, `TriggerEvent`, `ToolTriggerHandler`, `ToolLogger` interfaces. Extended `ToolManifest` with `logName?`, `settings?`, `triggers?`.
+- **Tool loader changes:** After loading handlers, also loads `mod.triggers` and registers them. Creates scoped `ToolLogger` via `init(logger)` pattern so tools can log at any time (not just during polling).
+- **Gmail trigger (`tools/google/`):** `gmail_new_email` trigger using Gmail History API. First poll establishes baseline `historyId`, subsequent polls check for `messageAdded` events. Handles stale historyId (404) by resetting. Configurable poll interval via tool settings.
+- **API:** `GET /api/trigger-types` returns all builtin + tool-provided triggers. Task creation validates trigger type against registry.
+- **Frontend:** TaskDialog dynamically fetches trigger types, grouped by "Built-in" / "Tool Events". ToolConfigDialog shows settings section (e.g., poll interval) for tools with declared settings.
+- **Executor integration:** `executeTask()` accepts optional `TriggerContext` and prepends trigger summary to the action prompt.
+- **Server lifecycle:** `triggerPoller.init()` on startup, `triggerPoller.shutdown()` on shutdown. `refreshAll()` called after task CRUD.
+- **Tool logging:** Tools declare `logName` in manifest for `tool:<name>` log area. `ensureLogArea()` registers the area in the log viewer dropdown.
+
+### Sidebar Improvements
+
+Iterative UI improvements to sidebar section layout and management.
+
+- **Section reorder:** Sidebar now shows Tasks → Flow → Conversations (previously Conversations was first).
+- **Item limits:** Tasks limited to 3 (most recent by `created_at`), Flow limited to 5, Conversations limited to 3.
+- **"See all" modals:**
+  - `FlowHistoryDialog` — search, expandable content preview, "Open in chat" action, delete per item.
+  - `TaskManagerDialog` — search, task list with trigger icons and active/inactive badges, edit (opens TaskDialog), run now, delete with confirmation, "New Task" button at bottom-left.
+  - "See all flows" / "See all tasks" links appear when items exceed sidebar limits.
+- **Flow section:** Removed inline delete buttons; management moved to FlowHistoryDialog.
+- **Task count badge:** Shows total task count in sidebar header.
+
+### Orb Status During Task Execution
+
+The TalosOrb now reflects background task activity.
+
+- **`broadcastStatus()` (`apps/server/src/ws/index.ts`):** New broadcast function that sends agent status to all connected WebSocket clients.
+- **Executor integration:** `executeTask()` broadcasts `"thinking"` when a task starts, `"idle"` when it completes or fails.
+- **Result:** Orb transitions from sleep → idle during background task execution, then back to sleep when done. Previously, the orb stayed asleep during all background work since only chat-initiated status changes were broadcast.
 
 ---
 

@@ -14,12 +14,29 @@ Every tool must have a `manifest.json` in its root directory. This file defines 
   "name": "My Tool",
   "description": "A short description of what the tool does.",
   "version": "1.0.0",
+  "logName": "mytool",
   "credentials": [
     {
       "name": "api_key",
       "label": "API Key",
       "description": "Your service API key",
       "required": true
+    }
+  ],
+  "settings": [
+    {
+      "name": "poll_interval_minutes",
+      "label": "Poll interval (minutes)",
+      "type": "number",
+      "default": "5",
+      "description": "How often to check for new events"
+    }
+  ],
+  "triggers": [
+    {
+      "id": "new_event",
+      "label": "New event detected",
+      "description": "Fires when a new event is detected"
     }
   ],
   "functions": [
@@ -51,7 +68,10 @@ Every tool must have a `manifest.json` in its root directory. This file defines 
 | `name`        | string   | Yes      | Display name shown in the UI         |
 | `description` | string   | Yes      | Short description of the tool        |
 | `version`     | string   | Yes      | Semantic version                     |
+| `logName`     | string   | No       | Name used in log area (appears as `tool:<logName>` in logs) |
 | `credentials` | array    | No       | Credential requirements              |
+| `settings`    | array    | No       | User-configurable settings (shown in Settings UI) |
+| `triggers`    | array    | No       | Event triggers for the task system   |
 | `functions`   | array    | Yes      | Callable function definitions        |
 
 ### Credentials
@@ -62,6 +82,30 @@ Every tool must have a `manifest.json` in its root directory. This file defines 
 | `label`       | string  | Yes      | Label shown in the Settings UI       |
 | `description` | string  | No       | Help text for the user               |
 | `required`    | boolean | Yes      | Whether the credential must be set   |
+
+### Settings
+
+Settings are user-configurable values shown in **Settings → Tools** alongside credentials. Unlike credentials, settings use regular input fields (not password fields).
+
+| Field         | Type    | Required | Description                              |
+|---------------|---------|----------|------------------------------------------|
+| `name`        | string  | Yes      | Key name (stored in tool config JSON)    |
+| `label`       | string  | Yes      | Label shown in the Settings UI           |
+| `type`        | string  | Yes      | `"number"`, `"string"`, or `"boolean"`   |
+| `default`     | string  | No       | Default value (as string)                |
+| `description` | string  | No       | Help text for the user                   |
+
+### Triggers
+
+Triggers declare background event sources that can fire tasks. Each trigger is a named event that the tool can detect via polling. Trigger IDs are scoped as `{toolId}:{triggerId}` (e.g., `google:gmail_new_email`).
+
+| Field         | Type   | Required | Description                          |
+|---------------|--------|----------|--------------------------------------|
+| `id`          | string | Yes      | Local trigger ID (scoped by tool)    |
+| `label`       | string | Yes      | Display name in the task dialog      |
+| `description` | string | No       | Description of when this trigger fires |
+
+See [Handler Functions](handler-functions#triggers) for implementing the polling logic.
 
 ### Functions
 

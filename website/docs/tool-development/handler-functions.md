@@ -67,6 +67,88 @@ export async function list(args: { path: string }): Promise<string> {
 }
 ```
 
+## Logging
+
+Tools can log to the server's structured logging system by exporting an optional `init` function. The server calls it at load time with a scoped `ToolLogger`.
+
+```typescript
+let log = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+
+export function init(logger: { info: (msg: string) => void; warn: (msg: string) => void; error: (msg: string) => void; debug: (msg: string) => void }) {
+  log = logger;
+}
+
+export async function my_function(args: { input: string }, context: ToolContext): Promise<string> {
+  log.info("Processing request");
+  // ...
+  return "result";
+}
+```
+
+Declare `logName` in your manifest to control the log area name. Without it, the tool ID is used (e.g., `tool:my-tool`). With `"logName": "mytool"`, logs appear under `tool:mytool`.
+
+The log area is automatically registered in the log viewer dropdown when the tool loads.
+
+## Triggers
+
+Tools can provide background triggers for the task system. Declare triggers in `manifest.json` and export a `triggers` object from `index.ts`.
+
+### Trigger Handler
+
+Each trigger handler implements a `poll` function that checks for new events:
+
+```typescript
+interface TriggerPollResult {
+  event: { triggerId: string; toolId: string; data?: unknown; summary?: string } | null;
+  newState: Record<string, unknown>;
+}
+
+export const triggers = {
+  my_event: {
+    async poll(
+      credentials: Record<string, string>,
+      state: Record<string, unknown>,
+      settings: Record<string, string>
+    ): Promise<TriggerPollResult> {
+      // Check for new events using credentials and previous state
+      const hasNewEvent = /* your detection logic */;
+
+      if (hasNewEvent) {
+        return {
+          event: {
+            triggerId: "my_event",
+            toolId: "my-tool",
+            summary: "New event detected: details here",
+          },
+          newState: { lastChecked: Date.now() },
+        };
+      }
+
+      return { event: null, newState: state };
+    },
+  },
+};
+```
+
+### How Polling Works
+
+1. The poller only runs when at least one active task uses the trigger
+2. Poll interval is read from tool settings (falls back to 5 minutes)
+3. `state` is persisted between polls in the `trigger_state` DB table
+4. When `event` is non-null, all matching tasks execute with the event summary prepended to the action prompt
+5. A concurrency guard prevents overlapping polls for the same trigger
+
+### First Poll Pattern
+
+On the first poll (empty state), establish a baseline without firing an event. This prevents triggering on all existing data when a task is first created:
+
+```typescript
+if (!state.lastId) {
+  // First poll — get current state as baseline
+  return { event: null, newState: { lastId: currentId } };
+}
+```
+
 ## Tips
 
 - Keep handlers focused — one function per action
@@ -74,3 +156,4 @@ export async function list(args: { path: string }): Promise<string> {
 - Include error context in thrown messages
 - Validate required credentials early
 - Use timeouts for external calls
+- Use `init(logger)` for logging instead of `console.log`
