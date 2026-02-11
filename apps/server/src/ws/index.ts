@@ -26,6 +26,20 @@ export function broadcastInbox(item: InboxItem): void {
  * Broadcast a conversation title update to ALL connected WebSocket clients.
  * Called by the title generator after LLM generates a title.
  */
+/**
+ * Broadcast an agent status update to ALL connected WebSocket clients.
+ * Called by the task executor so the orb reflects background activity.
+ */
+export function broadcastStatus(status: "idle" | "thinking" | "tool_calling" | "responding"): void {
+  if (!wssRef) return;
+  const msg = JSON.stringify({ type: "status", status } satisfies ServerMessage);
+  for (const client of wssRef.clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(msg);
+    }
+  }
+}
+
 export function broadcastConversationTitleUpdate(conversationId: string, title: string): void {
   if (!wssRef) return;
   const msg = JSON.stringify({ type: "conversation_title_update", conversationId, title } satisfies ServerMessage);

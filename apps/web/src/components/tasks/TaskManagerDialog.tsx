@@ -94,13 +94,7 @@ export function TaskManagerDialog({ open, onOpenChange }: TaskManagerDialogProps
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col gap-0 p-0">
           <DialogHeader className="px-6 pt-6 pb-4">
-            <div className="flex items-center justify-between">
-              <DialogTitle>All Tasks</DialogTitle>
-              <Button size="sm" onClick={handleCreate}>
-                <Plus className="size-4 mr-1" />
-                New Task
-              </Button>
-            </div>
+            <DialogTitle>All Tasks</DialogTitle>
           </DialogHeader>
 
           <div className="px-6 pb-3">
@@ -179,6 +173,13 @@ export function TaskManagerDialog({ open, onOpenChange }: TaskManagerDialogProps
                   </div>
                 )
               })}
+            </div>
+
+            <div className="pt-3">
+              <Button variant="outline" size="sm" onClick={handleCreate}>
+                <Plus className="size-4 mr-1" />
+                New Task
+              </Button>
             </div>
           </div>
         </DialogContent>

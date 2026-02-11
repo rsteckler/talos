@@ -4,7 +4,7 @@ import { db, schema } from "../db/index.js";
 import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
 import { buildToolSet } from "../tools/runner.js";
 import { createLogger } from "../logger/index.js";
-import { broadcastInbox } from "../ws/index.js";
+import { broadcastInbox, broadcastStatus } from "../ws/index.js";
 import type { InboxItem, TokenUsage } from "@talos/shared/types";
 import type { TriggerContext } from "../triggers/index.js";
 
@@ -27,6 +27,7 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
     .run();
 
   log.info(`Executing task "${task.name}"`, { taskId: task.id, runId });
+  broadcastStatus("thinking");
 
   try {
     const active = getActiveProvider();
@@ -130,6 +131,7 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
 
     // Broadcast to connected WS clients
     broadcastInbox(inboxItem);
+    broadcastStatus("idle");
 
     log.info(`Task "${task.name}" completed`, { taskId: task.id, runId, resultLength: result.text.length });
   } catch (err: unknown) {
@@ -176,6 +178,7 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
       .run();
 
     broadcastInbox(inboxItem);
+    broadcastStatus("idle");
 
     log.error(`Task "${task.name}" failed`, { taskId: task.id, runId, error: errorMessage });
   }
