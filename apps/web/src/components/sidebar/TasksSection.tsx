@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ChevronRight, ListTodo, Plus, Clock, RefreshCw, Globe, Play, Trash2, Loader2, Zap } from "lucide-react"
+import { ChevronRight, ListTodo, Plus, Clock, RefreshCw, Globe, Play, Trash2, Loader2, Zap, History } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { TaskDialog } from "@/components/tasks/TaskDialog"
+import { TaskManagerDialog } from "@/components/tasks/TaskManagerDialog"
 import { useTaskStore } from "@/stores"
 import type { Task } from "@talos/shared/types"
 
@@ -47,6 +48,7 @@ export function TasksSection() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [managerOpen, setManagerOpen] = useState(false)
 
   useEffect(() => {
     fetchTasks()
@@ -174,6 +176,17 @@ export function TasksSection() {
                     <span className="px-2 text-xs text-destructive">{actionError}</span>
                   </SidebarMenuItem>
                 )}
+                {allTasks.length > SIDEBAR_TASK_LIMIT && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      onClick={() => setManagerOpen(true)}
+                      className="text-muted-foreground"
+                    >
+                      <History className="size-4" />
+                      <span>See all tasks</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
                 <SidebarMenuItem>
                   <SidebarMenuButton onClick={handleCreate}>
                     <Plus className="size-3.5" />
@@ -200,6 +213,7 @@ export function TasksSection() {
           if (deletingTaskId) handleDelete(deletingTaskId)
         }}
       />
+      <TaskManagerDialog open={managerOpen} onOpenChange={setManagerOpen} />
     </>
   )
 }

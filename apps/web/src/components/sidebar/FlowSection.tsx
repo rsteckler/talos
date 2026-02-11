@@ -1,4 +1,5 @@
-import { ChevronRight, Inbox, Bell, ClipboardCheck, Calendar, Loader2, Trash2 } from "lucide-react"
+import { useState } from "react"
+import { ChevronRight, Inbox, Bell, ClipboardCheck, Calendar, Loader2, History } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -14,6 +15,7 @@ import {
   SidebarMenuBadge,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { FlowHistoryDialog } from "@/components/flow/FlowHistoryDialog"
 import { useChatStore, useInboxStore } from "@/stores"
 import type { InboxItem } from "@talos/shared/types"
 
@@ -49,11 +51,11 @@ export function FlowSection() {
   const unreadCount = useInboxStore((s) => s.unreadCount)
   const isLoading = useInboxStore((s) => s.isLoading)
   const markAsRead = useInboxStore((s) => s.markAsRead)
-  const removeItem = useInboxStore((s) => s.removeItem)
   const items = allItems.slice(0, SIDEBAR_FLOW_LIMIT)
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const clearMessages = useChatStore((s) => s.clearMessages)
   const setInboxContext = useChatStore((s) => s.setInboxContext)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   if (state === "collapsed") {
     return (
@@ -75,6 +77,7 @@ export function FlowSection() {
   }
 
   return (
+  <>
     <Collapsible defaultOpen className="group/collapsible">
       <SidebarGroup>
         <SidebarGroupLabel asChild>
@@ -108,49 +111,51 @@ export function FlowSection() {
               ) : (
                 items.map((item) => (
                   <SidebarMenuItem key={item.id}>
-                    <div className="group/flow relative flex w-full items-center">
-                      <SidebarMenuButton
-                        onClick={() => {
-                          if (!item.is_read) markAsRead(item.id)
-                          setActiveConversation(null)
-                          clearMessages()
-                          setInboxContext(item)
-                        }}
-                        className="h-auto py-2 flex-1"
-                      >
-                        <div className="flex w-full items-start gap-2">
-                          {!item.is_read && (
-                            <span className="mt-1.5 block size-2 shrink-0 rounded-full bg-cyan-400" />
-                          )}
-                          {item.is_read && <span className="mt-1.5 block size-2 shrink-0" />}
-                          {typeIcon(item.type)}
-                          <div className="flex min-w-0 flex-1 flex-col">
-                            <span className="truncate text-xs font-medium text-zinc-200">
-                              {item.title}
-                            </span>
-                            <span className="text-[10px] text-zinc-500">
-                              {relativeTime(item.created_at)}
-                            </span>
-                          </div>
+                    <SidebarMenuButton
+                      onClick={() => {
+                        if (!item.is_read) markAsRead(item.id)
+                        setActiveConversation(null)
+                        clearMessages()
+                        setInboxContext(item)
+                      }}
+                      className="h-auto py-2"
+                    >
+                      <div className="flex w-full items-start gap-2">
+                        {!item.is_read && (
+                          <span className="mt-1.5 block size-2 shrink-0 rounded-full bg-cyan-400" />
+                        )}
+                        {item.is_read && <span className="mt-1.5 block size-2 shrink-0" />}
+                        {typeIcon(item.type)}
+                        <div className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-xs font-medium text-zinc-200">
+                            {item.title}
+                          </span>
+                          <span className="text-[10px] text-zinc-500">
+                            {relativeTime(item.created_at)}
+                          </span>
                         </div>
-                      </SidebarMenuButton>
-                      <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/flow:opacity-100 transition-opacity">
-                        <button
-                          className="p-0.5 rounded hover:bg-muted"
-                          title="Delete"
-                          onClick={(e) => { e.stopPropagation(); removeItem(item.id) }}
-                        >
-                          <Trash2 className="size-3" />
-                        </button>
                       </div>
-                    </div>
+                    </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))
+              )}
+              {allItems.length > SIDEBAR_FLOW_LIMIT && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => setHistoryOpen(true)}
+                    className="text-muted-foreground"
+                  >
+                    <History className="size-4" />
+                    <span>See all flows</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               )}
             </SidebarMenu>
           </SidebarGroupContent>
         </CollapsibleContent>
       </SidebarGroup>
     </Collapsible>
+    <FlowHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
+  </>
   )
 }
