@@ -20,11 +20,11 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarSeparator />
       <SidebarContent>
-        <ConversationsSection />
-        <SidebarSeparator />
         <TasksSection />
         <SidebarSeparator />
         <FlowSection />
+        <SidebarSeparator />
+        <ConversationsSection />
       </SidebarContent>
       <SidebarSeparator />
       <SidebarFooter>

@@ -28,14 +28,20 @@ const TRIGGER_ICONS: Record<string, typeof Clock> = {
   manual: Play,
 }
 
+const SIDEBAR_TASK_LIMIT = 3
+
 export function TasksSection() {
   const { state } = useSidebar()
-  const tasks = useTaskStore((s) => s.tasks)
+  const allTasks = useTaskStore((s) => s.tasks)
   const isLoading = useTaskStore((s) => s.isLoading)
   const error = useTaskStore((s) => s.error)
   const fetchTasks = useTaskStore((s) => s.fetchTasks)
   const deleteTask = useTaskStore((s) => s.deleteTask)
   const triggerTask = useTaskStore((s) => s.triggerTask)
+
+  const tasks = [...allTasks]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, SIDEBAR_TASK_LIMIT)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -96,9 +102,9 @@ export function TasksSection() {
             <CollapsibleTrigger className="flex w-full items-center">
               <ListTodo className="mr-2 size-4" />
               <span>Tasks</span>
-              {tasks.length > 0 && (
+              {allTasks.length > 0 && (
                 <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">
-                  {tasks.length}
+                  {allTasks.length}
                 </Badge>
               )}
               <ChevronRight className="ml-auto size-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />

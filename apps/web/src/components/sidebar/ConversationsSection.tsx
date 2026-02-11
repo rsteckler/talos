@@ -19,7 +19,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { ChatHistoryDialog } from "@/components/chat/ChatHistoryDialog"
 import { useChatStore } from "@/stores"
 
-const SIDEBAR_CONVERSATION_LIMIT = 5
+const SIDEBAR_CONVERSATION_LIMIT = 3
 
 export function ConversationsSection() {
   const { state } = useSidebar()
