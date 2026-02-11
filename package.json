@@ -11,10 +11,16 @@
     "build": "pnpm -r run build",
     "build:docs": "pnpm --filter @talos/docs build",
     "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm --filter @talos/server test",
+    "test:coverage": "pnpm --filter @talos/server test:coverage",
     "clean": "pnpm -r exec rm -rf dist node_modules && rm -rf node_modules dist"
   },
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@9.0.0",
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.18",
+    "vitest": "^4.0.18"
+  }
 }
