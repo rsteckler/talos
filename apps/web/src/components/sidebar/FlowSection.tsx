@@ -81,20 +81,23 @@ export function FlowSection() {
 
   if (state === "collapsed") {
     return (
-      <SidebarGroup>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Flow">
-              <Inbox />
-              {unreadCount > 0 && (
-                <SidebarMenuBadge className="bg-cyan-500 text-white text-[10px] min-w-[18px] h-[18px] flex items-center justify-center rounded-full">
-                  {unreadCount}
-                </SidebarMenuBadge>
-              )}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarGroup>
+      <>
+        <SidebarGroup>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton tooltip="Flow" onClick={() => setHistoryOpen(true)}>
+                <Inbox />
+                {unreadCount > 0 && (
+                  <SidebarMenuBadge className="bg-sidebar-primary text-white text-[10px] min-w-[18px] h-[18px] flex items-center justify-center rounded-full">
+                    {unreadCount}
+                  </SidebarMenuBadge>
+                )}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
+        <FlowHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
+      </>
     )
   }
 
@@ -105,7 +108,7 @@ export function FlowSection() {
           <Inbox className="mr-2 size-4" />
           <span>Flow</span>
           {unreadCount > 0 && (
-            <span className="ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-cyan-500 px-1.5 text-[10px] font-semibold text-white">
+            <span className="ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-sidebar-primary px-1.5 text-[10px] font-semibold text-white">
               {unreadCount}
             </span>
           )}
@@ -148,7 +151,7 @@ export function FlowSection() {
                   >
                     <div className="flex w-full items-start gap-2">
                       {!item.is_read && (
-                        <span className="mt-1.5 block size-2 shrink-0 rounded-full bg-cyan-400" />
+                        <span className="mt-1.5 block size-2 shrink-0 rounded-full bg-sidebar-primary" />
                       )}
                       {item.is_read && <span className="mt-1.5 block size-2 shrink-0" />}
                       {typeIcon(item.type)}

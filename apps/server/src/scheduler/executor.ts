@@ -110,7 +110,7 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
     const inboxItem: InboxItem = {
       id: crypto.randomUUID(),
       task_run_id: runId,
-      title: `Task completed: ${task.name}`,
+      title: task.name,
       content: result.text || "(no output)",
       type: "task_result",
       is_read: false,

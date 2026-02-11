@@ -65,6 +65,7 @@ export function TasksSection() {
   const isLoading = useTaskStore((s) => s.isLoading)
   const error = useTaskStore((s) => s.error)
   const fetchTasks = useTaskStore((s) => s.fetchTasks)
+  const triggerTask = useTaskStore((s) => s.triggerTask)
 
   const activeTasks = allTasks.filter((t) => t.is_active)
   const tasks = sortTasks(activeTasks).slice(0, SIDEBAR_TASK_LIMIT)
@@ -89,15 +90,18 @@ export function TasksSection() {
 
   if (state === "collapsed") {
     return (
-      <SidebarGroup className="shrink-0">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Tasks">
-              <ListTodo />
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarGroup>
+      <>
+        <SidebarGroup className="shrink-0">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton tooltip="Tasks" onClick={() => setManagerOpen(true)}>
+                <ListTodo />
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
+        <TaskManagerDialog open={managerOpen} onOpenChange={setManagerOpen} />
+      </>
     )
   }
 
@@ -150,15 +154,24 @@ export function TasksSection() {
                 const TriggerIcon = TRIGGER_ICONS[task.trigger_type] ?? Zap
                 return (
                   <SidebarMenuItem key={task.id}>
-                    <SidebarMenuButton className="flex-1">
-                      <TriggerIcon className="size-3.5 shrink-0" />
-                      <span className="truncate flex-1">{task.name}</span>
-                      {task.next_run_at && !INDETERMINATE_TRIGGERS.has(task.trigger_type) ? (
-                        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground tabular-nums">
-                          {relativeTimeUntil(task.next_run_at)}
-                        </span>
-                      ) : null}
-                    </SidebarMenuButton>
+                    <div className="group/task relative flex w-full items-center">
+                      <SidebarMenuButton className="flex-1">
+                        <TriggerIcon className="size-3.5 shrink-0" />
+                        <span className="truncate flex-1">{task.name}</span>
+                        {task.next_run_at && !INDETERMINATE_TRIGGERS.has(task.trigger_type) ? (
+                          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground tabular-nums group-hover/task:opacity-0">
+                            {relativeTimeUntil(task.next_run_at)}
+                          </span>
+                        ) : null}
+                      </SidebarMenuButton>
+                      <button
+                        className="absolute right-1 p-0.5 rounded hover:bg-muted opacity-0 group-hover/task:opacity-100 transition-opacity"
+                        title="Run now"
+                        onClick={() => triggerTask(task.id)}
+                      >
+                        <Play className="size-3" />
+                      </button>
+                    </div>
                   </SidebarMenuItem>
                 )
               })

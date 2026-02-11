@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar"
+import { SidebarMenu, SidebarMenuItem, SidebarMenuButton, useSidebar } from "@/components/ui/sidebar"
 import { TalosOrb as AnimatedOrb } from "@/components/orb/TalosOrb"
 import { useOrb } from "@/contexts/OrbContext"
 import { useConnectionStore } from "@/stores"
@@ -15,6 +15,7 @@ const sidebarOrbConfig = {
 }
 
 export function TalosOrb() {
+  const { state } = useSidebar()
   const orbRef = useOrb()
   const agentStatus = useConnectionStore((s) => s.agentStatus)
   const latestStatusLog = useConnectionStore((s) => s.latestStatusLog)
@@ -62,12 +63,14 @@ export function TalosOrb() {
               <AnimatedOrb ref={orbRef} initialConfig={sidebarOrbConfig} initialState="sleep" />
             </div>
           </div>
-          <div className="ml-auto flex flex-col gap-0.5 leading-none text-right">
-            <span className="font-semibold">Talos</span>
-            <span className="text-[10px] font-mono text-muted-foreground/70 italic truncate max-w-[140px]">
-              {agentStatus === "idle" ? "Sleeping" : latestStatusLog ?? "Thinking…"}
-            </span>
-          </div>
+          {state !== "collapsed" && (
+            <div className="ml-auto flex flex-col gap-0.5 leading-none text-right">
+              <span className="font-semibold">Talos</span>
+              <span className="text-[10px] font-mono text-muted-foreground/70 italic truncate max-w-[140px]">
+                {agentStatus === "idle" ? "Sleeping" : latestStatusLog ?? "Thinking…"}
+              </span>
+            </div>
+          )}
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>
