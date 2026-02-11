@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ChevronRight, ListTodo, Plus, Clock, RefreshCw, Globe, Play, Trash2, Loader2 } from "lucide-react"
+import { ChevronRight, ListTodo, Plus, Clock, RefreshCw, Globe, Play, Trash2, Loader2, Zap } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -19,9 +19,9 @@ import { Badge } from "@/components/ui/badge"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { TaskDialog } from "@/components/tasks/TaskDialog"
 import { useTaskStore } from "@/stores"
-import type { Task, TriggerType } from "@talos/shared/types"
+import type { Task } from "@talos/shared/types"
 
-const TRIGGER_ICONS: Record<TriggerType, typeof Clock> = {
+const TRIGGER_ICONS: Record<string, typeof Clock> = {
   cron: Clock,
   interval: RefreshCw,
   webhook: Globe,
@@ -128,7 +128,7 @@ export function TasksSection() {
                   </SidebarMenuItem>
                 ) : (
                   tasks.map((task) => {
-                    const TriggerIcon = TRIGGER_ICONS[task.trigger_type]
+                    const TriggerIcon = TRIGGER_ICONS[task.trigger_type] ?? Zap
                     return (
                       <SidebarMenuItem key={task.id}>
                         <div className="group/task relative flex w-full items-center">

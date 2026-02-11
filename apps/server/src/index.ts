@@ -16,6 +16,7 @@ import { errorHandler } from "./api/errorHandler.js";
 import { attachWebSocket } from "./ws/index.js";
 import { loadAllTools } from "./tools/index.js";
 import { scheduler } from "./scheduler/index.js";
+import { triggerPoller } from "./triggers/index.js";
 import { createLogger, initLogger } from "./logger/index.js";
 
 const log = createLogger("server");
@@ -54,9 +55,10 @@ app.use(errorHandler);
 const server = http.createServer(app);
 attachWebSocket(server);
 
-// Load tools, init scheduler, then start listening
+// Load tools, init scheduler and trigger poller, then start listening
 loadAllTools().then(() => {
   scheduler.init();
+  triggerPoller.init();
   server.listen(PORT, () => {
     log.info(`Talos server listening on http://localhost:${PORT}`);
   });
@@ -64,6 +66,7 @@ loadAllTools().then(() => {
   log.error("Failed to load tools", err instanceof Error ? { error: err.message } : undefined);
   // Start anyway even if tool loading fails
   scheduler.init();
+  triggerPoller.init();
   server.listen(PORT, () => {
     log.info(`Talos server listening on http://localhost:${PORT} (tool loading failed)`);
   });
@@ -72,6 +75,7 @@ loadAllTools().then(() => {
 // Graceful shutdown
 function handleShutdown() {
   log.info("Shutting down...");
+  triggerPoller.shutdown();
   scheduler.shutdown();
   server.close();
   process.exit(0);

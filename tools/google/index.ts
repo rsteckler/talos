@@ -1,6 +1,18 @@
 import { google } from "googleapis";
 import type { OAuth2Client } from "google-auth-library";
 
+// Logger injected by tool loader at init time
+let log: { info(m: string): void; warn(m: string): void; error(m: string): void; debug(m: string): void } = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  debug: () => {},
+};
+
+export function init(logger: typeof log) {
+  log = logger;
+}
+
 function makeAuth(config: Record<string, string>): OAuth2Client {
   const clientId = config["client_id"];
   const clientSecret = config["client_secret"];
@@ -400,4 +412,139 @@ export const handlers = {
   sheets_write,
   docs_read,
   slides_read,
+};
+
+// --- Trigger handlers ---
+
+interface GmailTriggerState {
+  lastHistoryId?: string;
+  lastPollTimestamp?: string;
+}
+
+interface TriggerPollResult {
+  event: { triggerId: string; toolId: string; data?: unknown; summary?: string } | null;
+  newState: Record<string, unknown>;
+}
+
+const gmail_new_email_handler = {
+  async poll(
+    credentials: Record<string, string>,
+    state: Record<string, unknown>,
+  ): Promise<TriggerPollResult> {
+    const auth = makeAuth(credentials);
+    const gmail = google.gmail({ version: "v1", auth });
+    const triggerState = state as GmailTriggerState;
+
+    // First poll: establish baseline historyId, don't fire
+    if (!triggerState.lastHistoryId) {
+      log.info("Gmail trigger: establishing baseline historyId");
+      const profile = await gmail.users.getProfile({ userId: "me" });
+      const historyId = profile.data.historyId;
+      log.debug(`Gmail trigger: baseline historyId=${historyId}`);
+      return {
+        event: null,
+        newState: {
+          lastHistoryId: historyId,
+          lastPollTimestamp: new Date().toISOString(),
+        },
+      };
+    }
+
+    log.debug(`Gmail trigger: polling history since ${triggerState.lastHistoryId}`);
+
+    try {
+      const historyRes = await gmail.users.history.list({
+        userId: "me",
+        startHistoryId: triggerState.lastHistoryId,
+        historyTypes: ["messageAdded"],
+        labelId: "INBOX",
+      });
+
+      const history = historyRes.data.history ?? [];
+      const newHistoryId = historyRes.data.historyId ?? triggerState.lastHistoryId;
+
+      // Collect new message IDs from messageAdded events
+      const newMessageIds: string[] = [];
+      for (const entry of history) {
+        for (const added of entry.messagesAdded ?? []) {
+          if (added.message?.id && added.message.labelIds?.includes("INBOX")) {
+            newMessageIds.push(added.message.id);
+          }
+        }
+      }
+
+      if (newMessageIds.length === 0) {
+        log.debug("Gmail trigger: no new messages");
+        return {
+          event: null,
+          newState: {
+            lastHistoryId: newHistoryId,
+            lastPollTimestamp: new Date().toISOString(),
+          },
+        };
+      }
+
+      log.info(`Gmail trigger: ${newMessageIds.length} new message(s) found`);
+
+      // Fetch metadata for up to 10 new messages
+      const toFetch = newMessageIds.slice(0, 10);
+      const summaryParts: string[] = [];
+
+      for (const msgId of toFetch) {
+        try {
+          const detail = await gmail.users.messages.get({
+            userId: "me",
+            id: msgId,
+            format: "metadata",
+            metadataHeaders: ["From", "Subject"],
+          });
+          const headers = detail.data.payload?.headers ?? [];
+          const from = headers.find((h) => h.name === "From")?.value ?? "Unknown";
+          const subject = headers.find((h) => h.name === "Subject")?.value ?? "(no subject)";
+          summaryParts.push(`- From: ${from} | Subject: ${subject}`);
+        } catch {
+          // Skip messages that can't be fetched (may have been deleted)
+        }
+      }
+
+      const totalNew = newMessageIds.length;
+      const summary = totalNew === 1
+        ? `1 new email received:\n${summaryParts.join("\n")}`
+        : `${totalNew} new email(s) received:\n${summaryParts.join("\n")}${totalNew > 10 ? `\n...and ${totalNew - 10} more` : ""}`;
+
+      const event = {
+        triggerId: "google:gmail_new_email",
+        toolId: "google",
+        summary,
+        data: { messageIds: newMessageIds, count: totalNew },
+      };
+
+      return {
+        event,
+        newState: {
+          lastHistoryId: newHistoryId,
+          lastPollTimestamp: new Date().toISOString(),
+        },
+      };
+    } catch (err: unknown) {
+      // Handle stale historyId (404) by resetting to current
+      const isNotFound = err instanceof Error && "code" in err && (err as { code: number }).code === 404;
+      if (isNotFound) {
+        log.warn("Gmail trigger: stale historyId (404), resetting baseline");
+        const profile = await gmail.users.getProfile({ userId: "me" });
+        return {
+          event: null,
+          newState: {
+            lastHistoryId: profile.data.historyId,
+            lastPollTimestamp: new Date().toISOString(),
+          },
+        };
+      }
+      throw err;
+    }
+  },
+};
+
+export const triggers = {
+  gmail_new_email: gmail_new_email_handler,
 };

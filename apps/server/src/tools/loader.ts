@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ToolManifest } from "@talos/shared/types";
+import type { ToolManifest, ToolTriggerHandler, ToolLogger } from "@talos/shared/types";
 import type { LoadedTool, ToolHandler } from "./types.js";
-import { createLogger } from "../logger/index.js";
+import { createLogger, ensureLogArea } from "../logger/index.js";
+import { registerTrigger, clearRegistry } from "../triggers/registry.js";
 
 const log = createLogger("tools");
 
@@ -12,8 +13,21 @@ const TOOLS_DIR = path.join(__dirname, "..", "..", "..", "..", "tools");
 
 const loadedTools = new Map<string, LoadedTool>();
 
+function createToolLogger(manifest: ToolManifest): ToolLogger {
+  const area = `tool:${manifest.logName ?? manifest.id}`;
+  ensureLogArea(area);
+  const inner = createLogger(area);
+  return {
+    info: (message: string) => inner.info(message),
+    warn: (message: string) => inner.warn(message),
+    error: (message: string) => inner.error(message),
+    debug: (message: string) => inner.dev.debug(message),
+  };
+}
+
 export async function loadAllTools(): Promise<void> {
   loadedTools.clear();
+  clearRegistry();
 
   if (!fs.existsSync(TOOLS_DIR)) {
     log.dev.debug("No tools/ directory found, skipping tool loading");
@@ -37,7 +51,30 @@ export async function loadAllTools(): Promise<void> {
       // Dynamic import of the tool's index.ts/js
       const indexPath = path.join(toolDir, "index.ts");
       const mod = await import(indexPath);
+
+      // Inject scoped logger if the tool exports init()
+      const toolLogger = createToolLogger(manifest);
+      if (typeof mod.init === "function") {
+        mod.init(toolLogger);
+      }
+
       const handlers: Record<string, ToolHandler> = mod.handlers ?? {};
+
+      // Load trigger handlers if the tool declares triggers
+      const triggers: Record<string, ToolTriggerHandler> = mod.triggers ?? {};
+
+      // Register tool-provided triggers
+      if (manifest.triggers) {
+        for (const triggerSpec of manifest.triggers) {
+          const handler = triggers[triggerSpec.id];
+          if (handler) {
+            registerTrigger(manifest.id, triggerSpec.id, triggerSpec, handler);
+            log.dev.debug(`Registered trigger: ${manifest.id}:${triggerSpec.id}`);
+          } else {
+            log.warn(`Trigger "${triggerSpec.id}" declared in ${manifest.id} manifest but no handler found`);
+          }
+        }
+      }
 
       // Read prompt.md if present
       const promptPath = path.join(toolDir, "prompt.md");
@@ -45,7 +82,7 @@ export async function loadAllTools(): Promise<void> {
         ? fs.readFileSync(promptPath, "utf-8")
         : undefined;
 
-      loadedTools.set(manifest.id, { manifest, handlers, promptMd });
+      loadedTools.set(manifest.id, { manifest, handlers, triggers, promptMd });
       log.dev.debug(`Loaded: ${manifest.id} (${manifest.name})`);
     } catch (err) {
       log.error(`Failed to load tool "${entry.name}"`, { error: err instanceof Error ? err.message : String(err) });

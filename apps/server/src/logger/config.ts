@@ -130,6 +130,16 @@ export function setLogSettings(pruneDays: number): void {
   }
 }
 
+export function ensureLogArea(area: string): void {
+  if (configCache.has(area)) return;
+  const now = new Date().toISOString();
+  db.insert(schema.logConfigs)
+    .values({ area, userLevel: DEFAULT_USER_LEVEL, devLevel: DEFAULT_DEV_LEVEL, updatedAt: now })
+    .onConflictDoNothing()
+    .run();
+  configCache.set(area, { userLevel: DEFAULT_USER_LEVEL, devLevel: DEFAULT_DEV_LEVEL });
+}
+
 export function getKnownAreas(): string[] {
   // Predefined areas + any dynamic areas from config
   const fromConfig = db.select({ area: schema.logConfigs.area }).from(schema.logConfigs).all();

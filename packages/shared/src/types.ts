@@ -11,7 +11,7 @@ export interface HealthResponse {
 
 // --- Tasks ---
 
-export type TriggerType = "cron" | "interval" | "webhook" | "manual";
+export type TriggerType = "cron" | "interval" | "webhook" | "manual" | (string & {});
 
 export interface Task {
   id: string;
@@ -181,6 +181,50 @@ export type ConnectionStatus = "connected" | "disconnected" | "reconnecting";
 
 // --- Tools ---
 
+export interface ToolTriggerSpec {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+export interface ToolSettingSpec {
+  name: string;
+  label: string;
+  type: "number" | "string" | "boolean";
+  default: string;
+  description?: string;
+}
+
+export interface TriggerTypeInfo {
+  id: string;
+  label: string;
+  category: "builtin" | "tool";
+  toolId?: string;
+  description?: string;
+}
+
+export interface TriggerEvent {
+  triggerId: string;
+  toolId: string;
+  data?: unknown;
+  summary?: string;
+}
+
+export interface ToolLogger {
+  info(message: string): void;
+  warn(message: string): void;
+  error(message: string): void;
+  debug(message: string): void;
+}
+
+export interface ToolTriggerHandler {
+  poll(
+    credentials: Record<string, string>,
+    state: Record<string, unknown>,
+    settings: Record<string, string>,
+  ): Promise<{ event: TriggerEvent | null; newState: Record<string, unknown> }>;
+}
+
 export interface ToolCredentialSpec {
   name: string;
   label: string;
@@ -205,8 +249,11 @@ export interface ToolManifest {
   name: string;
   description: string;
   version: string;
+  logName?: string;
   credentials?: ToolCredentialSpec[];
   oauth?: ToolOAuthSpec;
+  settings?: ToolSettingSpec[];
+  triggers?: ToolTriggerSpec[];
   functions: ToolFunctionSpec[];
 }
 
@@ -220,6 +267,8 @@ export interface ToolInfo {
   credentials: ToolCredentialSpec[];
   oauth?: ToolOAuthSpec;
   oauthConnected?: boolean;
+  settings: ToolSettingSpec[];
+  triggers: ToolTriggerSpec[];
   functions: ToolFunctionSpec[];
   hasRequiredCredentials: boolean;
 }

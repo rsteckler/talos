@@ -1,5 +1,5 @@
 import { request } from "./client"
-import type { ToolInfo } from "@talos/shared/types"
+import type { ToolInfo, TriggerTypeInfo } from "@talos/shared/types"
 
 export const toolsApi = {
   list: () => request<ToolInfo[]>("/tools"),
@@ -29,4 +29,7 @@ export const toolsApi = {
 
   oauthDisconnect: (provider: string) =>
     request<ToolInfo>(`/oauth/${provider}/disconnect`, { method: "POST" }),
+
+  getTriggerTypes: () =>
+    request<TriggerTypeInfo[]>("/trigger-types"),
 }

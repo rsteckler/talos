@@ -146,6 +146,41 @@ export function runMigrations(): void {
   // Add allow_without_asking column to tool_configs
   try { raw.exec("ALTER TABLE tool_configs ADD COLUMN allow_without_asking INTEGER NOT NULL DEFAULT 0;"); } catch { /* column already exists */ }
 
+  // Create trigger_state table
+  raw.exec(`
+    CREATE TABLE IF NOT EXISTS trigger_state (
+      trigger_id TEXT PRIMARY KEY,
+      state TEXT NOT NULL DEFAULT '{}',
+      last_poll_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  // Migrate tasks table: remove CHECK constraint on trigger_type to allow tool-provided triggers
+  const tasksInfo = raw.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'").get() as { sql: string } | undefined;
+  if (tasksInfo?.sql && tasksInfo.sql.includes("CHECK(trigger_type IN")) {
+    raw.exec("PRAGMA foreign_keys = OFF;");
+    raw.exec(`
+      CREATE TABLE tasks_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        trigger_type TEXT NOT NULL,
+        trigger_config TEXT NOT NULL DEFAULT '{}',
+        action_prompt TEXT NOT NULL,
+        tools TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        last_run_at TEXT,
+        next_run_at TEXT,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO tasks_new SELECT * FROM tasks;
+      DROP TABLE tasks;
+      ALTER TABLE tasks_new RENAME TO tasks;
+    `);
+    raw.exec("PRAGMA foreign_keys = ON;");
+  }
+
   // Note: createLogger used here but initLogger() hasn't been called yet,
   // so this falls back to console.log. That's fine for migration output.
   console.log("[db] info: Database migrations complete");

@@ -3,6 +3,7 @@
   "name": "Google Workspace",
   "description": "Access Gmail, Calendar, Drive, Sheets, Docs, and Slides.",
   "version": "1.0.0",
+  "logName": "google",
   "credentials": [
     { "name": "client_id", "label": "OAuth Client ID", "required": true },
     { "name": "client_secret", "label": "OAuth Client Secret", "required": true }
@@ -19,6 +20,22 @@
     ],
     "authorizeUrl": "/api/oauth/google/authorize"
   },
+  "settings": [
+    {
+      "name": "gmail_poll_interval_minutes",
+      "label": "Gmail poll interval (minutes)",
+      "type": "number",
+      "default": "5",
+      "description": "How often to check for new emails"
+    }
+  ],
+  "triggers": [
+    {
+      "id": "gmail_new_email",
+      "label": "New Gmail received",
+      "description": "Fires when new emails arrive in your inbox"
+    }
+  ],
   "functions": [
     {
       "name": "gmail_search",

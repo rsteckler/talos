@@ -75,7 +75,7 @@ export const tasks = sqliteTable("tasks", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
-  triggerType: text("trigger_type", { enum: ["cron", "interval", "webhook", "manual"] }).notNull(),
+  triggerType: text("trigger_type").notNull(),
   triggerConfig: text("trigger_config").notNull().default("{}"),
   actionPrompt: text("action_prompt").notNull(),
   tools: text("tools"), // JSON array of tool IDs, null = all enabled
@@ -96,6 +96,13 @@ export const taskRuns = sqliteTable("task_runs", {
   result: text("result"),
   error: text("error"),
   usage: text("usage"),
+});
+
+export const triggerState = sqliteTable("trigger_state", {
+  triggerId: text("trigger_id").primaryKey(),
+  state: text("state").notNull().default("{}"),
+  lastPollAt: text("last_poll_at"),
+  updatedAt: text("updated_at").notNull(),
 });
 
 export const inbox = sqliteTable("inbox", {

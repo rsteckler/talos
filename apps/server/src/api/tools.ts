@@ -3,6 +3,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { getLoadedTools, getLoadedTool } from "../tools/index.js";
+import { getAllTriggerTypes } from "../triggers/index.js";
 import type { ToolInfo } from "@talos/shared/types";
 
 const router = Router();
@@ -39,6 +40,8 @@ function toToolInfo(toolId: string): ToolInfo | null {
     credentials,
     oauth: loaded.manifest.oauth,
     oauthConnected,
+    settings: loaded.manifest.settings ?? [],
+    triggers: loaded.manifest.triggers ?? [],
     functions: loaded.manifest.functions,
     hasRequiredCredentials,
   };
@@ -229,6 +232,11 @@ router.post("/tools/:id/allow-without-asking", (req, res) => {
 
   const info = toToolInfo(toolId);
   res.json({ data: info });
+});
+
+// GET /api/trigger-types
+router.get("/trigger-types", (_req, res) => {
+  res.json({ data: getAllTriggerTypes() });
 });
 
 export { router as toolRouter };

@@ -31,6 +31,10 @@ export function ToolConfigDialog({ tool, onClose }: ToolConfigDialogProps) {
       for (const cred of tool.credentials) {
         initial[cred.name] = ""
       }
+      // Initialize settings with defaults
+      for (const setting of tool.settings) {
+        initial[setting.name] = setting.default
+      }
       setValues(initial)
     }
   }, [tool])
@@ -105,6 +109,33 @@ export function ToolConfigDialog({ tool, onClose }: ToolConfigDialogProps) {
               />
             </div>
           ))}
+
+          {tool.settings.length > 0 && (
+            <>
+              <div className="border-t pt-4">
+                <p className="text-sm font-medium mb-3">Settings</p>
+              </div>
+              {tool.settings.map((setting) => (
+                <div key={setting.name} className="space-y-1.5">
+                  <Label htmlFor={`setting-${setting.name}`}>
+                    {setting.label}
+                  </Label>
+                  {setting.description && (
+                    <p className="text-xs text-muted-foreground">{setting.description}</p>
+                  )}
+                  <Input
+                    id={`setting-${setting.name}`}
+                    type={setting.type === "number" ? "number" : "text"}
+                    placeholder={setting.default}
+                    value={values[setting.name] ?? setting.default}
+                    onChange={(e) =>
+                      setValues((prev) => ({ ...prev, [setting.name]: e.target.value }))
+                    }
+                  />
+                </div>
+              ))}
+            </>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

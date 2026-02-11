@@ -3,6 +3,7 @@ import { z } from "zod";
 import { eq, desc } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { scheduler, executeTask } from "../scheduler/index.js";
+import { isRegisteredTrigger } from "../triggers/index.js";
 import type { Task, TaskRun } from "@talos/shared/types";
 
 const router = Router();
@@ -42,10 +43,16 @@ function toTaskRunResponse(row: TaskRunRow): TaskRun {
 
 // --- Zod Schemas ---
 
+const BUILTIN_TRIGGER_TYPES = new Set(["cron", "interval", "webhook", "manual"]);
+
+function isValidTriggerType(value: string): boolean {
+  return BUILTIN_TRIGGER_TYPES.has(value) || isRegisteredTrigger(value);
+}
+
 const createTaskSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
-  trigger_type: z.enum(["cron", "interval", "webhook", "manual"]),
+  trigger_type: z.string().min(1),
   trigger_config: z.string().min(1),
   action_prompt: z.string().min(1),
   tools: z.array(z.string()).optional(),
@@ -55,7 +62,7 @@ const createTaskSchema = z.object({
 const updateTaskSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
-  trigger_type: z.enum(["cron", "interval", "webhook", "manual"]).optional(),
+  trigger_type: z.string().min(1).optional(),
   trigger_config: z.string().min(1).optional(),
   action_prompt: z.string().min(1).optional(),
   tools: z.array(z.string()).optional(),
@@ -79,6 +86,11 @@ router.post("/tasks", (req, res) => {
   }
 
   const { name, description, trigger_type, trigger_config, action_prompt, tools, is_active } = parsed.data;
+
+  if (!isValidTriggerType(trigger_type)) {
+    res.status(400).json({ error: `Unknown trigger type: ${trigger_type}` });
+    return;
+  }
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -152,8 +164,14 @@ router.put("/tasks/:id", (req, res) => {
     return;
   }
 
-  const updates: Record<string, unknown> = {};
   const data = parsed.data;
+
+  if (data.trigger_type !== undefined && !isValidTriggerType(data.trigger_type)) {
+    res.status(400).json({ error: `Unknown trigger type: ${data.trigger_type}` });
+    return;
+  }
+
+  const updates: Record<string, unknown> = {};
   if (data.name !== undefined) updates["name"] = data.name;
   if (data.description !== undefined) updates["description"] = data.description;
   if (data.trigger_type !== undefined) updates["triggerType"] = data.trigger_type;

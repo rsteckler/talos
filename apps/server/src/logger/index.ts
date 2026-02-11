@@ -185,5 +185,6 @@ export {
   getLogSettings,
   setLogSettings,
   getKnownAreas,
+  ensureLogArea,
 } from "./config.js";
 export { pruneLogs } from "./pruner.js";

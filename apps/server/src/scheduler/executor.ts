@@ -6,12 +6,13 @@ import { buildToolSet } from "../tools/runner.js";
 import { createLogger } from "../logger/index.js";
 import { broadcastInbox } from "../ws/index.js";
 import type { InboxItem, TokenUsage } from "@talos/shared/types";
+import type { TriggerContext } from "../triggers/index.js";
 
 const log = createLogger("scheduler");
 
 type TaskRow = typeof schema.tasks.$inferSelect;
 
-export async function executeTask(task: TaskRow): Promise<void> {
+export async function executeTask(task: TaskRow, triggerContext?: TriggerContext): Promise<void> {
   const runId = crypto.randomUUID();
   const now = new Date().toISOString();
 
@@ -44,10 +45,15 @@ export async function executeTask(task: TaskRow): Promise<void> {
       ? `${systemPrompt}\n\n${toolPrompts.join("\n\n")}`
       : systemPrompt;
 
+    // Prepend trigger context to the action prompt if present
+    const userContent = triggerContext?.summary
+      ? `[Trigger: ${triggerContext.summary}]\n---\n${task.actionPrompt}`
+      : task.actionPrompt;
+
     const result = await generateText({
       model: active.model,
       system: fullSystemPrompt,
-      messages: [{ role: "user", content: task.actionPrompt }],
+      messages: [{ role: "user", content: userContent }],
       ...(hasTools ? { tools, stopWhen: stepCountIs(10) } : {}),
     });
 

@@ -91,6 +91,8 @@ function toToolInfo(toolId: string): ToolInfo | null {
     credentials,
     oauth: loaded.manifest.oauth,
     oauthConnected,
+    settings: loaded.manifest.settings ?? [],
+    triggers: loaded.manifest.triggers ?? [],
     functions: loaded.manifest.functions,
     hasRequiredCredentials,
   };

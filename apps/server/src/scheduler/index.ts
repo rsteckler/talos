@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { executeTask } from "./executor.js";
 import { createLogger } from "../logger/index.js";
+import { triggerPoller } from "../triggers/index.js";
 
 const log = createLogger("scheduler");
 
@@ -47,7 +48,10 @@ function scheduleTask(task: TaskRow): void {
   // Unschedule first if already scheduled
   unscheduleTask(task.id);
 
-  if (!task.isActive) return;
+  if (!task.isActive) {
+    triggerPoller.refreshAll();
+    return;
+  }
 
   let config: Record<string, unknown>;
   try {
@@ -121,12 +125,18 @@ function scheduleTask(task: TaskRow): void {
 
     log.info(`Scheduled interval task "${task.name}" every ${minutes} minute(s)`, { taskId: task.id });
   }
-  // webhook and manual types have no schedule — they're triggered via API
+  // webhook, manual, and tool-provided triggers have no cron/interval schedule here
+  // Tool triggers are handled by the trigger poller
+
+  triggerPoller.refreshAll();
 }
 
 function unscheduleTask(taskId: string): void {
   const job = jobs.get(taskId);
-  if (!job) return;
+  if (!job) {
+    triggerPoller.refreshAll();
+    return;
+  }
 
   if (job.type === "cron" && job.cronTask) {
     job.cronTask.stop();
@@ -135,6 +145,7 @@ function unscheduleTask(taskId: string): void {
   }
 
   jobs.delete(taskId);
+  triggerPoller.refreshAll();
 }
 
 function rescheduleTask(task: TaskRow): void {

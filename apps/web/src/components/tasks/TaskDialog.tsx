@@ -14,12 +14,15 @@ import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
 import { useTaskStore } from "@/stores"
-import type { Task, TriggerType } from "@talos/shared/types"
+import { toolsApi } from "@/api/tools"
+import type { Task, TriggerType, TriggerTypeInfo } from "@talos/shared/types"
 
 interface TaskDialogProps {
   task: Task | null // null = create mode
@@ -40,6 +43,20 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
   const [isActive, setIsActive] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [triggerTypes, setTriggerTypes] = useState<TriggerTypeInfo[]>([])
+
+  // Fetch trigger types when dialog opens
+  useEffect(() => {
+    if (open) {
+      toolsApi.getTriggerTypes()
+        .then(setTriggerTypes)
+        .catch(() => setTriggerTypes([]))
+    }
+  }, [open])
+
+  const builtinTriggers = triggerTypes.filter((t) => t.category === "builtin")
+  const toolTriggers = triggerTypes.filter((t) => t.category === "tool")
+  const isToolTrigger = toolTriggers.some((t) => t.id === triggerType)
 
   // Reset form when dialog opens or task changes
   useEffect(() => {
@@ -77,14 +94,13 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
   }, [open, task])
 
   function buildTriggerConfig(): string {
-    switch (triggerType) {
-      case "cron":
-        return JSON.stringify({ cron: cronExpression })
-      case "interval":
-        return JSON.stringify({ interval_minutes: Number(intervalMinutes) || 60 })
-      default:
-        return "{}"
+    if (triggerType === "cron") {
+      return JSON.stringify({ cron: cronExpression })
     }
+    if (triggerType === "interval") {
+      return JSON.stringify({ interval_minutes: Number(intervalMinutes) || 60 })
+    }
+    return "{}"
   }
 
   async function handleSave() {
@@ -179,10 +195,28 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="manual">Manual</SelectItem>
-                <SelectItem value="cron">Cron Schedule</SelectItem>
-                <SelectItem value="interval">Interval</SelectItem>
-                <SelectItem value="webhook">Webhook</SelectItem>
+                <SelectGroup>
+                  <SelectLabel>Built-in</SelectLabel>
+                  {builtinTriggers.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                  ))}
+                  {builtinTriggers.length === 0 && (
+                    <>
+                      <SelectItem value="manual">Manual</SelectItem>
+                      <SelectItem value="cron">Cron Schedule</SelectItem>
+                      <SelectItem value="interval">Interval</SelectItem>
+                      <SelectItem value="webhook">Webhook</SelectItem>
+                    </>
+                  )}
+                </SelectGroup>
+                {toolTriggers.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Tool Events</SelectLabel>
+                    {toolTriggers.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -224,6 +258,13 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
                   POST /api/webhooks/{task.id}
                 </code>
               )}
+            </div>
+          )}
+
+          {isToolTrigger && (
+            <div className="rounded-md border p-3 text-sm text-muted-foreground">
+              <p>This trigger fires automatically based on tool settings.</p>
+              <p className="mt-1 text-xs">Configure the poll interval in Settings &gt; Tools.</p>
             </div>
           )}
 
