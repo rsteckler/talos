@@ -3,7 +3,7 @@ import { db, schema } from "../db/index.js";
 import type { UserLogLevel, DevLogLevel, LogConfig, LogSettings } from "@talos/shared/types";
 
 /** Predefined logging areas */
-export const PREDEFINED_AREAS = ["server", "ws", "agent", "db", "tools", "api"] as const;
+export const PREDEFINED_AREAS = ["server", "ws", "agent", "db", "tools", "api", "channels", "scheduler", "triggers", "oauth", "summary-gen", "title-gen"] as const;
 
 const DEFAULT_USER_LEVEL: UserLogLevel = "medium";
 const DEFAULT_DEV_LEVEL: DevLogLevel = "debug";

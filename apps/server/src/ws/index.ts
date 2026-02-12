@@ -71,7 +71,7 @@ export function attachWebSocket(server: Server): void {
 
       switch (msg.type) {
         case "chat":
-          log.user.medium(`Chat received: "${msg.content.slice(0, 50)}"`, { conversationId: msg.conversationId });
+          log.user.medium("Message received", { conversationId: msg.conversationId, preview: msg.content.slice(0, 100) });
           handleChat(ws, msg.conversationId, msg.content, abortControllers, pendingApprovals);
           break;
         case "cancel":

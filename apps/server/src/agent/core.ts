@@ -11,6 +11,59 @@ import type { ApprovalGate } from "../tools/index.js";
 
 const log = createLogger("agent");
 
+/** Map tool call names (e.g. "web-search__search") to friendly descriptions */
+function describeToolCall(toolName: string, args?: Record<string, unknown>): string {
+  const [toolId, fn] = toolName.split("__");
+
+  switch (toolId) {
+    case "web-search":
+      return args?.["query"] ? `Searching the web for "${String(args["query"]).slice(0, 60)}"` : "Searching the web";
+    case "google-maps": {
+      const mapActions: Record<string, string> = {
+        places_search: "Searching for places",
+        place_details: "Looking up place details",
+        places_nearby: "Finding nearby places",
+        directions: "Getting directions",
+        distance_matrix: "Calculating distances",
+        geocode: "Looking up an address",
+        reverse_geocode: "Looking up a location",
+        place_autocomplete: "Searching for places",
+      };
+      return mapActions[fn ?? ""] ?? "Using Google Maps";
+    }
+    case "google": {
+      const googleActions: Record<string, string> = {
+        gmail_search: "Searching email",
+        gmail_read: "Reading an email",
+        gmail_send: "Sending an email",
+        gmail_reply: "Replying to an email",
+        gmail_archive: "Archiving an email",
+        calendar_list_events: "Checking the calendar",
+        calendar_create_event: "Creating a calendar event",
+        drive_list: "Browsing Google Drive",
+        drive_read: "Reading a file from Drive",
+        sheets_read: "Reading a spreadsheet",
+        sheets_write: "Writing to a spreadsheet",
+        docs_read: "Reading a document",
+        slides_read: "Reading a presentation",
+      };
+      return googleActions[fn ?? ""] ?? "Using Google Workspace";
+    }
+    case "shell":
+      return args?.["command"] ? `Running command` : "Running a shell command";
+    case "file-operations": {
+      const fileActions: Record<string, string> = {
+        read: "Reading a file",
+        write: "Writing a file",
+        list: "Listing files",
+      };
+      return fileActions[fn ?? ""] ?? "Accessing files";
+    }
+    default:
+      return `Using ${toolName}`;
+  }
+}
+
 interface StreamCallbacks {
   onChunk: (content: string) => void;
   onEnd: (messageId: string, usage?: TokenUsage) => void;
@@ -84,7 +137,7 @@ export async function streamChat(
       { role: "user", content: userContent },
     ];
 
-    log.user.high(`Thinking: "${userContent.slice(0, 50)}"`);
+    log.user.high("Thinking", { query: userContent.slice(0, 100) });
     log.dev.debug("Streaming started", { conversationId, modelId: active.modelId, providerType: active.providerType, toolCount: Object.keys(tools).length });
 
     let fullContent = "";
@@ -111,12 +164,12 @@ export async function streamChat(
             break;
           case "tool-call":
             toolCallCount++;
-            log.user.high(`Using tool: ${part.toolName}`);
+            log.user.high(describeToolCall(part.toolName, part.input as Record<string, unknown>), { tool: part.toolName, args: part.input });
             log.dev.debug("Tool call args", { toolCallId: part.toolCallId, toolName: part.toolName, args: part.input });
             onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>);
             break;
           case "tool-result":
-            log.user.medium(`Tool result: "${String(part.output).slice(0, 50)}"`);
+            log.user.medium("Tool finished", { tool: part.toolName, result: part.output });
             log.dev.debug("Tool result detail", { toolCallId: part.toolCallId, toolName: part.toolName });
             onToolResult?.(part.toolCallId, part.toolName, part.output);
             break;
@@ -166,9 +219,9 @@ export async function streamChat(
     // Some models don't support tool calling and silently return empty responses.
     if (fullContent.length === 0 && hasTools) {
       if (toolCallCount === 0) {
-        log.user.high(`Model returned empty response with ${Object.keys(tools).length} tool(s) offered — model may not support tool calling, retrying without tools`);
+        log.user.high("Retrying without tools", { reason: "empty response", toolCount: Object.keys(tools).length });
       } else {
-        log.user.high("Model called tools but produced no text response — retrying without tools");
+        log.user.high("Retrying without tools", { reason: "tools called but no text produced", toolCalls: toolCallCount });
       }
       stepCount = 0;
       toolCallCount = 0;
@@ -178,21 +231,11 @@ export async function streamChat(
 
     // Post-stream summary
     if (fullContent.length > 0) {
-      if (toolCallCount > 0) {
-        log.user.high(`Done (${toolCallCount} tool call(s), ${stepCount} step(s)): "${fullContent.slice(0, 50)}"`);
-      } else if (hasTools) {
-        log.user.medium(`Responded without using tools: "${fullContent.slice(0, 50)}"`);
-      } else {
-        log.user.high(`Response: "${fullContent.slice(0, 50)}"`);
-      }
+      log.user.high("Responded", { preview: fullContent.slice(0, 100), toolCalls: toolCallCount, steps: stepCount });
       log.dev.debug("Stream complete", { length: fullContent.length, steps: stepCount, toolCalls: toolCallCount, finishReason: lastFinishReason });
     } else {
       const modelName = active.modelId.split("/").pop() ?? active.modelId;
-      if (hasTools && toolCallCount === 0) {
-        log.user.high(`Model "${modelName}" returned nothing — it likely does not support tool calling`);
-      } else {
-        log.user.high(`Model "${modelName}" returned an empty response`);
-      }
+      log.user.high("Empty response from model", { model: modelName, toolCalls: toolCallCount, toolsOffered: hasTools });
       log.dev.debug("Stream empty", { steps: stepCount, toolCalls: toolCallCount, finishReason: lastFinishReason });
       onError("The model returned an empty response. It may not support tool calling — try disabling tools or switching models.");
       return;

@@ -119,7 +119,7 @@ export function buildToolSet(filterToolIds?: string[], approvalGate?: ApprovalGa
           if (!autoAllow && approvalGate) {
             const approved = await approvalGate(toolCallId, toolName, args);
             if (!approved) {
-              log.user.medium(`Tool ${toolName} denied by user`);
+              log.user.medium("Tool denied", { tool: toolName });
               return { denied: true, message: "User denied tool execution" };
             }
           }
