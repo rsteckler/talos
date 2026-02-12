@@ -12,6 +12,7 @@ function toInboxResponse(row: InboxRow): InboxItem {
     id: row.id,
     task_run_id: row.taskRunId,
     title: row.title,
+    summary: row.summary ?? null,
     content: row.content,
     type: row.type,
     is_read: row.isRead,

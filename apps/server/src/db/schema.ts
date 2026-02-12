@@ -109,6 +109,7 @@ export const inbox = sqliteTable("inbox", {
   id: text("id").primaryKey(),
   taskRunId: text("task_run_id").references(() => taskRuns.id, { onDelete: "set null" }),
   title: text("title").notNull(),
+  summary: text("summary"),
   content: text("content").notNull(),
   type: text("type", { enum: ["task_result", "schedule_result", "notification"] }).notNull(),
   isRead: integer("is_read", { mode: "boolean" }).notNull().default(false),

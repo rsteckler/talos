@@ -5,6 +5,7 @@ import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
 import { buildToolSet } from "../tools/runner.js";
 import { createLogger } from "../logger/index.js";
 import { broadcastInbox, broadcastStatus } from "../ws/index.js";
+import { generateInboxSummary } from "../agent/summaryGenerator.js";
 import type { InboxItem, TokenUsage } from "@talos/shared/types";
 import type { TriggerContext } from "../triggers/index.js";
 
@@ -132,6 +133,11 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
     // Broadcast to connected WS clients
     broadcastInbox(inboxItem);
     broadcastStatus("idle");
+
+    // Fire-and-forget summary generation — updates inbox item async via WS
+    generateInboxSummary(inboxItem.id, task.name, result.text || "").catch((err: unknown) =>
+      log.dev.debug("Summary generation failed", { error: err instanceof Error ? err.message : String(err) })
+    );
 
     log.info(`Task "${task.name}" completed`, { taskId: task.id, runId, resultLength: result.text.length });
   } catch (err: unknown) {

@@ -29,6 +29,13 @@ export const useInboxStore = create<InboxState>((set, get) => ({
 
   addItem: (item) =>
     set((state) => {
+      const existingIdx = state.items.findIndex((i) => i.id === item.id)
+      if (existingIdx !== -1) {
+        // Upsert: replace existing item (e.g. summary filled in async)
+        const items = [...state.items]
+        items[existingIdx] = item
+        return { items, unreadCount: items.filter((i) => !i.is_read).length }
+      }
       const items = [item, ...state.items]
       const total = state.total + 1
       return { items, total, unreadCount: items.filter((i) => !i.is_read).length }

@@ -159,6 +159,11 @@ export function FlowSection() {
                         <span className="truncate text-xs font-normal text-zinc-200">
                           {item.title}
                         </span>
+                        {item.summary && (
+                          <span className="truncate text-[10px] text-zinc-400">
+                            {item.summary}
+                          </span>
+                        )}
                         <span className="text-[10px] text-zinc-500">
                           {relativeTime(item.created_at)}
                         </span>

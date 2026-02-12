@@ -181,6 +181,9 @@ export function runMigrations(): void {
     raw.exec("PRAGMA foreign_keys = ON;");
   }
 
+  // Add summary column to inbox
+  try { raw.exec("ALTER TABLE inbox ADD COLUMN summary TEXT;"); } catch { /* column already exists */ }
+
   // Note: createLogger used here but initLogger() hasn't been called yet,
   // so this falls back to console.log. That's fine for migration output.
   console.log("[db] info: Database migrations complete");

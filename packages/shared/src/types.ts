@@ -56,6 +56,7 @@ export interface InboxItem {
   id: string;
   task_run_id?: string | null;
   title: string;
+  summary?: string | null;
   content: string;
   type: "task_result" | "schedule_result" | "notification";
   is_read: boolean;
