@@ -15,6 +15,7 @@ import {
 import { useSettings, type Theme } from "@/contexts/SettingsContext"
 import { ProviderList } from "@/components/settings/ProviderList"
 import { ToolList } from "@/components/settings/ToolList"
+import { ChannelList } from "@/components/settings/ChannelList"
 import { soulApi } from "@/api/soul"
 import { themesApi } from "@/api/themes"
 import { ACCENT_COLORS } from "@/lib/accent-colors"
@@ -320,6 +321,18 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent>
               <ToolList />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Channels</CardTitle>
+              <CardDescription>
+                Connect external messaging platforms to chat with Talos.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ChannelList />
             </CardContent>
           </Card>
 

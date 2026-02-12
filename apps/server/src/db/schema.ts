@@ -105,6 +105,24 @@ export const triggerState = sqliteTable("trigger_state", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const channelConfigs = sqliteTable("channel_configs", {
+  channelId: text("channel_id").primaryKey(),
+  config: text("config").notNull().default("{}"),
+  isEnabled: integer("is_enabled", { mode: "boolean" }).notNull().default(false),
+  notificationsEnabled: integer("notifications_enabled", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+export const channelSessions = sqliteTable("channel_sessions", {
+  id: text("id").primaryKey(),
+  channelId: text("channel_id").notNull(),
+  externalChatId: text("external_chat_id").notNull(),
+  conversationId: text("conversation_id").notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const inbox = sqliteTable("inbox", {
   id: text("id").primaryKey(),
   taskRunId: text("task_run_id").references(() => taskRuns.id, { onDelete: "set null" }),

@@ -181,6 +181,29 @@ export function runMigrations(): void {
     raw.exec("PRAGMA foreign_keys = ON;");
   }
 
+  // Create channel tables
+  raw.exec(`
+    CREATE TABLE IF NOT EXISTS channel_configs (
+      channel_id TEXT PRIMARY KEY,
+      config TEXT NOT NULL DEFAULT '{}',
+      is_enabled INTEGER NOT NULL DEFAULT 0,
+      notifications_enabled INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS channel_sessions (
+      id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      external_chat_id TEXT NOT NULL,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_sessions_lookup
+      ON channel_sessions(channel_id, external_chat_id);
+  `);
+
   // Add summary column to inbox
   try { raw.exec("ALTER TABLE inbox ADD COLUMN summary TEXT;"); } catch { /* column already exists */ }
 

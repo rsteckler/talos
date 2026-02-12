@@ -12,9 +12,11 @@ import { inboxRouter } from "./api/inbox.js";
 import { webhookRouter } from "./api/webhooks.js";
 import { themeRouter } from "./api/themes.js";
 import { oauthRouter } from "./api/oauth.js";
+import { channelRouter } from "./api/channels.js";
 import { errorHandler } from "./api/errorHandler.js";
 import { attachWebSocket } from "./ws/index.js";
 import { loadAllTools } from "./tools/index.js";
+import { loadAllChannels, initChannels, shutdownChannels } from "./channels/index.js";
 import { scheduler } from "./scheduler/index.js";
 import { triggerPoller } from "./triggers/index.js";
 import { createLogger, initLogger } from "./logger/index.js";
@@ -48,6 +50,7 @@ app.use("/api", inboxRouter);
 app.use("/api", webhookRouter);
 app.use("/api", themeRouter);
 app.use("/api", oauthRouter);
+app.use("/api", channelRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -55,26 +58,30 @@ app.use(errorHandler);
 const server = http.createServer(app);
 attachWebSocket(server);
 
-// Load tools, init scheduler and trigger poller, then start listening
-loadAllTools().then(() => {
+// Load tools and channels, init scheduler and trigger poller, then start listening
+Promise.all([loadAllTools(), loadAllChannels()]).then(async () => {
   scheduler.init();
   triggerPoller.init();
+  await initChannels().catch((err) => {
+    log.error("Failed to init channels", err instanceof Error ? { error: err.message } : undefined);
+  });
   server.listen(PORT, () => {
     log.info(`Talos server listening on http://localhost:${PORT}`);
   });
 }).catch((err) => {
-  log.error("Failed to load tools", err instanceof Error ? { error: err.message } : undefined);
-  // Start anyway even if tool loading fails
+  log.error("Failed to load plugins", err instanceof Error ? { error: err.message } : undefined);
+  // Start anyway even if loading fails
   scheduler.init();
   triggerPoller.init();
   server.listen(PORT, () => {
-    log.info(`Talos server listening on http://localhost:${PORT} (tool loading failed)`);
+    log.info(`Talos server listening on http://localhost:${PORT} (plugin loading failed)`);
   });
 });
 
 // Graceful shutdown
 function handleShutdown() {
   log.info("Shutting down...");
+  shutdownChannels().catch(() => {});
   triggerPoller.shutdown();
   scheduler.shutdown();
   server.close();

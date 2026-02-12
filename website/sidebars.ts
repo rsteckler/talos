@@ -20,6 +20,7 @@ const sidebars: SidebarsConfig = {
         "user-guide/tasks",
         "user-guide/inbox",
         "user-guide/tools",
+        "user-guide/channels",
         "user-guide/settings",
       ],
     },
@@ -29,6 +30,7 @@ const sidebars: SidebarsConfig = {
       items: [
         "guides/google-workspace-setup",
         "guides/google-maps-setup",
+        "guides/telegram-setup",
       ],
     },
     {

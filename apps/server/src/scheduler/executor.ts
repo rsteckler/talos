@@ -6,6 +6,7 @@ import { buildToolSet } from "../tools/runner.js";
 import { createLogger } from "../logger/index.js";
 import { broadcastInbox, broadcastStatus } from "../ws/index.js";
 import { generateInboxSummary } from "../agent/summaryGenerator.js";
+import { notifyChannels } from "../channels/index.js";
 import type { InboxItem, TokenUsage } from "@talos/shared/types";
 import type { TriggerContext } from "../triggers/index.js";
 
@@ -134,6 +135,11 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
     broadcastInbox(inboxItem);
     broadcastStatus("idle");
 
+    // Push notification to external channels
+    notifyChannels(inboxItem).catch((err: unknown) =>
+      log.dev.debug("Channel notification failed", { error: err instanceof Error ? err.message : String(err) })
+    );
+
     // Fire-and-forget summary generation — updates inbox item async via WS
     generateInboxSummary(inboxItem.id, task.name, result.text || "").catch((err: unknown) =>
       log.dev.debug("Summary generation failed", { error: err instanceof Error ? err.message : String(err) })
@@ -185,6 +191,11 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
 
     broadcastInbox(inboxItem);
     broadcastStatus("idle");
+
+    // Push failure notification to external channels
+    notifyChannels(inboxItem).catch((err2: unknown) =>
+      log.dev.debug("Channel notification failed", { error: err2 instanceof Error ? err2.message : String(err2) })
+    );
 
     log.error(`Task "${task.name}" failed`, { taskId: task.id, runId, error: errorMessage });
   }

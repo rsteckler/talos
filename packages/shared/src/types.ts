@@ -288,6 +288,45 @@ export interface ToolCallInfo {
   status: "pending_approval" | "calling" | "complete" | "error" | "denied";
 }
 
+// --- Channels ---
+
+export interface ChannelCredentialSpec {
+  name: string;
+  label: string;
+  description?: string;
+  required: boolean;
+}
+
+export interface ChannelSettingSpec {
+  name: string;
+  label: string;
+  type: "number" | "string" | "boolean";
+  default: string;
+  description?: string;
+}
+
+export interface ChannelManifest {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  logName?: string;
+  credentials: ChannelCredentialSpec[];
+  settings?: ChannelSettingSpec[];
+}
+
+export interface ChannelInfo {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  isEnabled: boolean;
+  notificationsEnabled: boolean;
+  credentials: ChannelCredentialSpec[];
+  settings: ChannelSettingSpec[];
+  hasRequiredCredentials: boolean;
+}
+
 // --- WebSocket Protocol ---
 
 // --- Themes ---

@@ -1,0 +1,24 @@
+{
+  "id": "telegram",
+  "name": "Telegram",
+  "description": "Chat with Talos via Telegram bot in DMs or group chats.",
+  "version": "1.0.0",
+  "logName": "telegram",
+  "credentials": [
+    {
+      "name": "bot_token",
+      "label": "Bot Token",
+      "description": "From @BotFather",
+      "required": true
+    }
+  ],
+  "settings": [
+    {
+      "name": "allowed_chat_ids",
+      "label": "Allowed Chat IDs",
+      "type": "string",
+      "default": "",
+      "description": "Comma-separated chat IDs. Leave empty to allow all."
+    }
+  ]
+}
