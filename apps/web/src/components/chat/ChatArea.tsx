@@ -1,13 +1,14 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from "react"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
+import { TalosOrb as AnimatedOrb } from "@/components/orb/TalosOrb"
+import { useOrb } from "@/contexts/OrbContext"
 import { useChatStore, useProviderStore, useConnectionStore } from "@/stores"
+import type { AgentStatus } from "@talos/shared/types"
 import { MessageBubble } from "@/components/chat/MessageBubble"
 import { InlineChatLog } from "@/components/chat/InlineChatLog"
 import { InboxContextCard } from "@/components/chat/InboxContextCard"
 import { ChatLogFilterDialog } from "@/components/chat/ChatLogFilterDialog"
 import { useSettings } from "@/contexts/SettingsContext"
-import { Send, Loader2, AlertCircle, ScrollText } from "lucide-react"
+import { Send, Loader2, AlertCircle, ScrollText, Plus } from "lucide-react"
 import type { FormEvent, KeyboardEvent } from "react"
 import type { Message, LogEntry } from "@talos/shared/types"
 
@@ -22,6 +23,8 @@ export function ChatArea() {
   const clearInput = useChatStore((s) => s.clearInput)
   const addMessage = useChatStore((s) => s.addMessage)
   const messages = useChatStore((s) => s.messages)
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation)
+  const clearMessages = useChatStore((s) => s.clearMessages)
   const chatLogs = useChatStore((s) => s.chatLogs)
   const clearChatLogs = useChatStore((s) => s.clearChatLogs)
   const isStreaming = useChatStore((s) => s.isStreaming)
@@ -31,11 +34,33 @@ export function ChatArea() {
   const setInboxContext = useChatStore((s) => s.setInboxContext)
   const send = useConnectionStore((s) => s.send)
   const connectionStatus = useConnectionStore((s) => s.status)
+  const agentStatus = useConnectionStore((s) => s.agentStatus)
+  const latestStatusLog = useConnectionStore((s) => s.latestStatusLog)
   const { settings } = useSettings()
 
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const orbRef = useOrb()
+  const prevStatusRef = useRef<AgentStatus>("idle")
+
+  // Sync orb animation state with agent status
+  useEffect(() => {
+    const orb = orbRef.current
+    if (!orb || agentStatus === prevStatusRef.current) return
+    prevStatusRef.current = agentStatus
+
+    switch (agentStatus) {
+      case "idle":
+        orb.sleep()
+        break
+      case "thinking":
+      case "responding":
+      case "tool_calling":
+        orb.idle()
+        break
+    }
+  }, [agentStatus, orbRef])
 
   const resizeTextarea = useCallback(() => {
     const ta = textareaRef.current
@@ -140,22 +165,33 @@ export function ChatArea() {
   }, [messages])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4 bg-card/50">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4" />
-        <span className="font-semibold text-foreground">Chat</span>
-        {activeModel.model && (
+    <div className="relative flex min-h-0 flex-1 flex-col bg-background">
+      <header className="absolute top-[var(--floating-padding)] right-[var(--floating-padding)] left-0 z-10 flex items-center gap-2 overflow-hidden rounded-lg border border-border bg-card/80 px-4 py-3 shadow backdrop-blur">
+        <div className="relative flex items-center justify-center" style={{ width: 28, height: 28, overflow: "visible" }}>
+          <div className="absolute" style={{ transform: "translate(-50%, -50%)", left: "50%", top: "50%" }}>
+            <AnimatedOrb ref={orbRef} initialConfig={{ size: 160, ringCount: 2, cometCount: 2, sparkliness: 0.3, blobiness: 0.1, animationScale: 0.3 }} initialState="sleep" />
+          </div>
+        </div>
+        {/* Center: Talos name + status */}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="flex flex-col items-center leading-none">
+            <span className="font-semibold text-foreground text-sm">Talos</span>
+            <span className="text-[10px] font-mono text-muted-foreground/70 italic truncate max-w-[140px]">
+              {agentStatus === "idle" ? "Sleeping" : latestStatusLog ?? "Thinking\u2026"}
+            </span>
+          </div>
+        </div>
+        <div className="ml-auto flex flex-col items-end leading-none">
           <span className="text-xs text-muted-foreground">
-            {activeModel.model.displayName}
+            {activeModel.model?.displayName}
           </span>
-        )}
-        {sessionUsage && (
-          <span className="ml-auto text-xs text-muted-foreground">
-            {sessionUsage.totalTokens.toLocaleString()} tokens
-            {sessionUsage.cost != null && ` · $${sessionUsage.cost.toFixed(4)}`}
-          </span>
-        )}
+          {sessionUsage && (
+            <span className="text-[10px] text-muted-foreground/70">
+              {sessionUsage.totalTokens.toLocaleString()} tokens
+              {sessionUsage.cost != null && ` · $${sessionUsage.cost.toFixed(4)}`}
+            </span>
+          )}
+        </div>
         {settings.showLogsInChat && (
           <button
             onClick={() => setFilterDialogOpen(true)}
@@ -167,7 +203,7 @@ export function ChatArea() {
         )}
       </header>
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className="flex-1 font-chat scrollbar-thumb-only p-4 pb-20">
+        <div className="flex-1 font-chat scrollbar-thumb-only p-4 pt-[calc(var(--floating-padding)_+_70px)] pb-20">
           {messages.length === 0 && !inboxContext ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
               {!hasProvider ? (
@@ -210,7 +246,19 @@ export function ChatArea() {
             </div>
           )}
         </div>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
+        <div className="pointer-events-none absolute bottom-[var(--floating-padding)] right-[var(--floating-padding)] left-0 flex flex-col items-stretch">
+          <div className="pointer-events-auto flex items-center gap-1 px-1 pb-1">
+            <button
+              onClick={() => {
+                setActiveConversation(null)
+                clearMessages()
+              }}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <Plus className="size-3" />
+              New Chat
+            </button>
+          </div>
           <form
             onSubmit={handleSubmit}
             className="pointer-events-auto flex w-full items-end gap-2 rounded-lg border border-border bg-card/95 px-3 py-2 shadow-lg backdrop-blur"
