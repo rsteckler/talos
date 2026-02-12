@@ -10,6 +10,8 @@ import { db, schema } from "../db/index.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SYSTEM_PATH = path.join(__dirname, "..", "agent", "SYSTEM.md");
 const SOUL_PATH = path.join(__dirname, "..", "..", "data", "SOUL.md");
+const TOOLS_PATH = path.join(__dirname, "..", "..", "data", "TOOLS.md");
+const HUMAN_PATH = path.join(__dirname, "..", "..", "data", "HUMAN.md");
 
 type ProviderRow = typeof schema.providers.$inferSelect;
 
@@ -85,7 +87,28 @@ export function loadSystemPrompt(): string {
     soul = "You are Talos, a helpful AI assistant.";
   }
 
-  return system ? `${system}\n\n---\n\n${soul}` : soul;
+  let toolsInstructions = "";
+  try {
+    toolsInstructions = fs.readFileSync(TOOLS_PATH, "utf-8").trim();
+  } catch {
+    // TOOLS.md missing — continue without it
+  }
+
+  let humanNotes = "";
+  try {
+    humanNotes = fs.readFileSync(HUMAN_PATH, "utf-8").trim();
+  } catch {
+    // HUMAN.md missing — continue without it
+  }
+
+  let prompt = system ? `${system}\n\n---\n\n${soul}` : soul;
+  if (toolsInstructions) {
+    prompt += `\n\n---\n\n${toolsInstructions}`;
+  }
+  if (humanNotes) {
+    prompt += `\n\n---\n\n${humanNotes}`;
+  }
+  return prompt;
 }
 
 export function readSoulFile(): string {
@@ -94,4 +117,28 @@ export function readSoulFile(): string {
 
 export function writeSoulFile(content: string): void {
   fs.writeFileSync(SOUL_PATH, content, "utf-8");
+}
+
+export function readToolsFile(): string {
+  try {
+    return fs.readFileSync(TOOLS_PATH, "utf-8");
+  } catch {
+    return "";
+  }
+}
+
+export function writeToolsFile(content: string): void {
+  fs.writeFileSync(TOOLS_PATH, content, "utf-8");
+}
+
+export function readHumanFile(): string {
+  try {
+    return fs.readFileSync(HUMAN_PATH, "utf-8");
+  } catch {
+    return "";
+  }
+}
+
+export function writeHumanFile(content: string): void {
+  fs.writeFileSync(HUMAN_PATH, content, "utf-8");
 }

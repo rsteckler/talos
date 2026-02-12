@@ -1,0 +1,95 @@
+{
+  "id": "chat-history",
+  "name": "Chat History",
+  "description": "Search and browse past conversations and messages.",
+  "version": "1.0.0",
+  "defaultEnabled": true,
+  "functions": [
+    {
+      "name": "list_conversations",
+      "description": "List recent conversations with titles and dates. Returns newest first.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of conversations to return. Default 20, max 100."
+          },
+          "offset": {
+            "type": "number",
+            "description": "Number of conversations to skip for pagination. Default 0."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "search_conversations",
+      "description": "Search conversations by title. Returns matching conversations with their titles and dates.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Text to search for in conversation titles."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum results. Default 20."
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "search_messages",
+      "description": "Search across all messages for a keyword or phrase. Returns matching messages with their conversation ID, role, timestamp, and a content snippet. Use this to find past discussions on a topic.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Text to search for in message content."
+          },
+          "role": {
+            "type": "string",
+            "description": "Filter by role: 'user' or 'assistant'. Omit to search both."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum results. Default 20."
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "get_conversation",
+      "description": "Get all messages in a conversation, in chronological order. Use this to recreate a full chat.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "description": "The conversation ID to retrieve."
+          }
+        },
+        "required": ["conversation_id"]
+      }
+    },
+    {
+      "name": "get_message",
+      "description": "Get the full content of a single message by its ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "description": "The message ID to retrieve."
+          }
+        },
+        "required": ["message_id"]
+      }
+    }
+  ]
+}

@@ -251,6 +251,7 @@ export interface ToolManifest {
   description: string;
   version: string;
   logName?: string;
+  defaultEnabled?: boolean;
   credentials?: ToolCredentialSpec[];
   oauth?: ToolOAuthSpec;
   settings?: ToolSettingSpec[];

@@ -1,0 +1,41 @@
+{
+  "id": "self",
+  "name": "Self Knowledge",
+  "description": "Read and update Talos's own personality, tool instructions, and notes about the human user.",
+  "version": "1.0.0",
+  "defaultEnabled": true,
+  "functions": [
+    {
+      "name": "read_document",
+      "description": "Read one of Talos's knowledge documents: 'soul' (personality and behavior), 'tools' (tool usage instructions), or 'human' (notes about the user).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "Which document to read: 'soul', 'tools', or 'human'."
+          }
+        },
+        "required": ["document"]
+      }
+    },
+    {
+      "name": "write_document",
+      "description": "Update one of Talos's knowledge documents. The entire document is replaced with the new content.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "description": "Which document to write: 'soul', 'tools', or 'human'."
+          },
+          "content": {
+            "type": "string",
+            "description": "The new markdown content for the document."
+          }
+        },
+        "required": ["document", "content"]
+      }
+    }
+  ]
+}

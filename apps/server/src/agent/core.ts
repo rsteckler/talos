@@ -11,9 +11,12 @@ import type { ApprovalGate } from "../tools/index.js";
 
 const log = createLogger("agent");
 
-/** Map tool call names (e.g. "web-search__search") to friendly descriptions */
+/** Map tool call names (e.g. "web-search_search") to friendly descriptions */
 function describeToolCall(toolName: string, args?: Record<string, unknown>): string {
-  const [toolId, fn] = toolName.split("__");
+  // Tool names are "{toolId}_{functionName}" — split on first underscore only
+  const sepIdx = toolName.indexOf("_");
+  const toolId = sepIdx >= 0 ? toolName.slice(0, sepIdx) : toolName;
+  const fn = sepIdx >= 0 ? toolName.slice(sepIdx + 1) : "";
 
   switch (toolId) {
     case "web-search":
@@ -29,7 +32,7 @@ function describeToolCall(toolName: string, args?: Record<string, unknown>): str
         reverse_geocode: "Looking up a location",
         place_autocomplete: "Searching for places",
       };
-      return mapActions[fn ?? ""] ?? "Using Google Maps";
+      return mapActions[fn] ?? "Using Google Maps";
     }
     case "google": {
       const googleActions: Record<string, string> = {
@@ -47,7 +50,7 @@ function describeToolCall(toolName: string, args?: Record<string, unknown>): str
         docs_read: "Reading a document",
         slides_read: "Reading a presentation",
       };
-      return googleActions[fn ?? ""] ?? "Using Google Workspace";
+      return googleActions[fn] ?? "Using Google Workspace";
     }
     case "shell":
       return args?.["command"] ? `Running command` : "Running a shell command";
@@ -57,7 +60,27 @@ function describeToolCall(toolName: string, args?: Record<string, unknown>): str
         write: "Writing a file",
         list: "Listing files",
       };
-      return fileActions[fn ?? ""] ?? "Accessing files";
+      return fileActions[fn] ?? "Accessing files";
+    }
+    case "datetime":
+      return "Checking the current date and time";
+    case "self": {
+      const doc = typeof args?.["document"] === "string" ? args["document"] : "";
+      const docLabels: Record<string, string> = { soul: "personality", tools: "tool instructions", human: "user notes" };
+      const label = docLabels[doc] ?? doc;
+      if (fn === "read_document") return label ? `Reading ${label}` : "Reading self-knowledge";
+      if (fn === "write_document") return label ? `Updating ${label}` : "Updating self-knowledge";
+      return "Accessing self-knowledge";
+    }
+    case "chat-history": {
+      const historyActions: Record<string, string> = {
+        list_conversations: "Browsing recent conversations",
+        search_conversations: "Searching conversation titles",
+        search_messages: args?.["query"] ? `Searching chat history for "${String(args["query"]).slice(0, 50)}"` : "Searching chat history",
+        get_conversation: "Reading a past conversation",
+        get_message: "Reading a past message",
+      };
+      return historyActions[fn] ?? "Browsing chat history";
     }
     default:
       return `Using ${toolName}`;

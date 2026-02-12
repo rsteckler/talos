@@ -16,7 +16,7 @@ import { useSettings, type Theme } from "@/contexts/SettingsContext"
 import { ProviderList } from "@/components/settings/ProviderList"
 import { ToolList } from "@/components/settings/ToolList"
 import { ChannelList } from "@/components/settings/ChannelList"
-import { soulApi } from "@/api/soul"
+import { soulApi, toolsPromptApi, humanPromptApi } from "@/api/soul"
 import { themesApi } from "@/api/themes"
 import { ACCENT_COLORS } from "@/lib/accent-colors"
 import { cn } from "@/lib/utils"
@@ -30,6 +30,18 @@ export function SettingsPage() {
   const [soulSaving, setSoulSaving] = useState(false)
   const [soulSaved, setSoulSaved] = useState(false)
   const [soulError, setSoulError] = useState<string | null>(null)
+
+  const [toolsContent, setToolsContent] = useState("")
+  const [toolsLoading, setToolsLoading] = useState(true)
+  const [toolsSaving, setToolsSaving] = useState(false)
+  const [toolsSaved, setToolsSaved] = useState(false)
+  const [toolsError, setToolsError] = useState<string | null>(null)
+
+  const [humanContent, setHumanContent] = useState("")
+  const [humanLoading, setHumanLoading] = useState(true)
+  const [humanSaving, setHumanSaving] = useState(false)
+  const [humanSaved, setHumanSaved] = useState(false)
+  const [humanError, setHumanError] = useState<string | null>(null)
 
   // Theme state
   const [themes, setThemes] = useState<ThemeMeta[]>([])
@@ -46,6 +58,24 @@ export function SettingsPage() {
       .catch((err) => {
         setSoulError(err instanceof Error ? err.message : "Failed to load")
         setSoulLoading(false)
+      })
+    toolsPromptApi.get()
+      .then((data) => {
+        setToolsContent(data.content)
+        setToolsLoading(false)
+      })
+      .catch((err) => {
+        setToolsError(err instanceof Error ? err.message : "Failed to load")
+        setToolsLoading(false)
+      })
+    humanPromptApi.get()
+      .then((data) => {
+        setHumanContent(data.content)
+        setHumanLoading(false)
+      })
+      .catch((err) => {
+        setHumanError(err instanceof Error ? err.message : "Failed to load")
+        setHumanLoading(false)
       })
   }, [])
 
@@ -78,6 +108,34 @@ export function SettingsPage() {
       setSoulSaving(false)
     }
   }, [soulContent])
+
+  const handleToolsSave = useCallback(async () => {
+    setToolsSaving(true)
+    setToolsError(null)
+    try {
+      await toolsPromptApi.update(toolsContent)
+      setToolsSaved(true)
+      setTimeout(() => setToolsSaved(false), 2000)
+    } catch (err) {
+      setToolsError(err instanceof Error ? err.message : "Failed to save")
+    } finally {
+      setToolsSaving(false)
+    }
+  }, [toolsContent])
+
+  const handleHumanSave = useCallback(async () => {
+    setHumanSaving(true)
+    setHumanError(null)
+    try {
+      await humanPromptApi.update(humanContent)
+      setHumanSaved(true)
+      setTimeout(() => setHumanSaved(false), 2000)
+    } catch (err) {
+      setHumanError(err instanceof Error ? err.message : "Failed to save")
+    } finally {
+      setHumanSaving(false)
+    }
+  }, [humanContent])
 
   const handleAccentChange = (id: string | null) => {
     updateSettings({ accentColor: id })
@@ -417,6 +475,96 @@ export function SettingsPage() {
                         <Save className="mr-2 size-4" />
                       )}
                       {soulSaved ? "Saved" : "Save"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Tool Instructions (TOOLS.md)</CardTitle>
+              <CardDescription>
+                Instructions for how Talos should use its tools. Injected into the system prompt alongside SOUL.md.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {toolsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading...
+                </div>
+              ) : (
+                <>
+                  <textarea
+                    value={toolsContent}
+                    onChange={(e) => setToolsContent(e.target.value)}
+                    rows={12}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
+                  />
+                  {toolsError && (
+                    <p className="text-sm text-destructive">{toolsError}</p>
+                  )}
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={handleToolsSave}
+                      disabled={toolsSaving}
+                      size="sm"
+                    >
+                      {toolsSaving ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : toolsSaved ? (
+                        <Check className="mr-2 size-4" />
+                      ) : (
+                        <Save className="mr-2 size-4" />
+                      )}
+                      {toolsSaved ? "Saved" : "Save"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Human Profile (HUMAN.md)</CardTitle>
+              <CardDescription>
+                Information about you that Talos uses to personalize responses. Talos can also update this during conversations.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {humanLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading...
+                </div>
+              ) : (
+                <>
+                  <textarea
+                    value={humanContent}
+                    onChange={(e) => setHumanContent(e.target.value)}
+                    rows={12}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
+                  />
+                  {humanError && (
+                    <p className="text-sm text-destructive">{humanError}</p>
+                  )}
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={handleHumanSave}
+                      disabled={humanSaving}
+                      size="sm"
+                    >
+                      {humanSaving ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : humanSaved ? (
+                        <Check className="mr-2 size-4" />
+                      ) : (
+                        <Save className="mr-2 size-4" />
+                      )}
+                      {humanSaved ? "Saved" : "Save"}
                     </Button>
                   </div>
                 </>

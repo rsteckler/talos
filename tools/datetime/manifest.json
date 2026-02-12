@@ -1,0 +1,32 @@
+{
+  "id": "datetime",
+  "name": "Date & Time",
+  "description": "Get the current date and time from a public network source for accuracy.",
+  "version": "1.0.0",
+  "defaultEnabled": true,
+  "settings": [
+    {
+      "name": "timezone",
+      "label": "Local Timezone",
+      "type": "string",
+      "default": "",
+      "description": "IANA timezone (e.g. America/New_York, Europe/London). When set, results always include local time."
+    }
+  ],
+  "functions": [
+    {
+      "name": "get_current_datetime",
+      "description": "Get the current date and time. Returns accurate UTC time fetched from public web servers, plus a converted local time if a timezone is specified.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone name (e.g. 'America/New_York', 'Europe/London'). If omitted, uses the configured local timezone or UTC."
+          }
+        },
+        "required": []
+      }
+    }
+  ]
+}

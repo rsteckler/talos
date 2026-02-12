@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { eq } from "drizzle-orm";
 import type { ToolManifest, ToolTriggerHandler, ToolLogger } from "@talos/shared/types";
 import type { LoadedTool, ToolHandler } from "./types.js";
+import { db, schema } from "../db/index.js";
 import { createLogger, ensureLogArea } from "../logger/index.js";
 import { registerTrigger, clearRegistry } from "../triggers/registry.js";
 
@@ -83,6 +85,28 @@ export async function loadAllTools(): Promise<void> {
         : undefined;
 
       loadedTools.set(manifest.id, { manifest, handlers, triggers, promptMd });
+
+      // Auto-enable tools with defaultEnabled if no config row exists yet
+      if (manifest.defaultEnabled) {
+        const existing = db
+          .select()
+          .from(schema.toolConfigs)
+          .where(eq(schema.toolConfigs.toolId, manifest.id))
+          .get();
+        if (!existing) {
+          db.insert(schema.toolConfigs)
+            .values({
+              toolId: manifest.id,
+              config: "{}",
+              isEnabled: true,
+              allowWithoutAsking: true,
+              createdAt: new Date().toISOString(),
+            })
+            .run();
+          log.dev.debug(`Auto-enabled: ${manifest.id} (defaultEnabled)`);
+        }
+      }
+
       log.dev.debug(`Loaded: ${manifest.id} (${manifest.name})`);
     } catch (err) {
       log.error(`Failed to load tool "${entry.name}"`, { error: err instanceof Error ? err.message : String(err) });
