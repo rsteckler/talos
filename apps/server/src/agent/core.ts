@@ -74,7 +74,8 @@ function describeToolCall(toolName: string, args?: Record<string, unknown>): str
     }
     case "chat-history": {
       const historyActions: Record<string, string> = {
-        list_conversations: "Browsing recent conversations",
+        list_conversations: "Browsing conversations",
+        recent_conversations: "Checking today's conversations",
         search_conversations: "Searching conversation titles",
         search_messages: args?.["query"] ? `Searching chat history for "${String(args["query"]).slice(0, 50)}"` : "Searching chat history",
         get_conversation: "Reading a past conversation",

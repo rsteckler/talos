@@ -36,17 +36,34 @@ interface MessageRow {
 async function list_conversations(args: Record<string, unknown>): Promise<unknown> {
   const limit = Math.min(100, Math.max(1, Number(args["limit"]) || 20));
   const offset = Math.max(0, Number(args["offset"]) || 0);
+  const after = typeof args["after"] === "string" ? args["after"] : null;
+  const before = typeof args["before"] === "string" ? args["before"] : null;
 
   const db = getDb();
   try {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (after) {
+      conditions.push("updated_at > ?");
+      params.push(after);
+    }
+    if (before) {
+      conditions.push("updated_at < ?");
+      params.push(before);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
     const rows = db.prepare(
       `SELECT id, title, created_at, updated_at
        FROM conversations
+       ${where}
        ORDER BY updated_at DESC
        LIMIT ? OFFSET ?`
-    ).all(limit, offset) as ConversationRow[];
+    ).all(...params, limit, offset) as ConversationRow[];
 
-    const total = (db.prepare("SELECT count(*) as count FROM conversations").get() as { count: number }).count;
+    const total = (db.prepare(`SELECT count(*) as count FROM conversations ${where}`).get(...params) as { count: number }).count;
 
     return {
       conversations: rows.map((r) => ({
@@ -58,6 +75,34 @@ async function list_conversations(args: Record<string, unknown>): Promise<unknow
       total,
       limit,
       offset,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+async function recent_conversations(args: Record<string, unknown>): Promise<unknown> {
+  const limit = Math.min(100, Math.max(1, Number(args["limit"]) || 50));
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const db = getDb();
+  try {
+    const rows = db.prepare(
+      `SELECT id, title, created_at, updated_at
+       FROM conversations
+       WHERE updated_at > ?
+       ORDER BY updated_at DESC
+       LIMIT ?`
+    ).all(cutoff, limit) as ConversationRow[];
+
+    return {
+      conversations: rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        updatedAt: r.updated_at,
+        createdAt: r.created_at,
+      })),
+      since: cutoff,
     };
   } finally {
     db.close();
@@ -100,35 +145,40 @@ async function search_messages(args: Record<string, unknown>): Promise<unknown> 
   if (!query) return { error: "query is required" };
 
   const role = typeof args["role"] === "string" ? args["role"] : null;
+  const after = typeof args["after"] === "string" ? args["after"] : null;
+  const before = typeof args["before"] === "string" ? args["before"] : null;
   const limit = Math.min(100, Math.max(1, Number(args["limit"]) || 20));
   const pattern = `%${query}%`;
 
   const db = getDb();
   try {
-    let sql: string;
-    let params: unknown[];
+    const conditions: string[] = ["m.content LIKE ?"];
+    const params: unknown[] = [pattern];
 
     if (role) {
-      sql = `SELECT m.id, m.conversation_id, m.role, m.content, m.created_at,
-                    c.title as conversation_title
-             FROM messages m
-             JOIN conversations c ON c.id = m.conversation_id
-             WHERE m.content LIKE ? AND m.role = ?
-             ORDER BY m.created_at DESC
-             LIMIT ?`;
-      params = [pattern, role, limit];
-    } else {
-      sql = `SELECT m.id, m.conversation_id, m.role, m.content, m.created_at,
-                    c.title as conversation_title
-             FROM messages m
-             JOIN conversations c ON c.id = m.conversation_id
-             WHERE m.content LIKE ?
-             ORDER BY m.created_at DESC
-             LIMIT ?`;
-      params = [pattern, limit];
+      conditions.push("m.role = ?");
+      params.push(role);
+    }
+    if (after) {
+      conditions.push("m.created_at > ?");
+      params.push(after);
+    }
+    if (before) {
+      conditions.push("m.created_at < ?");
+      params.push(before);
     }
 
-    const rows = db.prepare(sql).all(...params) as (MessageRow & { conversation_title: string })[];
+    const where = conditions.join(" AND ");
+
+    const rows = db.prepare(
+      `SELECT m.id, m.conversation_id, m.role, m.content, m.created_at,
+              c.title as conversation_title
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE ${where}
+       ORDER BY m.created_at DESC
+       LIMIT ?`
+    ).all(...params, limit) as (MessageRow & { conversation_title: string })[];
 
     return {
       messages: rows.map((r) => ({
@@ -235,6 +285,7 @@ function buildSnippet(content: string, query: string, maxLength: number): string
 
 export const handlers = {
   list_conversations,
+  recent_conversations,
   search_conversations,
   search_messages,
   get_conversation,
