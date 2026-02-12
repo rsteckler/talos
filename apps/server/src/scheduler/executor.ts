@@ -116,6 +116,7 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
       content: result.text || "(no output)",
       type: "task_result",
       is_read: false,
+      is_pinned: false,
       created_at: completedAt,
     };
 
@@ -174,6 +175,7 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
       content: `Error: ${errorMessage}`,
       type: "task_result",
       is_read: false,
+      is_pinned: false,
       created_at: completedAt,
     };
 

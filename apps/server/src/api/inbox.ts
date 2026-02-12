@@ -16,6 +16,7 @@ function toInboxResponse(row: InboxRow): InboxItem {
     content: row.content,
     type: row.type,
     is_read: row.isRead,
+    is_pinned: row.isPinned,
     created_at: row.createdAt,
   };
 }
@@ -52,6 +53,42 @@ router.put("/inbox/:id/read", (req, res) => {
 
   db.update(schema.inbox)
     .set({ isRead: true })
+    .where(eq(schema.inbox.id, id))
+    .run();
+
+  const updated = db.select().from(schema.inbox).where(eq(schema.inbox.id, id)).get()!;
+  res.json({ data: toInboxResponse(updated) });
+});
+
+// PUT /api/inbox/:id/pin
+router.put("/inbox/:id/pin", (req, res) => {
+  const id = req.params["id"]!;
+  const existing = db.select().from(schema.inbox).where(eq(schema.inbox.id, id)).get();
+  if (!existing) {
+    res.status(404).json({ error: "Inbox item not found" });
+    return;
+  }
+
+  db.update(schema.inbox)
+    .set({ isPinned: true })
+    .where(eq(schema.inbox.id, id))
+    .run();
+
+  const updated = db.select().from(schema.inbox).where(eq(schema.inbox.id, id)).get()!;
+  res.json({ data: toInboxResponse(updated) });
+});
+
+// PUT /api/inbox/:id/unpin
+router.put("/inbox/:id/unpin", (req, res) => {
+  const id = req.params["id"]!;
+  const existing = db.select().from(schema.inbox).where(eq(schema.inbox.id, id)).get();
+  if (!existing) {
+    res.status(404).json({ error: "Inbox item not found" });
+    return;
+  }
+
+  db.update(schema.inbox)
+    .set({ isPinned: false })
     .where(eq(schema.inbox.id, id))
     .run();
 

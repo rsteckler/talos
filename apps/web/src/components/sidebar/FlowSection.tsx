@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Inbox, Bell, ClipboardCheck, Calendar, Loader2, ExternalLink } from "lucide-react"
+import { Inbox, Bell, ClipboardCheck, Calendar, Loader2, ExternalLink, Pin, PinOff } from "lucide-react"
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -47,12 +47,26 @@ export function FlowSection() {
   const isFetchingMore = useInboxStore((s) => s.isFetchingMore)
   const fetchMore = useInboxStore((s) => s.fetchMore)
   const markAsRead = useInboxStore((s) => s.markAsRead)
+  const pinItem = useInboxStore((s) => s.pinItem)
+  const unpinItem = useInboxStore((s) => s.unpinItem)
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const clearMessages = useChatStore((s) => s.clearMessages)
   const setInboxContext = useChatStore((s) => s.setInboxContext)
+  const inboxContext = useChatStore((s) => s.inboxContext)
   const [historyOpen, setHistoryOpen] = useState(false)
 
   const sentinelRef = useRef<HTMLDivElement>(null)
+
+  // Mark-as-read on deselect: when inboxContext transitions away from an item
+  const prevContextRef = useRef<InboxItem | null>(null)
+
+  useEffect(() => {
+    const prev = prevContextRef.current
+    if (prev && prev.id !== inboxContext?.id && !prev.is_read) {
+      markAsRead(prev.id)
+    }
+    prevContextRef.current = inboxContext ?? null
+  }, [inboxContext, markAsRead])
 
   // IntersectionObserver for infinite scroll
   const observerCallback = useCallback(
@@ -79,6 +93,15 @@ export function FlowSection() {
     return () => observer.disconnect()
   }, [observerCallback])
 
+  const pinned = items.filter((i) => i.is_pinned)
+  const unread = items.filter((i) => !i.is_read && !i.is_pinned)
+
+  const handleItemClick = (item: InboxItem) => {
+    setActiveConversation(null)
+    clearMessages()
+    setInboxContext(item)
+  }
+
   if (state === "collapsed") {
     return (
       <>
@@ -100,6 +123,53 @@ export function FlowSection() {
       </>
     )
   }
+
+  const renderItem = (item: InboxItem, section: "pinned" | "unread") => (
+    <SidebarMenuItem key={item.id}>
+      <SidebarMenuButton
+        isActive={inboxContext?.id === item.id}
+        onClick={() => handleItemClick(item)}
+        className="h-auto py-2"
+      >
+        <div className="flex w-full items-start gap-2">
+          {typeIcon(item.type)}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-xs font-normal text-zinc-200">
+              {item.title}
+            </span>
+            {item.summary && (
+              <span className="truncate text-[10px] text-zinc-400">
+                {item.summary}
+              </span>
+            )}
+            <span className="text-[10px] text-zinc-500">
+              {relativeTime(item.created_at)}
+            </span>
+          </div>
+          <button
+            className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title={section === "pinned" ? "Unpin" : "Pin"}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (section === "pinned") {
+                unpinItem(item.id)
+              } else {
+                pinItem(item.id)
+              }
+            }}
+          >
+            {section === "pinned" ? (
+              <PinOff className="size-3.5" />
+            ) : (
+              <Pin className="size-3.5" />
+            )}
+          </button>
+        </div>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
+
+  const isEmpty = pinned.length === 0 && unread.length === 0
 
   return (
     <>
@@ -131,47 +201,31 @@ export function FlowSection() {
                   <span className="text-muted-foreground">Loading...</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-            ) : items.length === 0 ? (
+            ) : isEmpty ? (
               <SidebarMenuItem>
                 <SidebarMenuButton>
                   <span className="text-muted-foreground">Inbox empty</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ) : (
-              items.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    onClick={() => {
-                      if (!item.is_read) markAsRead(item.id)
-                      setActiveConversation(null)
-                      clearMessages()
-                      setInboxContext(item)
-                    }}
-                    className="h-auto py-2"
-                  >
-                    <div className="flex w-full items-start gap-2">
-                      {!item.is_read && (
-                        <span className="mt-1.5 block size-2 shrink-0 rounded-full bg-sidebar-primary" />
-                      )}
-                      {item.is_read && <span className="mt-1.5 block size-2 shrink-0" />}
-                      {typeIcon(item.type)}
-                      <div className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate text-xs font-normal text-zinc-200">
-                          {item.title}
-                        </span>
-                        {item.summary && (
-                          <span className="truncate text-[10px] text-zinc-400">
-                            {item.summary}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-zinc-500">
-                          {relativeTime(item.created_at)}
-                        </span>
-                      </div>
+              <>
+                {pinned.length > 0 && (
+                  <>
+                    <div className="px-2 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Pinned
                     </div>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))
+                    {pinned.map((item) => renderItem(item, "pinned"))}
+                  </>
+                )}
+                {unread.length > 0 && (
+                  <>
+                    <div className="px-2 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Unread
+                    </div>
+                    {unread.map((item) => renderItem(item, "unread"))}
+                  </>
+                )}
+              </>
             )}
             {isFetchingMore && (
               <SidebarMenuItem>

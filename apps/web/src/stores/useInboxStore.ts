@@ -13,6 +13,8 @@ interface InboxState {
   isFetchingMore: boolean
   addItem: (item: InboxItem) => void
   markAsRead: (id: string) => Promise<void>
+  pinItem: (id: string) => Promise<void>
+  unpinItem: (id: string) => Promise<void>
   removeItem: (id: string) => Promise<void>
   setItems: (items: InboxItem[]) => void
   fetchInbox: () => Promise<void>
@@ -53,6 +55,42 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       )
       return { items, unreadCount: items.filter((i) => !i.is_read).length }
     })
+  },
+
+  pinItem: async (id) => {
+    set((state) => ({
+      items: state.items.map((item) =>
+        item.id === id ? { ...item, is_pinned: true } : item
+      ),
+    }))
+    try {
+      await inboxApi.pin(id)
+    } catch {
+      // Revert on failure
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.id === id ? { ...item, is_pinned: false } : item
+        ),
+      }))
+    }
+  },
+
+  unpinItem: async (id) => {
+    set((state) => ({
+      items: state.items.map((item) =>
+        item.id === id ? { ...item, is_pinned: false } : item
+      ),
+    }))
+    try {
+      await inboxApi.unpin(id)
+    } catch {
+      // Revert on failure
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.id === id ? { ...item, is_pinned: true } : item
+        ),
+      }))
+    }
   },
 
   removeItem: async (id) => {

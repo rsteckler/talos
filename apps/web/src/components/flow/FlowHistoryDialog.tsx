@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react"
-import { Search, Inbox, ClipboardCheck, Calendar, Bell, Trash2, ExternalLink, ChevronDown, ChevronRight } from "lucide-react"
+import { Search, Inbox, ClipboardCheck, Calendar, Bell, Trash2, ExternalLink, ChevronDown, ChevronRight, Pin, PinOff } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -43,6 +43,8 @@ interface FlowHistoryDialogProps {
 export function FlowHistoryDialog({ open, onOpenChange }: FlowHistoryDialogProps) {
   const items = useInboxStore((s) => s.items)
   const markAsRead = useInboxStore((s) => s.markAsRead)
+  const pinItem = useInboxStore((s) => s.pinItem)
+  const unpinItem = useInboxStore((s) => s.unpinItem)
   const removeItem = useInboxStore((s) => s.removeItem)
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const clearMessages = useChatStore((s) => s.clearMessages)
@@ -107,9 +109,6 @@ export function FlowHistoryDialog({ open, onOpenChange }: FlowHistoryDialogProps
             {filtered.map((item) => (
               <div key={item.id} className="rounded-lg border border-border">
                 <div className="flex items-center gap-2 px-3 py-2.5">
-                  {!item.is_read && (
-                    <span className="block size-2 shrink-0 rounded-full bg-cyan-400" />
-                  )}
                   {typeIcon(item.type)}
                   <button
                     onClick={() => {
@@ -128,6 +127,15 @@ export function FlowHistoryDialog({ open, onOpenChange }: FlowHistoryDialogProps
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {relativeTime(item.created_at)}
                   </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0"
+                    title={item.is_pinned ? "Unpin" : "Pin"}
+                    onClick={() => item.is_pinned ? unpinItem(item.id) : pinItem(item.id)}
+                  >
+                    {item.is_pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"

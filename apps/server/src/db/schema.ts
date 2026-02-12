@@ -131,5 +131,6 @@ export const inbox = sqliteTable("inbox", {
   content: text("content").notNull(),
   type: text("type", { enum: ["task_result", "schedule_result", "notification"] }).notNull(),
   isRead: integer("is_read", { mode: "boolean" }).notNull().default(false),
+  isPinned: integer("is_pinned", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull(),
 });

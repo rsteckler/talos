@@ -207,6 +207,9 @@ export function runMigrations(): void {
   // Add summary column to inbox
   try { raw.exec("ALTER TABLE inbox ADD COLUMN summary TEXT;"); } catch { /* column already exists */ }
 
+  // Add is_pinned column to inbox
+  try { raw.exec("ALTER TABLE inbox ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;"); } catch { /* column already exists */ }
+
   // Note: createLogger used here but initLogger() hasn't been called yet,
   // so this falls back to console.log. That's fine for migration output.
   console.log("[db] info: Database migrations complete");

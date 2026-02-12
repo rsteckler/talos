@@ -60,6 +60,7 @@ export interface InboxItem {
   content: string;
   type: "task_result" | "schedule_result" | "notification";
   is_read: boolean;
+  is_pinned: boolean;
   created_at: string;
 }
 

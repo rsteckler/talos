@@ -20,6 +20,16 @@ export const inboxApi = {
       method: "PUT",
     }),
 
+  pin: (id: string) =>
+    request<InboxItem>(`/inbox/${id}/pin`, {
+      method: "PUT",
+    }),
+
+  unpin: (id: string) =>
+    request<InboxItem>(`/inbox/${id}/unpin`, {
+      method: "PUT",
+    }),
+
   remove: (id: string) =>
     request<{ success: boolean }>(`/inbox/${id}`, {
       method: "DELETE",

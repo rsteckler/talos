@@ -55,6 +55,7 @@ export async function generateInboxSummary(
         content: row.content,
         type: row.type,
         is_read: row.isRead,
+        is_pinned: row.isPinned,
         created_at: row.createdAt,
       };
       broadcastInbox(item);
