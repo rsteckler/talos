@@ -110,7 +110,7 @@ export function ToolConfigDialog({ tool, onClose }: ToolConfigDialogProps) {
               )}
               <Input
                 id={`cred-${cred.name}`}
-                type="password"
+                type={cred.secret === false ? "text" : "password"}
                 placeholder={`Enter ${cred.label.toLowerCase()}`}
                 value={values[cred.name] ?? ""}
                 onChange={(e) =>

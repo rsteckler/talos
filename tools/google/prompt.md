@@ -27,6 +27,15 @@ When searching, use Gmail search operators: `from:`, `to:`, `subject:`, `is:unre
 - `google_docs_read` — Read the full text content of a Google Doc.
 - `google_slides_read` — Read text content from all slides in a presentation.
 
+### Event Triggers
+This tool fires the following events into the inbox:
+- **New Gmail received** — when new emails arrive in the inbox.
+- **Upcoming event reminder** — when a calendar event is approaching (configurable lead time, default 15 minutes).
+- **Calendar event created or updated** — when events are added or modified.
+- **Calendar event cancelled** — when an event is cancelled.
+- **New calendar invitation** — when you receive an invitation requiring RSVP.
+- **File shared with you** — when a new file is shared with you in Google Drive.
+
 ### Tips
 - File IDs can be found in Drive URLs or from `drive_list` results.
 - Calendar times must be in ISO 8601 format with timezone.

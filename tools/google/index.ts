@@ -545,6 +545,432 @@ const gmail_new_email_handler = {
   },
 };
 
+// --- Calendar triggers ---
+
+interface CalendarTriggerState {
+  lastSyncToken?: string;
+  lastPollTimestamp?: string;
+  remindedEventIds?: string[];
+}
+
+const calendar_reminder_handler = {
+  async poll(
+    credentials: Record<string, string>,
+    state: Record<string, unknown>,
+    settings: Record<string, string>,
+  ): Promise<TriggerPollResult> {
+    const auth = makeAuth(credentials);
+    const calendar = google.calendar({ version: "v3", auth });
+    const triggerState = state as CalendarTriggerState;
+    const reminderMinutes = parseInt(settings["calendar_reminder_minutes"] ?? "15", 10);
+    const alreadyReminded = new Set(triggerState.remindedEventIds ?? []);
+
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + reminderMinutes * 60_000);
+
+    const res = await calendar.events.list({
+      calendarId: "primary",
+      timeMin: now.toISOString(),
+      timeMax: windowEnd.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+    });
+
+    const upcoming = (res.data.items ?? []).filter(
+      (e) => e.id && !alreadyReminded.has(e.id) && e.status !== "cancelled",
+    );
+
+    if (upcoming.length === 0) {
+      // Prune old reminded IDs (keep only recent ones)
+      return {
+        event: null,
+        newState: {
+          ...triggerState,
+          remindedEventIds: [...alreadyReminded].slice(-100),
+          lastPollTimestamp: now.toISOString(),
+        },
+      };
+    }
+
+    const newRemindedIds = [...alreadyReminded, ...upcoming.map((e) => e.id!)];
+    const summaryParts = upcoming.map((e) => {
+      const start = e.start?.dateTime ?? e.start?.date ?? "unknown";
+      return `- ${e.summary ?? "(no title)"} at ${start}`;
+    });
+
+    const summary =
+      upcoming.length === 1
+        ? `Upcoming event in the next ${reminderMinutes} minutes:\n${summaryParts[0]}`
+        : `${upcoming.length} upcoming events in the next ${reminderMinutes} minutes:\n${summaryParts.join("\n")}`;
+
+    return {
+      event: {
+        triggerId: "google:calendar_reminder",
+        toolId: "google",
+        summary,
+        data: {
+          events: upcoming.map((e) => ({
+            id: e.id,
+            summary: e.summary,
+            start: e.start?.dateTime ?? e.start?.date,
+            end: e.end?.dateTime ?? e.end?.date,
+            location: e.location,
+            htmlLink: e.htmlLink,
+          })),
+        },
+      },
+      newState: {
+        ...triggerState,
+        remindedEventIds: newRemindedIds.slice(-100),
+        lastPollTimestamp: now.toISOString(),
+      },
+    };
+  },
+};
+
+const calendar_event_changed_handler = {
+  async poll(
+    credentials: Record<string, string>,
+    state: Record<string, unknown>,
+  ): Promise<TriggerPollResult> {
+    const auth = makeAuth(credentials);
+    const calendar = google.calendar({ version: "v3", auth });
+    const triggerState = state as CalendarTriggerState;
+
+    // First poll: establish sync token baseline
+    if (!triggerState.lastSyncToken) {
+      log.info("Calendar event_changed trigger: establishing baseline syncToken");
+      const res = await calendar.events.list({
+        calendarId: "primary",
+        maxResults: 1,
+        showDeleted: false,
+      });
+      return {
+        event: null,
+        newState: {
+          lastSyncToken: res.data.nextSyncToken,
+          lastPollTimestamp: new Date().toISOString(),
+        },
+      };
+    }
+
+    try {
+      const res = await calendar.events.list({
+        calendarId: "primary",
+        syncToken: triggerState.lastSyncToken,
+        showDeleted: false,
+      });
+
+      const changed = (res.data.items ?? []).filter((e) => e.status !== "cancelled");
+      const newSyncToken = res.data.nextSyncToken ?? triggerState.lastSyncToken;
+
+      if (changed.length === 0) {
+        return {
+          event: null,
+          newState: { lastSyncToken: newSyncToken, lastPollTimestamp: new Date().toISOString() },
+        };
+      }
+
+      log.info(`Calendar event_changed trigger: ${changed.length} event(s) changed`);
+
+      const summaryParts = changed.slice(0, 10).map((e) => {
+        const start = e.start?.dateTime ?? e.start?.date ?? "";
+        return `- ${e.summary ?? "(no title)"} (${start})`;
+      });
+      const summary =
+        changed.length === 1
+          ? `Calendar event created/updated:\n${summaryParts[0]}`
+          : `${changed.length} calendar event(s) created/updated:\n${summaryParts.join("\n")}${changed.length > 10 ? `\n...and ${changed.length - 10} more` : ""}`;
+
+      return {
+        event: {
+          triggerId: "google:calendar_event_changed",
+          toolId: "google",
+          summary,
+          data: {
+            events: changed.map((e) => ({
+              id: e.id,
+              summary: e.summary,
+              start: e.start?.dateTime ?? e.start?.date,
+              end: e.end?.dateTime ?? e.end?.date,
+              htmlLink: e.htmlLink,
+            })),
+            count: changed.length,
+          },
+        },
+        newState: { lastSyncToken: newSyncToken, lastPollTimestamp: new Date().toISOString() },
+      };
+    } catch (err: unknown) {
+      // Sync token invalidated (410 Gone) — reset
+      const isGone = err instanceof Error && "code" in err && (err as { code: number }).code === 410;
+      if (isGone) {
+        log.warn("Calendar event_changed trigger: sync token expired (410), resetting");
+        const res = await calendar.events.list({
+          calendarId: "primary",
+          maxResults: 1,
+          showDeleted: false,
+        });
+        return {
+          event: null,
+          newState: { lastSyncToken: res.data.nextSyncToken, lastPollTimestamp: new Date().toISOString() },
+        };
+      }
+      throw err;
+    }
+  },
+};
+
+const calendar_event_cancelled_handler = {
+  async poll(
+    credentials: Record<string, string>,
+    state: Record<string, unknown>,
+  ): Promise<TriggerPollResult> {
+    const auth = makeAuth(credentials);
+    const calendar = google.calendar({ version: "v3", auth });
+    const triggerState = state as CalendarTriggerState;
+
+    // First poll: establish sync token baseline
+    if (!triggerState.lastSyncToken) {
+      log.info("Calendar event_cancelled trigger: establishing baseline syncToken");
+      const res = await calendar.events.list({
+        calendarId: "primary",
+        maxResults: 1,
+        showDeleted: true,
+      });
+      return {
+        event: null,
+        newState: {
+          lastSyncToken: res.data.nextSyncToken,
+          lastPollTimestamp: new Date().toISOString(),
+        },
+      };
+    }
+
+    try {
+      const res = await calendar.events.list({
+        calendarId: "primary",
+        syncToken: triggerState.lastSyncToken,
+        showDeleted: true,
+      });
+
+      const cancelled = (res.data.items ?? []).filter((e) => e.status === "cancelled");
+      const newSyncToken = res.data.nextSyncToken ?? triggerState.lastSyncToken;
+
+      if (cancelled.length === 0) {
+        return {
+          event: null,
+          newState: { lastSyncToken: newSyncToken, lastPollTimestamp: new Date().toISOString() },
+        };
+      }
+
+      log.info(`Calendar event_cancelled trigger: ${cancelled.length} event(s) cancelled`);
+
+      const summaryParts = cancelled.slice(0, 10).map((e) => `- ${e.summary ?? "(no title)"}`);
+      const summary =
+        cancelled.length === 1
+          ? `Calendar event cancelled:\n${summaryParts[0]}`
+          : `${cancelled.length} calendar event(s) cancelled:\n${summaryParts.join("\n")}`;
+
+      return {
+        event: {
+          triggerId: "google:calendar_event_cancelled",
+          toolId: "google",
+          summary,
+          data: {
+            events: cancelled.map((e) => ({
+              id: e.id,
+              summary: e.summary,
+            })),
+            count: cancelled.length,
+          },
+        },
+        newState: { lastSyncToken: newSyncToken, lastPollTimestamp: new Date().toISOString() },
+      };
+    } catch (err: unknown) {
+      const isGone = err instanceof Error && "code" in err && (err as { code: number }).code === 410;
+      if (isGone) {
+        log.warn("Calendar event_cancelled trigger: sync token expired (410), resetting");
+        const res = await calendar.events.list({
+          calendarId: "primary",
+          maxResults: 1,
+          showDeleted: true,
+        });
+        return {
+          event: null,
+          newState: { lastSyncToken: res.data.nextSyncToken, lastPollTimestamp: new Date().toISOString() },
+        };
+      }
+      throw err;
+    }
+  },
+};
+
+const calendar_invite_handler = {
+  async poll(
+    credentials: Record<string, string>,
+    state: Record<string, unknown>,
+  ): Promise<TriggerPollResult> {
+    const auth = makeAuth(credentials);
+    const calendar = google.calendar({ version: "v3", auth });
+    const triggerState = state as { lastPollTimestamp?: string; seenEventIds?: string[] };
+
+    const lastPoll = triggerState.lastPollTimestamp ?? new Date(Date.now() - 300_000).toISOString();
+    const seenIds = new Set(triggerState.seenEventIds ?? []);
+
+    // Get the user's email to check attendee status
+    const calMeta = await calendar.calendars.get({ calendarId: "primary" });
+    const myEmail = calMeta.data.id ?? "";
+
+    const res = await calendar.events.list({
+      calendarId: "primary",
+      updatedMin: lastPoll,
+      singleEvents: true,
+      orderBy: "startTime",
+      timeMin: new Date().toISOString(),
+      showDeleted: false,
+    });
+
+    const invites = (res.data.items ?? []).filter((e) => {
+      if (!e.id || seenIds.has(e.id)) return false;
+      // Check if I'm an attendee with needsAction status (pending RSVP)
+      const me = e.attendees?.find((a) => a.email === myEmail || a.self);
+      return me?.responseStatus === "needsAction";
+    });
+
+    const now = new Date().toISOString();
+    const newSeenIds = [...seenIds, ...invites.map((e) => e.id!)].slice(-200);
+
+    if (invites.length === 0) {
+      return {
+        event: null,
+        newState: { lastPollTimestamp: now, seenEventIds: newSeenIds },
+      };
+    }
+
+    log.info(`Calendar invite trigger: ${invites.length} new invitation(s)`);
+
+    const summaryParts = invites.slice(0, 10).map((e) => {
+      const start = e.start?.dateTime ?? e.start?.date ?? "";
+      const organizer = e.organizer?.displayName ?? e.organizer?.email ?? "unknown";
+      return `- ${e.summary ?? "(no title)"} at ${start} (from ${organizer})`;
+    });
+    const summary =
+      invites.length === 1
+        ? `New calendar invitation:\n${summaryParts[0]}`
+        : `${invites.length} new calendar invitation(s):\n${summaryParts.join("\n")}`;
+
+    return {
+      event: {
+        triggerId: "google:calendar_invite",
+        toolId: "google",
+        summary,
+        data: {
+          events: invites.map((e) => ({
+            id: e.id,
+            summary: e.summary,
+            start: e.start?.dateTime ?? e.start?.date,
+            end: e.end?.dateTime ?? e.end?.date,
+            organizer: e.organizer?.displayName ?? e.organizer?.email,
+            location: e.location,
+            htmlLink: e.htmlLink,
+          })),
+          count: invites.length,
+        },
+      },
+      newState: { lastPollTimestamp: now, seenEventIds: newSeenIds },
+    };
+  },
+};
+
+// --- Drive triggers ---
+
+interface DriveTriggerState {
+  startPageToken?: string;
+  lastPollTimestamp?: string;
+}
+
+const drive_file_shared_handler = {
+  async poll(
+    credentials: Record<string, string>,
+    state: Record<string, unknown>,
+  ): Promise<TriggerPollResult> {
+    const auth = makeAuth(credentials);
+    const drive = google.drive({ version: "v3", auth });
+    const triggerState = state as DriveTriggerState;
+
+    // First poll: establish baseline page token
+    if (!triggerState.startPageToken) {
+      log.info("Drive file_shared trigger: establishing baseline startPageToken");
+      const res = await drive.changes.getStartPageToken();
+      return {
+        event: null,
+        newState: {
+          startPageToken: res.data.startPageToken,
+          lastPollTimestamp: new Date().toISOString(),
+        },
+      };
+    }
+
+    const res = await drive.changes.list({
+      pageToken: triggerState.startPageToken,
+      fields: "newStartPageToken, changes(fileId, file(id, name, mimeType, sharingUser, sharedWithMeTime, webViewLink, owners))",
+      includeItemsFromAllDrives: false,
+      spaces: "drive",
+    });
+
+    const newPageToken = res.data.newStartPageToken ?? triggerState.startPageToken;
+
+    // Filter to files that were shared with me (have sharedWithMeTime set)
+    const sharedFiles = (res.data.changes ?? []).filter((c) => {
+      const file = c.file;
+      return file?.sharedWithMeTime && file.sharingUser;
+    });
+
+    if (sharedFiles.length === 0) {
+      return {
+        event: null,
+        newState: { startPageToken: newPageToken, lastPollTimestamp: new Date().toISOString() },
+      };
+    }
+
+    log.info(`Drive file_shared trigger: ${sharedFiles.length} newly shared file(s)`);
+
+    const summaryParts = sharedFiles.slice(0, 10).map((c) => {
+      const f = c.file!;
+      const sharer = f.sharingUser?.displayName ?? f.sharingUser?.emailAddress ?? "someone";
+      return `- "${f.name}" shared by ${sharer}`;
+    });
+    const summary =
+      sharedFiles.length === 1
+        ? `File shared with you:\n${summaryParts[0]}`
+        : `${sharedFiles.length} file(s) shared with you:\n${summaryParts.join("\n")}${sharedFiles.length > 10 ? `\n...and ${sharedFiles.length - 10} more` : ""}`;
+
+    return {
+      event: {
+        triggerId: "google:drive_file_shared",
+        toolId: "google",
+        summary,
+        data: {
+          files: sharedFiles.map((c) => ({
+            id: c.file?.id,
+            name: c.file?.name,
+            mimeType: c.file?.mimeType,
+            sharingUser: c.file?.sharingUser?.displayName ?? c.file?.sharingUser?.emailAddress,
+            webViewLink: c.file?.webViewLink,
+          })),
+          count: sharedFiles.length,
+        },
+      },
+      newState: { startPageToken: newPageToken, lastPollTimestamp: new Date().toISOString() },
+    };
+  },
+};
+
 export const triggers = {
   gmail_new_email: gmail_new_email_handler,
+  calendar_reminder: calendar_reminder_handler,
+  calendar_event_changed: calendar_event_changed_handler,
+  calendar_event_cancelled: calendar_event_cancelled_handler,
+  calendar_invite: calendar_invite_handler,
+  drive_file_shared: drive_file_shared_handler,
 };

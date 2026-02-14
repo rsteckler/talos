@@ -27,6 +27,27 @@
       "type": "number",
       "default": "5",
       "description": "How often to check for new emails"
+    },
+    {
+      "name": "calendar_poll_interval_minutes",
+      "label": "Calendar poll interval (minutes)",
+      "type": "number",
+      "default": "5",
+      "description": "How often to check for calendar changes and upcoming events"
+    },
+    {
+      "name": "calendar_reminder_minutes",
+      "label": "Calendar reminder lead time (minutes)",
+      "type": "number",
+      "default": "15",
+      "description": "How many minutes before an event to fire a reminder"
+    },
+    {
+      "name": "drive_poll_interval_minutes",
+      "label": "Drive poll interval (minutes)",
+      "type": "number",
+      "default": "10",
+      "description": "How often to check for newly shared files"
     }
   ],
   "triggers": [
@@ -34,6 +55,31 @@
       "id": "gmail_new_email",
       "label": "New Gmail received",
       "description": "Fires when new emails arrive in your inbox"
+    },
+    {
+      "id": "calendar_reminder",
+      "label": "Upcoming event reminder",
+      "description": "Fires when a calendar event is approaching (configurable lead time)"
+    },
+    {
+      "id": "calendar_event_changed",
+      "label": "Calendar event created or updated",
+      "description": "Fires when events are added or modified on your calendar"
+    },
+    {
+      "id": "calendar_event_cancelled",
+      "label": "Calendar event cancelled",
+      "description": "Fires when a calendar event is cancelled"
+    },
+    {
+      "id": "calendar_invite",
+      "label": "New calendar invitation",
+      "description": "Fires when you receive a new event invitation requiring RSVP"
+    },
+    {
+      "id": "drive_file_shared",
+      "label": "File shared with you",
+      "description": "Fires when a new file is shared with you in Google Drive"
     }
   ],
   "functions": [

@@ -232,6 +232,7 @@ export interface ToolCredentialSpec {
   label: string;
   description?: string;
   required: boolean;
+  secret?: boolean; // defaults to true — set false for non-sensitive values like URLs
 }
 
 export interface ToolFunctionSpec {
