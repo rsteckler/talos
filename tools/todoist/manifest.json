@@ -3,6 +3,7 @@
   "name": "Todoist",
   "description": "Manage tasks, projects, sections, labels, and comments in Todoist. Create, update, complete, and organize tasks with natural language due dates and filters.",
   "version": "1.0.0",
+  "category": "productivity",
   "credentials": [
     {
       "name": "api_token",

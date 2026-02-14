@@ -284,6 +284,7 @@ export interface ToolManifest {
   description: string;
   version: string;
   logName?: string;
+  category?: string; // e.g. "core", "productivity", "smart-home", "search", "system"
   defaultEnabled?: boolean;
   credentials?: ToolCredentialSpec[];
   oauth?: ToolOAuthSpec;

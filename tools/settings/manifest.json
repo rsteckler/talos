@@ -3,6 +3,7 @@
   "name": "Settings",
   "description": "View and manage application settings including model selection and log configuration.",
   "version": "1.0.0",
+  "category": "core",
   "defaultEnabled": true,
   "functions": [
     {

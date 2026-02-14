@@ -3,6 +3,7 @@
   "name": "Self Knowledge",
   "description": "Read and update Talos's own personality, tool instructions, and notes about the human user.",
   "version": "1.0.0",
+  "category": "core",
   "defaultEnabled": true,
   "functions": [
     {

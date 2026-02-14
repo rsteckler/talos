@@ -2,7 +2,7 @@ import { streamText, stepCountIs } from "ai";
 import { eq, asc, sql, and } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
-import { buildToolSet } from "../tools/index.js";
+import { buildRoutedToolSet, lookupFunction } from "../tools/index.js";
 import { createLogger } from "../logger/index.js";
 import { generateConversationTitle } from "./titleGenerator.js";
 import type { ModelMessage } from "ai";
@@ -121,6 +121,10 @@ function formatStreamError(err: unknown): string {
 
 /** Map tool call names (e.g. "web-search_search") to friendly descriptions */
 function describeToolCall(toolName: string, args?: Record<string, unknown>): string {
+  // Meta-tools (no underscore split needed)
+  if (toolName === "find_tools") return args?.["query"] ? `Searching for tools: "${String(args["query"]).slice(0, 60)}"` : "Searching available tools";
+  if (toolName === "use_tool") return args?.["tool_name"] ? `Using ${String(args["tool_name"])}` : "Using a tool";
+
   // Tool names are "{toolId}_{functionName}" — split on first underscore only
   const sepIdx = toolName.indexOf("_");
   const toolId = sepIdx >= 0 ? toolName.slice(0, sepIdx) : toolName;
@@ -196,6 +200,76 @@ function describeToolCall(toolName: string, args?: Record<string, unknown>): str
   }
 }
 
+// ---------------------------------------------------------------------------
+// Text tool call fallback
+// ---------------------------------------------------------------------------
+
+interface TextToolCall {
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+/** Try to parse a tool invocation from a JSON object. */
+function parseToolCallJson(parsed: Record<string, unknown>): TextToolCall | null {
+  // {"name": "use_tool", "arguments": {"tool_name": "...", "args": {...}}}
+  if (parsed["name"] === "use_tool") {
+    const inner = parsed["arguments"] as Record<string, unknown> | undefined;
+    const toolName = inner?.["tool_name"];
+    if (typeof toolName === "string") {
+      return { toolName, args: (inner?.["args"] ?? {}) as Record<string, unknown> };
+    }
+  }
+
+  // {"tool_name": "...", "args": {...}} — bare use_tool arguments
+  if (typeof parsed["tool_name"] === "string") {
+    return {
+      toolName: parsed["tool_name"],
+      args: (parsed["args"] ?? {}) as Record<string, unknown>,
+    };
+  }
+
+  // {"name": "obsidian_search_notes", "arguments": {...}} — direct routed call
+  if (typeof parsed["name"] === "string" && parsed["name"] !== "find_tools") {
+    return {
+      toolName: parsed["name"],
+      args: (parsed["arguments"] ?? parsed["args"] ?? {}) as Record<string, unknown>,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Extract a tool call emitted as text instead of a proper function call.
+ * Some models (especially smaller/free ones) output tool calls as
+ * `<tool_call>` tags or JSON code blocks instead of using the API.
+ */
+function extractTextToolCall(text: string): TextToolCall | null {
+  const jsonCandidates: string[] = [];
+
+  // <tool_call>JSON</tool_call>
+  const tagMatch = text.match(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/);
+  if (tagMatch?.[1]) jsonCandidates.push(tagMatch[1].trim());
+
+  // ```json\nJSON\n``` containing tool-like keys
+  const codeMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (codeMatch?.[1] && (codeMatch[1].includes('"name"') || codeMatch[1].includes('"tool_name"'))) {
+    jsonCandidates.push(codeMatch[1].trim());
+  }
+
+  for (const candidate of jsonCandidates) {
+    try {
+      const parsed = JSON.parse(candidate) as Record<string, unknown>;
+      const result = parseToolCallJson(parsed);
+      if (result) return result;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 interface StreamCallbacks {
   onChunk: (content: string) => void;
   onEnd: (messageId: string, usage?: TokenUsage) => void;
@@ -254,8 +328,8 @@ export async function streamChat(
       .where(eq(schema.conversations.id, conversationId))
       .run();
 
-    // Build tool set from enabled tools
-    const { tools, toolPrompts } = buildToolSet(undefined, approvalGate);
+    // Build routed tool set: direct tools + find_tools/use_tool meta-tools
+    const { tools, toolPrompts } = buildRoutedToolSet(approvalGate);
     const hasTools = Object.keys(tools).length > 0;
 
     // Append tool prompts to system prompt
@@ -270,7 +344,7 @@ export async function streamChat(
     ];
 
     log.user.high("Thinking", { query: userContent.slice(0, 100) });
-    log.dev.debug("Streaming started", { conversationId, modelId: active.modelId, providerType: active.providerType, toolCount: Object.keys(tools).length });
+    log.dev.debug("Streaming started", { conversationId, modelId: active.modelId, providerType: active.providerType, toolCount: Object.keys(tools).length, tools: Object.keys(tools) });
 
     let fullContent = "";
     let stepCount = 0;
@@ -392,6 +466,57 @@ export async function streamChat(
       const friendly = formatStreamError(streamError);
       onError(friendly);
       return;
+    }
+
+    // --- Text tool call fallback ---
+    // Some models emit tool calls as text (e.g. <tool_call>JSON</tool_call>)
+    // instead of proper function calls. Detect this, execute the tool, and
+    // re-stream so the LLM can produce a natural language response.
+    const textToolCall = extractTextToolCall(fullContent);
+    if (textToolCall && !streamError) {
+      const syntheticId = `text-fallback-${crypto.randomUUID()}`;
+      log.user.high(`Model emitted tool call as text — executing fallback for ${textToolCall.toolName}`, { tool: textToolCall.toolName, args: textToolCall.args });
+      log.dev.debug("Text tool call fallback detected", { toolName: textToolCall.toolName, args: textToolCall.args });
+
+      const lookup = lookupFunction(textToolCall.toolName);
+      if (lookup) {
+        let approved = true;
+        onToolCall?.(syntheticId, textToolCall.toolName, textToolCall.args);
+
+        if (!lookup.autoAllow && approvalGate) {
+          approved = await approvalGate(syntheticId, textToolCall.toolName, textToolCall.args);
+          if (!approved) {
+            log.user.medium("Tool denied", { tool: textToolCall.toolName });
+          }
+        }
+
+        if (approved) {
+          try {
+            const result = await lookup.handler(textToolCall.args, lookup.credentials);
+            log.dev.debug("Text fallback tool executed", { toolName: textToolCall.toolName, resultPreview: JSON.stringify(result).slice(0, 100) });
+            onToolResult?.(syntheticId, textToolCall.toolName, result);
+
+            // Re-stream with tool result for a natural language response
+            const resultJson = JSON.stringify(result, null, 2);
+            const truncated = resultJson.length > 8000 ? resultJson.slice(0, 8000) + "\n...(truncated)" : resultJson;
+
+            messages.push(
+              { role: "assistant" as const, content: fullContent },
+              { role: "user" as const, content: `[The tool "${textToolCall.toolName}" returned this result:]\n\n${truncated}\n\nRespond to the user's original request using this data. Do not include any tool call syntax in your response.` },
+            );
+
+            onChunk("\n\n");
+            fullContent += "\n\n";
+            toolCallCount++;
+            await runStream(false);
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            log.error("Text fallback tool execution failed", { toolName: textToolCall.toolName, error: message });
+          }
+        }
+      } else {
+        log.warn("Text fallback: tool not found in registry", { toolName: textToolCall.toolName });
+      }
     }
 
     // Post-stream summary

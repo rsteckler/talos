@@ -3,6 +3,7 @@
   "name": "Web Search",
   "description": "Search the web using the Tavily API.",
   "version": "1.0.0",
+  "category": "search",
   "credentials": [
     {
       "name": "api_key",

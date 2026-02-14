@@ -3,6 +3,7 @@
   "name": "Date & Time",
   "description": "Get the current date and time from a public network source for accuracy.",
   "version": "1.0.0",
+  "category": "core",
   "defaultEnabled": true,
   "settings": [
     {

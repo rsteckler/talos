@@ -3,6 +3,7 @@
   "name": "Google Maps",
   "description": "Search places, get directions, calculate distances, and geocode addresses.",
   "version": "1.0.0",
+  "category": "search",
   "credentials": [
     {
       "name": "api_key",

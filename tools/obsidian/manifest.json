@@ -3,6 +3,7 @@
   "name": "Obsidian Vault",
   "description": "Read, write, search, and navigate an Obsidian vault. Supports frontmatter parsing, wikilink/backlink resolution, tag extraction, and daily notes.",
   "version": "1.0.0",
+  "category": "productivity",
   "credentials": [
     {
       "name": "vault_path",

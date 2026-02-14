@@ -3,6 +3,7 @@
   "name": "Shell",
   "description": "Execute shell commands on the host system.",
   "version": "1.0.0",
+  "category": "system",
   "functions": [
     {
       "name": "execute",

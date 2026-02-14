@@ -3,6 +3,7 @@
   "name": "File Operations",
   "description": "Read, write, and list files and directories on the host system.",
   "version": "2.1.0",
+  "category": "system",
   "settings": [
     {
       "name": "allow_read",

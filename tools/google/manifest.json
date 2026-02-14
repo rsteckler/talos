@@ -4,6 +4,7 @@
   "description": "Access Gmail, Calendar, Drive, Sheets, Docs, and Slides.",
   "version": "1.0.0",
   "logName": "google",
+  "category": "productivity",
   "credentials": [
     { "name": "client_id", "label": "OAuth Client ID", "required": true },
     { "name": "client_secret", "label": "OAuth Client Secret", "required": true }

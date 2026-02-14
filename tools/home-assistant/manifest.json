@@ -3,6 +3,7 @@
   "name": "Home Assistant",
   "description": "Control and query a Home Assistant smart home instance. Manage devices, automations, areas, dashboards, and more.",
   "version": "1.0.0",
+  "category": "smart-home",
   "credentials": [
     {
       "name": "url",

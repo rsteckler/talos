@@ -7,6 +7,7 @@ import type { LoadedTool, ToolHandler } from "./types.js";
 import { db, schema } from "../db/index.js";
 import { createLogger, ensureLogArea } from "../logger/index.js";
 import { registerTrigger, clearRegistry } from "../triggers/registry.js";
+import { rebuildRegistry } from "./registry.js";
 
 const log = createLogger("tools");
 
@@ -114,6 +115,9 @@ export async function loadAllTools(): Promise<void> {
   }
 
   log.info(`${loadedTools.size} tool(s) loaded`);
+
+  // Build the searchable registry of routed tool functions
+  rebuildRegistry();
 }
 
 export function getLoadedTools(): Map<string, LoadedTool> {
