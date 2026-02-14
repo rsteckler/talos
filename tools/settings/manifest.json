@@ -1,0 +1,100 @@
+{
+  "id": "settings",
+  "name": "Settings",
+  "description": "View and manage application settings including model selection and log configuration.",
+  "version": "1.0.0",
+  "defaultEnabled": true,
+  "functions": [
+    {
+      "name": "list_providers",
+      "description": "List all configured AI providers. Returns provider names, types, and status. API keys are never exposed.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "list_models",
+      "description": "List available models for a specific provider.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "description": "The provider's database ID"
+          }
+        },
+        "required": ["providerId"]
+      }
+    },
+    {
+      "name": "get_active_model",
+      "description": "Get the currently active model and its provider.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "set_active_model",
+      "description": "Set the active model by its database ID. Use list_models first to find the correct ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "modelId": {
+            "type": "string",
+            "description": "The model's database ID (from list_models)"
+          }
+        },
+        "required": ["modelId"]
+      }
+    },
+    {
+      "name": "get_log_config",
+      "description": "Get all log configuration including per-area log levels, known areas, and retention settings.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "set_log_level",
+      "description": "Set log levels for a specific area. You can set userLevel, devLevel, or both.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "area": {
+            "type": "string",
+            "description": "The log area (e.g. 'agent', 'server', 'ws', 'db', 'tools', 'api')"
+          },
+          "userLevel": {
+            "type": "string",
+            "description": "User-facing log level: silent, low, medium, or high"
+          },
+          "devLevel": {
+            "type": "string",
+            "description": "Developer log level: silent, debug, or verbose"
+          }
+        },
+        "required": ["area"]
+      }
+    },
+    {
+      "name": "set_log_retention",
+      "description": "Set the number of days to retain logs before auto-pruning.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "number",
+            "description": "Number of days to retain logs (1-365)"
+          }
+        },
+        "required": ["days"]
+      }
+    }
+  ]
+}
