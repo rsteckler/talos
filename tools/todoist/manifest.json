@@ -1,0 +1,440 @@
+{
+  "id": "todoist",
+  "name": "Todoist",
+  "description": "Manage tasks, projects, sections, labels, and comments in Todoist. Create, update, complete, and organize tasks with natural language due dates and filters.",
+  "version": "1.0.0",
+  "credentials": [
+    {
+      "name": "api_token",
+      "label": "API Token",
+      "description": "Personal API token from Todoist Settings → Integrations → Developer",
+      "required": true
+    }
+  ],
+  "settings": [
+    {
+      "name": "poll_interval_minutes",
+      "label": "Poll interval (minutes)",
+      "type": "number",
+      "default": "5",
+      "description": "How often to check for new tasks"
+    }
+  ],
+  "triggers": [
+    {
+      "id": "new_task",
+      "label": "Todoist: New task created",
+      "description": "Fires when a new task appears in your Todoist account"
+    }
+  ],
+  "functions": [
+    {
+      "name": "get_tasks",
+      "description": "List active tasks, optionally filtered by project, section, or label.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Filter by project ID"
+          },
+          "section_id": {
+            "type": "string",
+            "description": "Filter by section ID"
+          },
+          "label": {
+            "type": "string",
+            "description": "Filter by label name"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor from a previous response"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max tasks to return (default 50)"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_task",
+      "description": "Get details for a single task by ID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "The task ID"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "add_task",
+      "description": "Create a new task. Use due_string for natural language dates like 'tomorrow', 'every monday', 'Jan 15'.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Task title/content (required)"
+          },
+          "description": {
+            "type": "string",
+            "description": "Task description (supports Markdown)"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Project to add task to (defaults to Inbox)"
+          },
+          "section_id": {
+            "type": "string",
+            "description": "Section within the project"
+          },
+          "parent_id": {
+            "type": "string",
+            "description": "Parent task ID for creating subtasks"
+          },
+          "labels": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Label names to apply"
+          },
+          "priority": {
+            "type": "number",
+            "description": "Priority 1 (normal) to 4 (urgent). Note: API priority 4 = UI Priority 1 (red)."
+          },
+          "due_string": {
+            "type": "string",
+            "description": "Natural language due date (e.g. 'tomorrow', 'every friday', 'Jan 23')"
+          },
+          "due_date": {
+            "type": "string",
+            "description": "Due date in YYYY-MM-DD format (no time)"
+          },
+          "due_datetime": {
+            "type": "string",
+            "description": "Due date and time in RFC3339 format (e.g. 2024-01-15T14:00:00Z)"
+          },
+          "due_lang": {
+            "type": "string",
+            "description": "Language for due_string parsing (e.g. 'en', 'es'). Defaults to user's language."
+          },
+          "assignee_id": {
+            "type": "string",
+            "description": "User ID to assign task to (shared projects only)"
+          },
+          "order": {
+            "type": "number",
+            "description": "Position within project/section"
+          }
+        },
+        "required": ["content"]
+      }
+    },
+    {
+      "name": "update_task",
+      "description": "Update an existing task. Only include fields you want to change.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "The task ID to update"
+          },
+          "content": {
+            "type": "string",
+            "description": "New task title/content"
+          },
+          "description": {
+            "type": "string",
+            "description": "New task description"
+          },
+          "labels": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Label names (replaces existing labels)"
+          },
+          "priority": {
+            "type": "number",
+            "description": "Priority 1 (normal) to 4 (urgent)"
+          },
+          "due_string": {
+            "type": "string",
+            "description": "Natural language due date"
+          },
+          "due_date": {
+            "type": "string",
+            "description": "Due date in YYYY-MM-DD format"
+          },
+          "due_datetime": {
+            "type": "string",
+            "description": "Due date and time in RFC3339 format"
+          },
+          "due_lang": {
+            "type": "string",
+            "description": "Language for due_string parsing"
+          },
+          "assignee_id": {
+            "type": "string",
+            "description": "User ID to assign task to"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "close_task",
+      "description": "Complete/close a task. For recurring tasks, moves to the next occurrence.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "The task ID to complete"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "reopen_task",
+      "description": "Reopen a previously completed task.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "The task ID to reopen"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "delete_task",
+      "description": "Permanently delete a task. This cannot be undone.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "The task ID to delete"
+          }
+        },
+        "required": ["task_id"]
+      }
+    },
+    {
+      "name": "filter_tasks",
+      "description": "Search tasks using Todoist filter syntax. Supports operators like 'today', 'overdue', '#ProjectName', '@label', 'p1', date ranges, and boolean logic (& for AND, | for OR).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "filter": {
+            "type": "string",
+            "description": "Todoist filter query (e.g. 'today & #Work', 'overdue | due before: next week', '@urgent')"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor from a previous response"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max tasks to return (default 50)"
+          }
+        },
+        "required": ["filter"]
+      }
+    },
+    {
+      "name": "get_projects",
+      "description": "List all projects.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "get_project",
+      "description": "Get details for a single project.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project ID"
+          }
+        },
+        "required": ["project_id"]
+      }
+    },
+    {
+      "name": "add_project",
+      "description": "Create a new project.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Project name (required)"
+          },
+          "color": {
+            "type": "string",
+            "description": "Color name (e.g. 'berry_red', 'blue', 'green', 'orange', 'grey')"
+          },
+          "parent_id": {
+            "type": "string",
+            "description": "Parent project ID for creating sub-projects"
+          },
+          "view_style": {
+            "type": "string",
+            "description": "'list' or 'board'"
+          },
+          "is_favorite": {
+            "type": "boolean",
+            "description": "Add to favorites"
+          }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "update_project",
+      "description": "Update an existing project. Only include fields you want to change.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project ID to update"
+          },
+          "name": {
+            "type": "string",
+            "description": "New project name"
+          },
+          "color": {
+            "type": "string",
+            "description": "Color name"
+          },
+          "view_style": {
+            "type": "string",
+            "description": "'list' or 'board'"
+          },
+          "is_favorite": {
+            "type": "boolean",
+            "description": "Add to or remove from favorites"
+          }
+        },
+        "required": ["project_id"]
+      }
+    },
+    {
+      "name": "delete_project",
+      "description": "Permanently delete a project and all its tasks. This cannot be undone.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "The project ID to delete"
+          }
+        },
+        "required": ["project_id"]
+      }
+    },
+    {
+      "name": "get_sections",
+      "description": "List sections, optionally filtered by project.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Filter by project ID"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_labels",
+      "description": "List all personal labels.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "add_label",
+      "description": "Create a new personal label.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Label name (required)"
+          },
+          "color": {
+            "type": "string",
+            "description": "Color name (e.g. 'berry_red', 'blue', 'green')"
+          },
+          "order": {
+            "type": "number",
+            "description": "Position in label list"
+          },
+          "is_favorite": {
+            "type": "boolean",
+            "description": "Add to favorites"
+          }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "get_comments",
+      "description": "List comments on a task or project. Exactly one of task_id or project_id is required.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "Task ID to get comments for"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Project ID to get comments for"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "add_comment",
+      "description": "Add a comment to a task or project. Exactly one of task_id or project_id is required.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Comment text (supports Markdown)"
+          },
+          "task_id": {
+            "type": "string",
+            "description": "Task ID to comment on"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Project ID to comment on"
+          }
+        },
+        "required": ["content"]
+      }
+    }
+  ]
+}

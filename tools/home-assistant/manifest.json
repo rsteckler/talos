@@ -21,7 +21,7 @@
   "triggers": [
     {
       "id": "state_changed",
-      "label": "Entity state changed",
+      "label": "Home Assistant: Entity state changed",
       "description": "Fires when a Home Assistant entity changes state (e.g. light turned on, sensor value changed)",
       "params": [
         {
@@ -48,7 +48,7 @@
     },
     {
       "id": "device_unavailable",
-      "label": "Device unavailable",
+      "label": "Home Assistant: Device unavailable",
       "description": "Fires when a device becomes unavailable or unknown",
       "params": [
         {

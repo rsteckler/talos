@@ -53,32 +53,32 @@
   "triggers": [
     {
       "id": "gmail_new_email",
-      "label": "New Gmail received",
+      "label": "Gmail: New email received",
       "description": "Fires when new emails arrive in your inbox"
     },
     {
       "id": "calendar_reminder",
-      "label": "Upcoming event reminder",
+      "label": "Google Calendar: Upcoming event reminder",
       "description": "Fires when a calendar event is approaching (configurable lead time)"
     },
     {
       "id": "calendar_event_changed",
-      "label": "Calendar event created or updated",
+      "label": "Google Calendar: Event created or updated",
       "description": "Fires when events are added or modified on your calendar"
     },
     {
       "id": "calendar_event_cancelled",
-      "label": "Calendar event cancelled",
+      "label": "Google Calendar: Event cancelled",
       "description": "Fires when a calendar event is cancelled"
     },
     {
       "id": "calendar_invite",
-      "label": "New calendar invitation",
+      "label": "Google Calendar: New invitation",
       "description": "Fires when you receive a new event invitation requiring RSVP"
     },
     {
       "id": "drive_file_shared",
-      "label": "File shared with you",
+      "label": "Google Drive: New file shared",
       "description": "Fires when a new file is shared with you in Google Drive"
     }
   ],
