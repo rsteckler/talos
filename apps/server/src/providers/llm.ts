@@ -12,6 +12,9 @@ const SYSTEM_PATH = path.join(__dirname, "..", "agent", "SYSTEM.md");
 const SOUL_PATH = path.join(__dirname, "..", "..", "data", "SOUL.md");
 const TOOLS_PATH = path.join(__dirname, "..", "..", "data", "TOOLS.md");
 const HUMAN_PATH = path.join(__dirname, "..", "..", "data", "HUMAN.md");
+const ONBOARDING_PATH = path.join(__dirname, "..", "..", "data", "ONBOARDING.md");
+
+const DEFAULT_HUMAN_CONTENT = "# Human\n\nThis document is for tracking information about the human user.";
 
 type ProviderRow = typeof schema.providers.$inferSelect;
 
@@ -101,11 +104,26 @@ export function loadSystemPrompt(): string {
     // HUMAN.md missing — continue without it
   }
 
+  const needsOnboarding =
+    !humanNotes || humanNotes === DEFAULT_HUMAN_CONTENT.trim();
+
+  let onboarding = "";
+  if (needsOnboarding) {
+    try {
+      onboarding = fs.readFileSync(ONBOARDING_PATH, "utf-8").trim();
+    } catch {
+      // ONBOARDING.md missing — skip onboarding gracefully
+    }
+  }
+
   let prompt = system ? `${system}\n\n---\n\n${soul}` : soul;
+  if (onboarding) {
+    prompt += `\n\n---\n\n${onboarding}`;
+  }
   if (toolsInstructions) {
     prompt += `\n\n---\n\n${toolsInstructions}`;
   }
-  if (humanNotes) {
+  if (humanNotes && !needsOnboarding) {
     prompt += `\n\n---\n\n${humanNotes}`;
   }
   return prompt;
