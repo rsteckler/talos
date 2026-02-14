@@ -396,7 +396,7 @@ export const TalosOrb = forwardRef<TalosOrbRef | null, TalosOrbProps>(({
         <TalosOrbDisplay config={config} />
 
         {showControls && (
-          <div className="absolute left-4 top-4 max-h-[calc(100vh-12rem)] w-72 overflow-y-auto rounded-lg border border-zinc-700/50 bg-zinc-900/95 backdrop-blur-sm">
+          <div className="absolute left-4 top-4 max-h-[calc(100vh-12rem)] w-72 overflow-y-auto scrollbar-thumb-only rounded-lg border border-zinc-700/50 bg-zinc-900/95 backdrop-blur-sm">
             <button
               onClick={() => setShowParams(!showParams)}
               className="sticky top-0 z-10 flex w-full items-center justify-between bg-zinc-900/95 px-3 py-2 text-sm font-medium text-zinc-300 hover:text-zinc-100"

@@ -95,7 +95,7 @@ export function FlowHistoryDialog({ open, onOpenChange }: FlowHistoryDialogProps
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-6 min-h-0">
+        <div className="flex-1 overflow-y-auto scrollbar-thumb-only px-6 pb-6 min-h-0">
           {filtered.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <Inbox className="size-8 mb-2" />

@@ -147,7 +147,7 @@ export function ChatHistoryDialog({ open, onOpenChange }: ChatHistoryDialogProps
 
         <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto px-6 pb-6 min-h-0"
+          className="flex-1 overflow-y-auto scrollbar-thumb-only px-6 pb-6 min-h-0"
         >
           {conversations.length === 0 && !isLoading && (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">

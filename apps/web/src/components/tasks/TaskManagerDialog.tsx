@@ -109,7 +109,7 @@ export function TaskManagerDialog({ open, onOpenChange }: TaskManagerDialogProps
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 pb-6 min-h-0">
+          <div className="flex-1 overflow-y-auto scrollbar-thumb-only px-6 pb-6 min-h-0">
             {actionError && (
               <p className="mb-2 text-sm text-destructive">{actionError}</p>
             )}

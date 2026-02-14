@@ -57,7 +57,7 @@ export function ToolCallDisplay({ toolCall }: ToolCallDisplayProps) {
           <span className="font-mono font-medium">{displayName}</span>
           <span className="text-amber-400/70">wants to run</span>
         </div>
-        <pre className="text-xs rounded bg-zinc-900 px-2 py-1.5 text-zinc-300 overflow-x-auto max-h-24 overflow-y-auto mb-2">
+        <pre className="text-xs rounded bg-zinc-900 px-2 py-1.5 text-zinc-300 overflow-x-auto max-h-24 overflow-y-auto scrollbar-thumb-only mb-2">
           {JSON.stringify(toolCall.args, null, 2)}
         </pre>
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -102,14 +102,14 @@ export function ToolCallDisplay({ toolCall }: ToolCallDisplayProps) {
         <div className="text-xs space-y-1.5">
           <div>
             <span className="text-zinc-500">Args:</span>
-            <pre className="mt-0.5 rounded bg-zinc-900 px-2 py-1.5 text-zinc-300 overflow-x-auto max-h-32 overflow-y-auto">
+            <pre className="mt-0.5 rounded bg-zinc-900 px-2 py-1.5 text-zinc-300 overflow-x-auto max-h-32 overflow-y-auto scrollbar-thumb-only">
               {JSON.stringify(toolCall.args, null, 2)}
             </pre>
           </div>
           {toolCall.result !== undefined && (
             <div>
               <span className="text-zinc-500">Result:</span>
-              <pre className="mt-0.5 rounded bg-zinc-900 px-2 py-1.5 text-zinc-300 overflow-x-auto max-h-48 overflow-y-auto">
+              <pre className="mt-0.5 rounded bg-zinc-900 px-2 py-1.5 text-zinc-300 overflow-x-auto max-h-48 overflow-y-auto scrollbar-thumb-only">
                 {typeof toolCall.result === "string"
                   ? toolCall.result
                   : JSON.stringify(toolCall.result, null, 2)}

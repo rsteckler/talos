@@ -142,7 +142,7 @@ export function EditProviderDialog({ provider, onOpenChange }: EditProviderDialo
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 overflow-y-auto flex-1 pr-1">
+        <div className="space-y-4 overflow-y-auto scrollbar-thumb-only flex-1 pr-1">
           {/* Provider info section */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
@@ -223,7 +223,7 @@ export function EditProviderDialog({ provider, onOpenChange }: EditProviderDialo
             </div>
 
             {/* Model list */}
-            <div className="max-h-64 overflow-y-auto rounded-md border">
+            <div className="max-h-64 overflow-y-auto scrollbar-thumb-only rounded-md border">
               {catalogLoading ? (
                 <div className="space-y-2 p-2">
                   {Array.from({ length: 5 }).map((_, i) => (

@@ -167,7 +167,7 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 overflow-y-auto flex-1 pr-1">
+        <div className="space-y-4 overflow-y-auto scrollbar-thumb-only flex-1 pr-1">
           <div className="space-y-2">
             <Label htmlFor="task-name">Name</Label>
             <Input
