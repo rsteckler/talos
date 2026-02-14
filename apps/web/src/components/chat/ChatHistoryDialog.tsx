@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Search, Loader2, MessageSquare } from "lucide-react"
+import { Search, Loader2, MessageSquare, Trash2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -102,9 +102,28 @@ export function ChatHistoryDialog({ open, onOpenChange }: ChatHistoryDialogProps
     return () => observer.disconnect()
   }, [open, hasMore, isLoading, page, debouncedSearch, fetchPage])
 
+  const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation)
+  const clearMessages = useChatStore((s) => s.clearMessages)
+
   const handleSelect = (id: string) => {
     loadConversation(id)
     onOpenChange(false)
+  }
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    try {
+      await conversationsApi.remove(id)
+      setConversations((prev) => prev.filter((c) => c.id !== id))
+      setTotal((prev) => prev - 1)
+      if (activeConversationId === id) {
+        setActiveConversation(null)
+        clearMessages()
+      }
+    } catch (err) {
+      console.error("[ChatHistory] Failed to delete:", err)
+    }
   }
 
   return (
@@ -141,23 +160,34 @@ export function ChatHistoryDialog({ open, onOpenChange }: ChatHistoryDialogProps
 
           <div className="space-y-1">
             {conversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
-                onClick={() => handleSelect(conv.id)}
-                className="w-full text-left rounded-lg px-3 py-2.5 hover:bg-accent transition-colors"
+                className="group/row flex items-center gap-1 rounded-lg hover:bg-accent transition-colors"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-sm truncate">{conv.title}</span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {relativeTime(conv.updated_at)}
-                  </span>
-                </div>
-                {conv.snippet && (
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    {conv.snippet}
-                  </p>
-                )}
-              </button>
+                <button
+                  onClick={() => handleSelect(conv.id)}
+                  className="flex-1 min-w-0 text-left px-3 py-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-sm truncate">{conv.title}</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {relativeTime(conv.updated_at)}
+                    </span>
+                  </div>
+                  {conv.snippet && (
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                      {conv.snippet}
+                    </p>
+                  )}
+                </button>
+                <button
+                  onClick={(e) => handleDelete(e, conv.id)}
+                  className="hidden shrink-0 rounded-lg p-1.5 mr-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover/row:block"
+                  title="Delete conversation"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
             ))}
           </div>
 

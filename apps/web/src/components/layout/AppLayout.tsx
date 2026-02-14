@@ -28,16 +28,18 @@ export function AppLayout() {
       >
         {slidePanel && (
           <div className="flex h-full w-80 flex-col">
-            <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold text-foreground">
+            <div className="relative flex shrink-0 items-center border-b border-border px-4 py-3">
+              <h2 className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm font-semibold text-foreground">
                 {TITLES[slidePanel]}
               </h2>
-              <button
-                onClick={() => setSlidePanel(null)}
-                className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <X className="size-4" />
-              </button>
+              <div className="ml-auto">
+                <button
+                  onClick={() => setSlidePanel(null)}
+                  className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto scrollbar-thumb-only">
               {slidePanel === "flow" && <FlowFeed />}

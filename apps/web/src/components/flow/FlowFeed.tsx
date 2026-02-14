@@ -189,15 +189,24 @@ export function FlowFeed() {
 
   return (
     <div ref={scrollContainerRef} className="flex flex-col">
-      {/* Flow History link */}
-      <div className="flex items-center justify-end px-3 py-1.5">
+      {/* Stats bar */}
+      <div className="sticky top-0 z-10 flex items-center gap-3 bg-background/60 px-3 py-1.5 backdrop-blur-sm">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          {unread.length > 0 && (
+            <span><span className="font-semibold text-foreground">{unread.length}</span> unread</span>
+          )}
+          {pinned.length > 0 && (
+            <span><span className="font-semibold text-foreground">{pinned.length}</span> pinned</span>
+          )}
+          <span><span className="font-semibold text-foreground">{items.length}</span> total</span>
+        </div>
+        <div className="flex-1" />
         <button
           onClick={() => setHistoryOpen(true)}
           className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           title="Flow History"
         >
           <ExternalLink className="size-3.5" />
-          All
         </button>
       </div>
 

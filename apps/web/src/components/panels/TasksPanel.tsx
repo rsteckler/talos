@@ -72,32 +72,32 @@ export function TasksPanel() {
 
   return (
     <>
-      <div className="px-3 py-2">
-        {/* Header actions */}
-        <div className="flex items-center justify-between pb-2">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <ListTodo className="size-3.5" />
-            <span>{activeTasks.length} active</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setDialogOpen(true)}
-              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-              title="New Task"
-            >
-              <Plus className="size-3.5" />
-            </button>
-            <button
-              onClick={() => setManagerOpen(true)}
-              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-              title="Manage Tasks"
-            >
-              <ExternalLink className="size-3.5" />
-            </button>
-          </div>
+      {/* Header actions */}
+      <div className="sticky top-0 z-10 flex items-center justify-between bg-background/60 px-3 py-1.5 backdrop-blur-sm">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <ListTodo className="size-3.5" />
+          <span>{activeTasks.length} active</span>
         </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setDialogOpen(true)}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="New Task"
+          >
+            <Plus className="size-3.5" />
+          </button>
+          <button
+            onClick={() => setManagerOpen(true)}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="Manage Tasks"
+          >
+            <ExternalLink className="size-3.5" />
+          </button>
+        </div>
+      </div>
 
-        {/* Task list */}
+      {/* Task list */}
+      <div className="px-2 pb-2">
         {isLoading && tasks.length === 0 ? (
           <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />

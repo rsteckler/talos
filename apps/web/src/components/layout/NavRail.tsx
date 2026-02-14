@@ -98,7 +98,7 @@ export function NavRail() {
     <nav className="flex h-full w-14 shrink-0 flex-col items-center border-r border-border bg-card py-3">
       {/* Orb */}
       <div
-        className="pointer-events-none relative mb-4 flex items-center justify-center"
+        className="pointer-events-none relative mb-14 flex items-center justify-center"
         style={{ width: 32, height: 32, overflow: "visible" }}
       >
         <div

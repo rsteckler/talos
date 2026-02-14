@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Search, Loader2, MessageSquare } from "lucide-react"
+import { Search, Loader2, MessageSquare, ExternalLink } from "lucide-react"
+import { ChatHistoryDialog } from "@/components/chat/ChatHistoryDialog"
 import { conversationsApi } from "@/api/conversations"
 import { useChatStore, useLayoutStore } from "@/stores"
 import type { ConversationSummary } from "@talos/shared/types"
@@ -91,8 +92,25 @@ export function HistoryPanel() {
     setSlidePanel(null)
   }
 
+  const [dialogOpen, setDialogOpen] = useState(false)
+
   return (
     <div ref={scrollContainerRef} className="flex flex-col">
+      {/* Stats bar */}
+      <div className="sticky top-0 z-10 flex items-center gap-2 bg-background/60 px-3 py-1.5 backdrop-blur-sm">
+        <span className="text-[11px] text-muted-foreground">
+          <span className="font-semibold text-foreground">{total}</span> conversations
+        </span>
+        <div className="flex-1" />
+        <button
+          onClick={() => setDialogOpen(true)}
+          className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          title="Open in modal"
+        >
+          <ExternalLink className="size-3.5" />
+        </button>
+      </div>
+
       {/* Search */}
       <div className="px-3 py-2">
         <div className="relative">
@@ -145,6 +163,8 @@ export function HistoryPanel() {
       )}
 
       <div ref={sentinelRef} className="h-1" />
+
+      <ChatHistoryDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </div>
   )
 }
