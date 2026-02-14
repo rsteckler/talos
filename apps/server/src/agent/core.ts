@@ -240,6 +240,29 @@ function parseToolCallJson(parsed: Record<string, unknown>): TextToolCall | null
 }
 
 /**
+ * Attempt to parse JSON, tolerating common LLM mistakes like missing
+ * trailing braces (models often truncate before closing all brackets).
+ */
+function tryParseJson(text: string): Record<string, unknown> | null {
+  // Try as-is first
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    // Try appending up to 3 missing closing braces
+    let attempt = text.trimEnd();
+    for (let i = 0; i < 3; i++) {
+      attempt += "}";
+      try {
+        return JSON.parse(attempt) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }
+}
+
+/**
  * Extract a tool call emitted as text instead of a proper function call.
  * Some models (especially smaller/free ones) output tool calls as
  * `<tool_call>` tags or JSON code blocks instead of using the API.
@@ -258,12 +281,10 @@ function extractTextToolCall(text: string): TextToolCall | null {
   }
 
   for (const candidate of jsonCandidates) {
-    try {
-      const parsed = JSON.parse(candidate) as Record<string, unknown>;
+    const parsed = tryParseJson(candidate);
+    if (parsed) {
       const result = parseToolCallJson(parsed);
       if (result) return result;
-    } catch {
-      continue;
     }
   }
 
@@ -353,6 +374,9 @@ export async function streamChat(
     let streamError: unknown = null;
     const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
+    // Track tool calls that never received a result (hallucinated/unsupported calls)
+    const unresolvedToolCalls = new Map<string, { toolName: string; args: Record<string, unknown> }>();
+
     // Stream helper — runs the LLM, collects text, and accumulates token usage
     const runStream = async (useTools: boolean) => {
       const streamResult = streamText({
@@ -378,11 +402,13 @@ export async function streamChat(
             break;
           case "tool-call":
             toolCallCount++;
+            unresolvedToolCalls.set(part.toolCallId, { toolName: part.toolName, args: part.input as Record<string, unknown> });
             log.user.high(describeToolCall(part.toolName, part.input as Record<string, unknown>), { tool: part.toolName, args: part.input });
             log.dev.debug("Tool call args", { toolCallId: part.toolCallId, toolName: part.toolName, args: part.input });
             onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>);
             break;
           case "tool-result":
+            unresolvedToolCalls.delete(part.toolCallId);
             log.user.medium("Tool finished", { tool: part.toolName, result: part.output });
             log.dev.debug("Tool result detail", { toolCallId: part.toolCallId, toolName: part.toolName });
             onToolResult?.(part.toolCallId, part.toolName, part.output);
@@ -468,54 +494,77 @@ export async function streamChat(
       return;
     }
 
-    // --- Text tool call fallback ---
-    // Some models emit tool calls as text (e.g. <tool_call>JSON</tool_call>)
-    // instead of proper function calls. Detect this, execute the tool, and
-    // re-stream so the LLM can produce a natural language response.
-    const textToolCall = extractTextToolCall(fullContent);
-    if (textToolCall && !streamError) {
-      const syntheticId = `text-fallback-${crypto.randomUUID()}`;
-      log.user.high(`Model emitted tool call as text — executing fallback for ${textToolCall.toolName}`, { tool: textToolCall.toolName, args: textToolCall.args });
-      log.dev.debug("Text tool call fallback detected", { toolName: textToolCall.toolName, args: textToolCall.args });
+    // --- Tool call fallback ---
+    // Weak models often: (a) call routed tools directly (hallucinated, no result
+    // from the SDK), or (b) emit tool calls as text (<tool_call>JSON</tool_call>).
+    // Detect both, execute the first match, and re-stream for a natural response.
+    if (!streamError) {
+      let fallbackTool: TextToolCall | null = null;
+      let fallbackSource = "";
 
-      const lookup = lookupFunction(textToolCall.toolName);
-      if (lookup) {
-        let approved = true;
-        onToolCall?.(syntheticId, textToolCall.toolName, textToolCall.args);
-
-        if (!lookup.autoAllow && approvalGate) {
-          approved = await approvalGate(syntheticId, textToolCall.toolName, textToolCall.args);
-          if (!approved) {
-            log.user.medium("Tool denied", { tool: textToolCall.toolName });
-          }
+      // Priority 1: Unresolved direct tool calls that exist in the registry
+      for (const [, call] of unresolvedToolCalls) {
+        if (call.toolName === "find_tools" || call.toolName === "use_tool") continue;
+        if (lookupFunction(call.toolName)) {
+          fallbackTool = call;
+          fallbackSource = "unresolved";
+          break;
         }
+      }
 
-        if (approved) {
-          try {
-            const result = await lookup.handler(textToolCall.args, lookup.credentials);
-            log.dev.debug("Text fallback tool executed", { toolName: textToolCall.toolName, resultPreview: JSON.stringify(result).slice(0, 100) });
-            onToolResult?.(syntheticId, textToolCall.toolName, result);
+      // Priority 2: Text-encoded tool calls in the response
+      if (!fallbackTool) {
+        fallbackTool = extractTextToolCall(fullContent);
+        if (fallbackTool) fallbackSource = "text";
+      }
 
-            // Re-stream with tool result for a natural language response
-            const resultJson = JSON.stringify(result, null, 2);
-            const truncated = resultJson.length > 8000 ? resultJson.slice(0, 8000) + "\n...(truncated)" : resultJson;
+      if (fallbackTool) {
+        const syntheticId = `fallback-${crypto.randomUUID()}`;
+        const sourceLabel = fallbackSource === "unresolved"
+          ? `Model called ${fallbackTool.toolName} directly (not in tool set) — executing fallback`
+          : `Model emitted tool call as text — executing fallback for ${fallbackTool.toolName}`;
+        log.user.high(sourceLabel, { tool: fallbackTool.toolName, args: fallbackTool.args, fallbackSource });
+        log.dev.debug("Tool call fallback detected", { toolName: fallbackTool.toolName, args: fallbackTool.args, source: fallbackSource });
 
-            messages.push(
-              { role: "assistant" as const, content: fullContent },
-              { role: "user" as const, content: `[The tool "${textToolCall.toolName}" returned this result:]\n\n${truncated}\n\nRespond to the user's original request using this data. Do not include any tool call syntax in your response.` },
-            );
+        const lookup = lookupFunction(fallbackTool.toolName);
+        if (lookup) {
+          let approved = true;
+          onToolCall?.(syntheticId, fallbackTool.toolName, fallbackTool.args);
 
-            onChunk("\n\n");
-            fullContent += "\n\n";
-            toolCallCount++;
-            await runStream(false);
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : String(err);
-            log.error("Text fallback tool execution failed", { toolName: textToolCall.toolName, error: message });
+          if (!lookup.autoAllow && approvalGate) {
+            approved = await approvalGate(syntheticId, fallbackTool.toolName, fallbackTool.args);
+            if (!approved) {
+              log.user.medium("Tool denied", { tool: fallbackTool.toolName });
+            }
           }
+
+          if (approved) {
+            try {
+              const result = await lookup.handler(fallbackTool.args, lookup.credentials);
+              log.dev.debug("Fallback tool executed", { toolName: fallbackTool.toolName, resultPreview: JSON.stringify(result).slice(0, 100) });
+              onToolResult?.(syntheticId, fallbackTool.toolName, result);
+
+              // Re-stream with tool result for a natural language response
+              const resultJson = JSON.stringify(result, null, 2);
+              const truncated = resultJson.length > 8000 ? resultJson.slice(0, 8000) + "\n...(truncated)" : resultJson;
+
+              messages.push(
+                { role: "assistant" as const, content: fullContent },
+                { role: "user" as const, content: `[The tool "${fallbackTool.toolName}" returned this result:]\n\n${truncated}\n\nRespond to the user's original request using this data. Do not include any tool call syntax in your response.` },
+              );
+
+              onChunk("\n\n");
+              fullContent += "\n\n";
+              toolCallCount++;
+              await runStream(false);
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : String(err);
+              log.error("Fallback tool execution failed", { toolName: fallbackTool.toolName, error: message });
+            }
+          }
+        } else {
+          log.warn("Fallback: tool not found in registry", { toolName: fallbackTool.toolName });
         }
-      } else {
-        log.warn("Text fallback: tool not found in registry", { toolName: textToolCall.toolName });
       }
     }
 
