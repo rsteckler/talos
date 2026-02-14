@@ -1,22 +1,15 @@
-import { createContext, useContext, useEffect, useState, useRef, useCallback, type ReactNode } from "react"
-import type { ThemeFile } from "@talos/shared/types"
-import { themesApi } from "@/api/themes"
-import { applyCustomTheme, clearCustomTheme, applyAccentColor, clearAccentColor } from "@/lib/theme-applier"
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react"
 
 export type Theme = "light" | "dark" | "system"
 
 export interface Settings {
   theme: Theme
   showLogsInChat: boolean
-  accentColor: string | null
-  customTheme: string | null
 }
 
 const defaultSettings: Settings = {
   theme: "system",
   showLogsInChat: false,
-  accentColor: null,
-  customTheme: null,
 }
 
 interface SettingsContextValue {
@@ -32,7 +25,11 @@ function loadSettings(): Settings {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) {
-      return { ...defaultSettings, ...JSON.parse(stored) }
+      const parsed = JSON.parse(stored)
+      return {
+        theme: parsed.theme ?? defaultSettings.theme,
+        showLogsInChat: parsed.showLogsInChat ?? defaultSettings.showLogsInChat,
+      }
     }
   } catch {
     // Ignore parse errors
@@ -60,66 +57,21 @@ function applyDarkClass(dark: boolean): void {
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(loadSettings)
-  const [themeData, setThemeData] = useState<ThemeFile | null>(null)
-  const fetchedThemeId = useRef<string | null>(null)
 
-  // Fetch theme data when customTheme changes
+  // Apply dark class whenever theme changes
   useEffect(() => {
-    if (!settings.customTheme) {
-      setThemeData(null)
-      fetchedThemeId.current = null
-      return
-    }
-
-    if (fetchedThemeId.current === settings.customTheme) return
-
-    themesApi.get(settings.customTheme).then((data) => {
-      fetchedThemeId.current = data.id
-      setThemeData(data)
-    }).catch(() => {
-      // Theme not found, clear selection
-      setThemeData(null)
-      fetchedThemeId.current = null
-    })
-  }, [settings.customTheme])
-
-  // Apply appearance whenever mode, theme data, or accent changes
-  useEffect(() => {
-    const dark = isDarkMode(settings.theme)
-    applyDarkClass(dark)
-
-    // Clear both first to avoid stale vars
-    clearCustomTheme()
-    clearAccentColor()
-
-    if (themeData) {
-      applyCustomTheme(themeData, dark)
-    } else if (settings.accentColor) {
-      applyAccentColor(settings.accentColor, dark)
-    }
-  }, [settings.theme, settings.accentColor, themeData])
+    applyDarkClass(isDarkMode(settings.theme))
+  }, [settings.theme])
 
   // Listen for system theme changes
   useEffect(() => {
     if (settings.theme !== "system") return
 
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
-    const handler = () => {
-      const dark = mediaQuery.matches
-      applyDarkClass(dark)
-
-      clearCustomTheme()
-      clearAccentColor()
-
-      if (themeData) {
-        applyCustomTheme(themeData, dark)
-      } else if (settings.accentColor) {
-        applyAccentColor(settings.accentColor, dark)
-      }
-    }
+    const handler = () => applyDarkClass(mediaQuery.matches)
     mediaQuery.addEventListener("change", handler)
     return () => mediaQuery.removeEventListener("change", handler)
-  }, [settings.theme, settings.accentColor, themeData])
+  }, [settings.theme])
 
   const updateSettings = useCallback((updates: Partial<Settings>) => {
     setSettings((prev) => {

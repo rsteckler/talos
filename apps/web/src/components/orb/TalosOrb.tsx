@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef, forwardRef, useImperativeHandle } from "react"
+import { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from "react"
 import { TalosOrbDisplay, type OrbConfig } from "./TalosOrbDisplay"
+import { useOrbColorStore } from "@/stores/useOrbColorStore"
 import { Shuffle, ChevronDown, ChevronUp, Moon, Circle, Zap } from "lucide-react"
 
 // Color utilities
@@ -322,6 +323,68 @@ export const TalosOrb = forwardRef<TalosOrbRef | null, TalosOrbProps>(({
       setConfig(prev => ({ ...prev, ...newConfig }))
     },
   }), [sleep, idle, turbo, randomize, orbState])
+
+  // Seed glow colors on mount — derive a triadic set from the orb's primary hue
+  // so all 3 glow colors are always visually distinct (120° apart), boosted in saturation.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const hexToHsl = (hex: string) => {
+      const r = parseInt(hex.slice(1, 3), 16) / 255
+      const g = parseInt(hex.slice(3, 5), 16) / 255
+      const b = parseInt(hex.slice(5, 7), 16) / 255
+      const max = Math.max(r, g, b), min = Math.min(r, g, b)
+      const l = (max + min) / 2
+      let h = 0, s = 0
+      if (max !== min) {
+        const d = max - min
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+        switch (max) {
+          case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break
+          case g: h = ((b - r) / d + 2) / 6; break
+          case b: h = ((r - g) / d + 4) / 6; break
+        }
+      }
+      return { h, s, l }
+    }
+
+    const hslToHexLocal = (h: number, s: number, l: number): string => {
+      const hue2rgb = (p: number, q: number, t: number) => {
+        if (t < 0) t += 1; if (t > 1) t -= 1
+        if (t < 1/6) return p + (q - p) * 6 * t
+        if (t < 1/2) return q
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6
+        return p
+      }
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s
+      const p = 2 * l - q
+      const r = Math.round(hue2rgb(p, q, h + 1/3) * 255)
+      const g = Math.round(hue2rgb(p, q, h) * 255)
+      const b = Math.round(hue2rgb(p, q, h - 1/3) * 255)
+      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+    }
+
+    const orb = baseConfig.orbPrimaryColor
+    if (!orb) return
+
+    const { h, s, l } = hexToHsl(orb)
+    const boostedSat = Math.min(s + 0.5, 1)
+
+    useOrbColorStore.getState().setColors({
+      primaryColor: hslToHexLocal(h, boostedSat, l),
+      secondaryColor: hslToHexLocal(((h + 1/3) % 1), boostedSat, l),
+      tertiaryColor: hslToHexLocal(((h + 2/3) % 1), boostedSat, l),
+    })
+  }, [])
+
+  // Pause/resume glow animation based on orb state.
+  // Colors are seeded on mount above — no need to update here,
+  // which avoids overwriting with intermediate lerp values during wake transitions.
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--glow-play-state',
+      orbState === 'sleep' ? 'paused' : 'running',
+    )
+  }, [orbState])
 
   const updateConfig = useCallback(<K extends keyof OrbConfig>(key: K, value: OrbConfig[K]) => {
     setConfig(prev => ({ ...prev, [key]: value }))

@@ -1,6 +1,5 @@
 import { useEffect } from "react"
 import { BrowserRouter, Routes, Route } from "react-router-dom"
-import { SidebarProvider } from "@/components/ui/sidebar"
 import { SettingsProvider } from "@/contexts/SettingsContext"
 import { OrbProvider } from "@/contexts/OrbContext"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -28,9 +27,7 @@ function AppContent() {
         path="/"
         element={
           <OrbProvider>
-            <SidebarProvider>
-              <AppLayout />
-            </SidebarProvider>
+            <AppLayout />
           </OrbProvider>
         }
       />

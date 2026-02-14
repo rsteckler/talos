@@ -5,5 +5,5 @@ export { toolsApi } from "./tools";
 export { logsApi } from "./logs";
 export { tasksApi } from "./tasks";
 export { inboxApi } from "./inbox";
-export { themesApi } from "./themes";
+
 export { ApiClientError } from "./client";

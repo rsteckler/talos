@@ -1,8 +1,5 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from "react"
-import { TalosOrb as AnimatedOrb } from "@/components/orb/TalosOrb"
-import { useOrb } from "@/contexts/OrbContext"
 import { useChatStore, useProviderStore, useConnectionStore } from "@/stores"
-import type { AgentStatus } from "@talos/shared/types"
 import { MessageBubble } from "@/components/chat/MessageBubble"
 import { InlineChatLog } from "@/components/chat/InlineChatLog"
 import { InboxContextCard } from "@/components/chat/InboxContextCard"
@@ -15,6 +12,13 @@ import type { Message, LogEntry } from "@talos/shared/types"
 type TimelineItem =
   | { kind: "message"; data: Message }
   | { kind: "log"; data: LogEntry }
+
+function getGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return "Good morning."
+  if (hour < 18) return "Good afternoon."
+  return "Good evening."
+}
 
 export function ChatArea() {
   const activeModel = useProviderStore((s) => s.activeModel)
@@ -41,26 +45,6 @@ export function ChatArea() {
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const orbRef = useOrb()
-  const prevStatusRef = useRef<AgentStatus>("idle")
-
-  // Sync orb animation state with agent status
-  useEffect(() => {
-    const orb = orbRef.current
-    if (!orb || agentStatus === prevStatusRef.current) return
-    prevStatusRef.current = agentStatus
-
-    switch (agentStatus) {
-      case "idle":
-        orb.sleep()
-        break
-      case "thinking":
-      case "responding":
-      case "tool_calling":
-        orb.idle()
-        break
-    }
-  }, [agentStatus, orbRef])
 
   const resizeTextarea = useCallback(() => {
     const ta = textareaRef.current
@@ -165,17 +149,13 @@ export function ChatArea() {
   }, [messages])
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col bg-background">
-      <header className="absolute top-[var(--floating-padding)] right-[var(--floating-padding)] left-0 z-10 flex items-center gap-2 overflow-hidden rounded-lg border border-border bg-card/80 px-4 py-3 shadow backdrop-blur">
-        <div className="relative flex items-center justify-center" style={{ width: 28, height: 28, overflow: "visible" }}>
-          <div className="absolute" style={{ transform: "translate(-50%, -50%)", left: "50%", top: "50%" }}>
-            <AnimatedOrb ref={orbRef} initialConfig={{ size: 160, ringCount: 2, cometCount: 2, sparkliness: 0.3, blobiness: 0.1, animationScale: 0.3 }} initialState="sleep" />
-          </div>
-        </div>
+    <div className="isolate relative flex min-h-0 flex-1 flex-col bg-background">
+      {/* Header */}
+      <header className="ambient-glow flex shrink-0 items-center gap-2 border-b border-border/50 bg-background px-4 py-4">
         {/* Center: Talos name + status */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-x-0 flex items-center justify-center">
           <div className="flex flex-col items-center leading-none">
-            <span className="font-semibold text-foreground text-sm">Talos</span>
+            <span className="text-base font-semibold text-foreground">Talos</span>
             <span className="text-[10px] font-mono text-muted-foreground/70 italic truncate max-w-[140px]">
               {agentStatus === "idle" ? "Sleeping" : latestStatusLog ?? "Thinking\u2026"}
             </span>
@@ -202,8 +182,10 @@ export function ChatArea() {
           </button>
         )}
       </header>
+
+      {/* Messages */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className="flex-1 font-chat scrollbar-thumb-only p-4 pt-[calc(var(--floating-padding)_+_70px)] pb-20">
+        <div className="flex-1 font-chat scrollbar-thumb-only p-4 pb-20">
           {messages.length === 0 && !inboxContext ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
               {!hasProvider ? (
@@ -218,7 +200,10 @@ export function ChatArea() {
                   </a>
                 </>
               ) : (
-                <p className="text-sm">Send a message to start chatting.</p>
+                <>
+                  <p className="text-lg font-medium text-foreground">{getGreeting()}</p>
+                  <p className="text-sm">How can I help you today?</p>
+                </>
               )}
             </div>
           ) : (
@@ -237,7 +222,7 @@ export function ChatArea() {
                 ),
               )}
               {isStreaming && (
-                <div className="flex items-center gap-2 text-muted-foreground text-sm pl-11">
+                <div className="flex items-center gap-2 text-muted-foreground text-sm pl-2">
                   <Loader2 className="size-3 animate-spin" />
                   <span>Talos is thinking...</span>
                 </div>
@@ -246,7 +231,7 @@ export function ChatArea() {
             </div>
           )}
         </div>
-        <div className="pointer-events-none absolute bottom-[var(--floating-padding)] right-[var(--floating-padding)] left-0 flex flex-col items-stretch">
+        <div className="isolate pointer-events-none absolute inset-x-0 bottom-4 flex flex-col items-stretch px-4">
           <div className="pointer-events-auto flex items-center gap-1 px-1 pb-1">
             <button
               onClick={() => {
@@ -261,7 +246,7 @@ export function ChatArea() {
           </div>
           <form
             onSubmit={handleSubmit}
-            className="pointer-events-auto flex w-full items-end gap-2 rounded-lg border border-border bg-card/95 px-3 py-2 shadow-lg backdrop-blur"
+            className="chatbox-ambient-glow pointer-events-auto flex w-full items-end gap-2 rounded-xl border border-border bg-card px-3 py-2 shadow-lg"
           >
             <textarea
               ref={textareaRef}
@@ -284,7 +269,8 @@ export function ChatArea() {
             <button
               type="submit"
               disabled={!inputValue.trim() || isStreaming || connectionStatus !== "connected"}
-              className="inline-flex shrink-0 items-center justify-center rounded-md bg-primary p-2 text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: "var(--orb-primary)" }}
             >
               <Send className="size-4" />
             </button>

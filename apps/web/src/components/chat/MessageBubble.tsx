@@ -1,5 +1,4 @@
 import type { Message } from "@talos/shared/types"
-import { User, Bot } from "lucide-react"
 import { ToolCallDisplay } from "./ToolCallDisplay"
 import { Markdown } from "./Markdown"
 
@@ -11,28 +10,17 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user"
 
   return (
-    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}>
+      <span className="mb-1 text-[11px] font-medium text-muted-foreground">
+        {isUser ? "You" : "Talos"}
+      </span>
       <div
-        className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
-          isUser ? "bg-primary" : "bg-muted"
-        }`}
-      >
-        {isUser ? (
-          <User className="size-4 text-primary-foreground" />
-        ) : (
-          <Bot className="size-4 text-muted-foreground" />
-        )}
-      </div>
-      <div
-        className={`max-w-[80%] rounded-lg px-4 py-2.5 ${
+        className={`max-w-[80%] px-4 py-2.5 ${
           isUser
-            ? "bg-primary/20 text-foreground"
-            : "bg-muted text-foreground"
+            ? "rounded-2xl rounded-tr-md bg-primary/10 text-foreground"
+            : "rounded-2xl rounded-tl-md border border-border/50 bg-card text-foreground"
         }`}
       >
-        <p className="text-xs font-medium mb-1 text-muted-foreground">
-          {isUser ? "You" : "Talos"}
-        </p>
         {message.toolCalls && message.toolCalls.length > 0 && (
           <div className="mb-2 border-b border-border pb-2">
             {message.toolCalls.map((tc) => (
