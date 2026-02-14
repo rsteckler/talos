@@ -245,6 +245,45 @@ router.post("/tools/:id/allow-without-asking", (req, res) => {
   res.json({ data: info });
 });
 
+// POST /api/tools/:id/call/:functionName — Call a tool function directly
+router.post("/tools/:id/call/:functionName", async (req, res) => {
+  const toolId = req.params["id"]!;
+  const functionName = req.params["functionName"]!;
+
+  const loaded = getLoadedTool(toolId);
+  if (!loaded) {
+    res.status(404).json({ error: "Tool not found" });
+    return;
+  }
+
+  const handler = loaded.handlers[functionName];
+  if (!handler) {
+    res.status(404).json({ error: `Function '${functionName}' not found on tool '${toolId}'` });
+    return;
+  }
+
+  // Get stored credentials
+  const configRow = db
+    .select()
+    .from(schema.toolConfigs)
+    .where(eq(schema.toolConfigs.toolId, toolId))
+    .get();
+
+  const storedConfig: Record<string, string> = configRow?.config
+    ? (JSON.parse(configRow.config) as Record<string, string>)
+    : {};
+
+  const args = (req.body as { args?: Record<string, unknown> })?.args ?? {};
+
+  try {
+    const result = await handler(args, storedConfig);
+    res.json({ data: result });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Function call failed";
+    res.status(500).json({ error: message });
+  }
+});
+
 // GET /api/trigger-types
 router.get("/trigger-types", (_req, res) => {
   res.json({ data: getAllTriggerTypes() });

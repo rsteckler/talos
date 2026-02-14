@@ -93,6 +93,8 @@ async function pollTrigger(reg: RegisteredTrigger): Promise<void> {
     const state = getTriggerState(reg.fullId);
     const handler = reg.handler;
 
+    if (!handler.poll) return;
+
     const result = await handler.poll(config, state, config);
     saveTriggerState(reg.fullId, result.newState);
 
@@ -105,6 +107,15 @@ async function pollTrigger(reg: RegisteredTrigger): Promise<void> {
       };
 
       for (const task of tasks) {
+        if (handler.filter) {
+          try {
+            const taskConfig = JSON.parse(task.triggerConfig) as Record<string, unknown>;
+            if (!handler.filter(result.event, taskConfig)) continue;
+          } catch {
+            // invalid config — skip filter
+          }
+        }
+
         executeTask(task, triggerContext).catch((err: unknown) => {
           log.error(`Failed to execute task "${task.name}" for trigger ${reg.fullId}`, {
             taskId: task.id,
@@ -171,10 +182,10 @@ function refreshAll(): void {
       .filter((tt) => isRegisteredTrigger(tt))
   );
 
-  // Start pollers for triggers that have active tasks
+  // Start pollers for triggers that have active tasks (skip subscribe-capable)
   for (const triggerType of activeTriggerTypes) {
     const reg = getTrigger(triggerType);
-    if (reg && !activePollers.has(triggerType)) {
+    if (reg && reg.handler.poll && !reg.handler.subscribe && !activePollers.has(triggerType)) {
       startPoller(reg);
     }
   }

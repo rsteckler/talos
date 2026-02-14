@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Separator } from "@/components/ui/separator"
 import {
   Select,
   SelectContent,
@@ -20,8 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 import { useTaskStore } from "@/stores"
 import { toolsApi } from "@/api/tools"
+import { TriggerParamEditor } from "./TriggerParamEditor"
 import type { Task, TriggerType, TriggerTypeInfo } from "@talos/shared/types"
 
 interface TaskDialogProps {
@@ -44,6 +47,7 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [triggerTypes, setTriggerTypes] = useState<TriggerTypeInfo[]>([])
+  const [triggerParams, setTriggerParams] = useState<Record<string, unknown>>({})
 
   // Fetch trigger types when dialog opens
   useEffect(() => {
@@ -57,6 +61,12 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
   const builtinTriggers = triggerTypes.filter((t) => t.category === "builtin")
   const toolTriggers = triggerTypes.filter((t) => t.category === "tool")
   const isToolTrigger = toolTriggers.some((t) => t.id === triggerType)
+  const selectedTriggerInfo = triggerTypes.find((t) => t.id === triggerType)
+  const currentTriggerParams = selectedTriggerInfo?.params
+  const hasComplexTrigger = isToolTrigger
+    && currentTriggerParams != null
+    && currentTriggerParams.length > 0
+    && currentTriggerParams.some((p) => p.type === "multi-select")
 
   // Reset form when dialog opens or task changes
   useEffect(() => {
@@ -76,9 +86,12 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
           } else if (task.trigger_type === "interval") {
             setIntervalMinutes(String(config["interval_minutes"] ?? "60"))
           }
+          // Seed trigger params from stored config (for tool triggers with params)
+          setTriggerParams(config)
         } catch {
           setCronExpression("")
           setIntervalMinutes("60")
+          setTriggerParams({})
         }
       } else {
         setName("")
@@ -89,6 +102,7 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
         setActionPrompt("")
         setIsActive(true)
         setError(null)
+        setTriggerParams({})
       }
     }
   }, [open, task])
@@ -99,6 +113,9 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
     }
     if (triggerType === "interval") {
       return JSON.stringify({ interval_minutes: Number(intervalMinutes) || 60 })
+    }
+    if (isToolTrigger && Object.keys(triggerParams).length > 0) {
+      return JSON.stringify(triggerParams)
     }
     return "{}"
   }
@@ -157,7 +174,10 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+      <DialogContent className={cn(
+        "max-h-[85vh] flex flex-col transition-[max-width] duration-200",
+        hasComplexTrigger ? "sm:max-w-2xl" : "max-w-lg",
+      )}>
         <DialogHeader>
           <DialogTitle>{task ? "Edit Task" : "New Task"}</DialogTitle>
           <DialogDescription>
@@ -167,134 +187,179 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 overflow-y-auto scrollbar-thumb-only flex-1 pr-1">
-          <div className="space-y-2">
-            <Label htmlFor="task-name">Name</Label>
-            <Input
-              id="task-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Daily standup summary"
-            />
-          </div>
+        <div className="space-y-5 overflow-y-auto scrollbar-thumb-only flex-1 px-1">
+          {/* ── Task Details ── */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60 shrink-0">Task Details</span>
+              <Separator />
+            </div>
+            <div className={cn(
+              "gap-3",
+              hasComplexTrigger ? "grid grid-cols-2" : "space-y-3",
+            )}>
+              <div className="space-y-2">
+                <Label htmlFor="task-name">Name</Label>
+                <Input
+                  id="task-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Daily standup summary"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="task-description">Description</Label>
+                <Input
+                  id="task-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional description"
+                />
+              </div>
+            </div>
+          </section>
 
-          <div className="space-y-2">
-            <Label htmlFor="task-description">Description</Label>
-            <Input
-              id="task-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
-            />
-          </div>
+          {/* ── Trigger ── */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60 shrink-0">Trigger</span>
+              <Separator />
+            </div>
 
-          <div className="space-y-2">
-            <Label>Trigger Type</Label>
-            <Select value={triggerType} onValueChange={(v) => setTriggerType(v as TriggerType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Built-in</SelectLabel>
-                  {builtinTriggers.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
-                  ))}
-                  {builtinTriggers.length === 0 && (
-                    <>
-                      <SelectItem value="manual">Manual</SelectItem>
-                      <SelectItem value="cron">Cron Schedule</SelectItem>
-                      <SelectItem value="interval">Interval</SelectItem>
-                      <SelectItem value="webhook">Webhook</SelectItem>
-                    </>
-                  )}
-                </SelectGroup>
-                {toolTriggers.length > 0 && (
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={triggerType} onValueChange={(v) => {
+                setTriggerType(v as TriggerType)
+                setTriggerParams({})
+              }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
                   <SelectGroup>
-                    <SelectLabel>Tool Events</SelectLabel>
-                    {toolTriggers.map((t) => (
+                    <SelectLabel>Built-in</SelectLabel>
+                    {builtinTriggers.map((t) => (
                       <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
                     ))}
+                    {builtinTriggers.length === 0 && (
+                      <>
+                        <SelectItem value="manual">Manual</SelectItem>
+                        <SelectItem value="cron">Cron Schedule</SelectItem>
+                        <SelectItem value="interval">Interval</SelectItem>
+                        <SelectItem value="webhook">Webhook</SelectItem>
+                      </>
+                    )}
                   </SelectGroup>
+                  {toolTriggers.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Tool Events</SelectLabel>
+                      {toolTriggers.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {triggerType === "cron" && (
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-3 border-l-2 border-l-primary/20">
+                <div className="space-y-2">
+                  <Label htmlFor="task-cron">Cron Expression</Label>
+                  <Input
+                    id="task-cron"
+                    value={cronExpression}
+                    onChange={(e) => setCronExpression(e.target.value)}
+                    placeholder="0 9 * * 1-5"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Standard cron syntax. Example: &quot;0 9 * * 1-5&quot; = weekdays at 9am
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {triggerType === "interval" && (
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-3 border-l-2 border-l-primary/20">
+                <div className="space-y-2">
+                  <Label htmlFor="task-interval">Interval (minutes)</Label>
+                  <Input
+                    id="task-interval"
+                    type="number"
+                    min="1"
+                    value={intervalMinutes}
+                    onChange={(e) => setIntervalMinutes(e.target.value)}
+                    placeholder="60"
+                  />
+                </div>
+              </div>
+            )}
+
+            {triggerType === "webhook" && (
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-4 border-l-2 border-l-primary/20 text-sm text-muted-foreground">
+                <p>Webhook URL will be available after creation:</p>
+                {task && (
+                  <code className="mt-1 block text-xs break-all">
+                    POST /api/webhooks/{task.id}
+                  </code>
                 )}
-              </SelectContent>
-            </Select>
-          </div>
+              </div>
+            )}
 
-          {triggerType === "cron" && (
+            {isToolTrigger && currentTriggerParams && currentTriggerParams.length > 0 && selectedTriggerInfo?.toolId && (
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-4 border-l-2 border-l-primary/20">
+                <TriggerParamEditor
+                  params={currentTriggerParams}
+                  toolId={selectedTriggerInfo.toolId}
+                  values={triggerParams}
+                  onChange={setTriggerParams}
+                />
+              </div>
+            )}
+
+            {isToolTrigger && (!currentTriggerParams || currentTriggerParams.length === 0) && (
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-4 border-l-2 border-l-primary/20 text-sm text-muted-foreground">
+                <p>This trigger fires automatically based on tool settings.</p>
+                <p className="mt-1 text-xs">Configure the poll interval in Settings &gt; Tools.</p>
+              </div>
+            )}
+          </section>
+
+          {/* ── Action ── */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60 shrink-0">Action</span>
+              <Separator />
+            </div>
             <div className="space-y-2">
-              <Label htmlFor="task-cron">Cron Expression</Label>
-              <Input
-                id="task-cron"
-                value={cronExpression}
-                onChange={(e) => setCronExpression(e.target.value)}
-                placeholder="0 9 * * 1-5"
-              />
-              <p className="text-xs text-muted-foreground">
-                Standard cron syntax. Example: "0 9 * * 1-5" = weekdays at 9am
-              </p>
-            </div>
-          )}
-
-          {triggerType === "interval" && (
-            <div className="space-y-2">
-              <Label htmlFor="task-interval">Interval (minutes)</Label>
-              <Input
-                id="task-interval"
-                type="number"
-                min="1"
-                value={intervalMinutes}
-                onChange={(e) => setIntervalMinutes(e.target.value)}
-                placeholder="60"
+              <Label htmlFor="task-prompt">Prompt</Label>
+              <textarea
+                id="task-prompt"
+                value={actionPrompt}
+                onChange={(e) => setActionPrompt(e.target.value)}
+                placeholder="Summarize the latest news about AI and provide a brief analysis..."
+                className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-y"
+                rows={4}
               />
             </div>
-          )}
+          </section>
+        </div>
 
-          {triggerType === "webhook" && (
-            <div className="rounded-md border p-3 text-sm text-muted-foreground">
-              <p>Webhook URL will be available after creation:</p>
-              {task && (
-                <code className="mt-1 block text-xs break-all">
-                  POST /api/webhooks/{task.id}
-                </code>
-              )}
-            </div>
-          )}
-
-          {isToolTrigger && (
-            <div className="rounded-md border p-3 text-sm text-muted-foreground">
-              <p>This trigger fires automatically based on tool settings.</p>
-              <p className="mt-1 text-xs">Configure the poll interval in Settings &gt; Tools.</p>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="task-prompt">Action Prompt</Label>
-            <textarea
-              id="task-prompt"
-              value={actionPrompt}
-              onChange={(e) => setActionPrompt(e.target.value)}
-              placeholder="Summarize the latest news about AI and provide a brief analysis..."
-              className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-y"
-              rows={4}
-            />
+        {error && (
+          <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
+            <p className="text-sm text-destructive">{error}</p>
           </div>
+        )}
 
-          <div className="flex items-center justify-between">
-            <Label htmlFor="task-active">Active</Label>
+        <DialogFooter className="items-center">
+          <div className="flex items-center gap-2 mr-auto">
             <Switch
               id="task-active"
               checked={isActive}
               onCheckedChange={setIsActive}
             />
+            <Label htmlFor="task-active" className="text-sm text-muted-foreground">Active</Label>
           </div>
-
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
-        </div>
-
-        <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

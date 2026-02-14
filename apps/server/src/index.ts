@@ -18,7 +18,7 @@ import { attachWebSocket } from "./ws/index.js";
 import { loadAllTools } from "./tools/index.js";
 import { loadAllChannels, initChannels, shutdownChannels } from "./channels/index.js";
 import { scheduler } from "./scheduler/index.js";
-import { triggerPoller } from "./triggers/index.js";
+import { triggerPoller, triggerSubscriber } from "./triggers/index.js";
 import { createLogger, initLogger } from "./logger/index.js";
 
 const log = createLogger("server");
@@ -62,6 +62,7 @@ attachWebSocket(server);
 Promise.all([loadAllTools(), loadAllChannels()]).then(async () => {
   scheduler.init();
   triggerPoller.init();
+  triggerSubscriber.init();
   await initChannels().catch((err) => {
     log.error("Failed to init channels", err instanceof Error ? { error: err.message } : undefined);
   });
@@ -73,6 +74,7 @@ Promise.all([loadAllTools(), loadAllChannels()]).then(async () => {
   // Start anyway even if loading fails
   scheduler.init();
   triggerPoller.init();
+  triggerSubscriber.init();
   server.listen(PORT, () => {
     log.info(`Talos server listening on http://localhost:${PORT} (plugin loading failed)`);
   });
@@ -82,6 +84,7 @@ Promise.all([loadAllTools(), loadAllChannels()]).then(async () => {
 function handleShutdown() {
   log.info("Shutting down...");
   shutdownChannels().catch(() => {});
+  triggerSubscriber.shutdown();
   triggerPoller.shutdown();
   scheduler.shutdown();
   server.close();

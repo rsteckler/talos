@@ -40,6 +40,7 @@ export function getAllTriggerTypes(): TriggerTypeInfo[] {
       category: "tool",
       toolId: reg.toolId,
       description: reg.spec.description,
+      params: reg.spec.params,
     });
   }
   return [...BUILTIN_TYPES, ...toolTypes];

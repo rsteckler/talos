@@ -183,10 +183,28 @@ export type ConnectionStatus = "connected" | "disconnected" | "reconnecting";
 
 // --- Tools ---
 
+export interface TriggerParamSource {
+  function: string;
+  args?: Record<string, unknown>;
+  valuePath: string;
+  labelPath: string;
+  groupPath?: string;
+}
+
+export interface TriggerParamSpec {
+  key: string;
+  label: string;
+  type: "multi-select" | "number" | "text";
+  description?: string;
+  default?: unknown;
+  source?: TriggerParamSource; // required for multi-select
+}
+
 export interface ToolTriggerSpec {
   id: string;
   label: string;
   description?: string;
+  params?: TriggerParamSpec[];
 }
 
 export interface ToolSettingSpec {
@@ -203,6 +221,7 @@ export interface TriggerTypeInfo {
   category: "builtin" | "tool";
   toolId?: string;
   description?: string;
+  params?: TriggerParamSpec[];
 }
 
 export interface TriggerEvent {
@@ -220,11 +239,22 @@ export interface ToolLogger {
 }
 
 export interface ToolTriggerHandler {
-  poll(
+  poll?(
     credentials: Record<string, string>,
     state: Record<string, unknown>,
     settings: Record<string, string>,
   ): Promise<{ event: TriggerEvent | null; newState: Record<string, unknown> }>;
+
+  subscribe?(
+    credentials: Record<string, string>,
+    settings: Record<string, string>,
+    emit: (event: TriggerEvent) => void,
+  ): Promise<() => void>; // returns unsubscribe function
+
+  filter?(
+    event: TriggerEvent,
+    taskConfig: Record<string, unknown>,
+  ): boolean;
 }
 
 export interface ToolCredentialSpec {

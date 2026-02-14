@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { executeTask } from "./executor.js";
 import { createLogger } from "../logger/index.js";
-import { triggerPoller } from "../triggers/index.js";
+import { triggerPoller, triggerSubscriber } from "../triggers/index.js";
 
 const log = createLogger("scheduler");
 
@@ -48,6 +48,7 @@ function scheduleTask(task: TaskRow): void {
 
   if (!task.isActive) {
     triggerPoller.refreshAll();
+    triggerSubscriber.refreshAll();
     return;
   }
 
@@ -149,12 +150,14 @@ function scheduleTask(task: TaskRow): void {
   // Tool triggers are handled by the trigger poller
 
   triggerPoller.refreshAll();
+  triggerSubscriber.refreshAll();
 }
 
 function unscheduleTask(taskId: string): void {
   const job = jobs.get(taskId);
   if (!job) {
     triggerPoller.refreshAll();
+    triggerSubscriber.refreshAll();
     return;
   }
 
@@ -166,6 +169,7 @@ function unscheduleTask(taskId: string): void {
 
   jobs.delete(taskId);
   triggerPoller.refreshAll();
+  triggerSubscriber.refreshAll();
 }
 
 function rescheduleTask(task: TaskRow): void {

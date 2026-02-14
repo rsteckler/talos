@@ -142,7 +142,7 @@ export function EditProviderDialog({ provider, onOpenChange }: EditProviderDialo
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 overflow-y-auto scrollbar-thumb-only flex-1 pr-1">
+        <div className="space-y-4 overflow-y-auto scrollbar-thumb-only flex-1 px-1">
           {/* Provider info section */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">

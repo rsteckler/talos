@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import type { ToolTriggerHandler, TriggerEvent } from "@talos/shared/types";
 
 // ---------------------------------------------------------------------------
 // Credential helpers
@@ -181,10 +182,12 @@ const search_entities = wrap(async (args, cfg) => {
     });
   }
 
-  const max = limit ?? 50;
+  // limit=0 means "return all" (used by UI multi-select); undefined/null defaults to 50 for LLM calls
+  const max = limit === 0 ? Infinity : (limit ?? 50);
+  const sliced = filtered.slice(0, max);
   return {
     total: filtered.length,
-    entities: filtered.slice(0, max).map((s) => ({
+    entities: sliced.map((s) => ({
       entity_id: s.entity_id,
       state: s.state,
       friendly_name: s.attributes["friendly_name"],
@@ -997,6 +1000,248 @@ const list_addons = wrap(async (_args, cfg) => {
 const get_error_log = wrap(async (_args, cfg) => {
   return haGet(cfg, "error_log");
 });
+
+// ---------------------------------------------------------------------------
+// Shared persistent WebSocket connection pool for triggers
+// ---------------------------------------------------------------------------
+
+interface HAConnection {
+  refCount: number;
+  ws: WebSocket | null;
+  listeners: Set<(event: HAStateChangedEvent) => void>;
+  closed: boolean;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
+  reconnectDelay: number;
+}
+
+interface HAStateChangedEvent {
+  entity_id: string;
+  old_state: { state: string; attributes: Record<string, unknown> } | null;
+  new_state: { state: string; attributes: Record<string, unknown> } | null;
+}
+
+const connectionPool = new Map<string, HAConnection>();
+
+function connectHA(cfg: HAConfig, conn: HAConnection): void {
+  if (conn.closed) return;
+
+  const wsUrl = cfg.baseUrl.replace(/^http/, "ws") + "/api/websocket";
+  let msgId = 1;
+
+  const ws = new WebSocket(wsUrl);
+  conn.ws = ws;
+
+  ws.on("error", () => {
+    // Handled by close event
+  });
+
+  ws.on("close", () => {
+    conn.ws = null;
+    if (conn.closed) return;
+
+    // Reconnect with exponential backoff
+    conn.reconnectTimer = setTimeout(() => {
+      conn.reconnectTimer = null;
+      connectHA(cfg, conn);
+    }, conn.reconnectDelay);
+
+    conn.reconnectDelay = Math.min(conn.reconnectDelay * 2, 60_000);
+  });
+
+  ws.on("message", (raw) => {
+    let msg: { type: string; id?: number; success?: boolean; event?: { event_type: string; data: unknown } };
+    try {
+      msg = JSON.parse(String(raw)) as typeof msg;
+    } catch {
+      return;
+    }
+
+    if (msg.type === "auth_required") {
+      ws.send(JSON.stringify({ type: "auth", access_token: cfg.token }));
+    } else if (msg.type === "auth_ok") {
+      // Reset backoff on successful connection
+      conn.reconnectDelay = 1_000;
+      // Subscribe to state_changed events
+      ws.send(JSON.stringify({ id: msgId++, type: "subscribe_events", event_type: "state_changed" }));
+    } else if (msg.type === "auth_invalid") {
+      // Don't reconnect on auth failure
+      conn.closed = true;
+      ws.close();
+    } else if (msg.type === "event" && msg.event?.event_type === "state_changed") {
+      const data = msg.event.data as HAStateChangedEvent;
+      for (const listener of conn.listeners) {
+        try {
+          listener(data);
+        } catch {
+          // Listener error shouldn't break the event loop
+        }
+      }
+    }
+  });
+}
+
+function getSharedConnection(
+  cfg: HAConfig,
+  listener: (event: HAStateChangedEvent) => void,
+): () => void {
+  const key = cfg.baseUrl;
+  let conn = connectionPool.get(key);
+
+  if (!conn) {
+    conn = {
+      refCount: 0,
+      ws: null,
+      listeners: new Set(),
+      closed: false,
+      reconnectTimer: null,
+      reconnectDelay: 1_000,
+    };
+    connectionPool.set(key, conn);
+    connectHA(cfg, conn);
+  }
+
+  conn.refCount++;
+  conn.listeners.add(listener);
+
+  return () => {
+    conn.listeners.delete(listener);
+    conn.refCount--;
+    if (conn.refCount <= 0) {
+      conn.closed = true;
+      if (conn.reconnectTimer) {
+        clearTimeout(conn.reconnectTimer);
+        conn.reconnectTimer = null;
+      }
+      if (conn.ws) {
+        conn.ws.close();
+        conn.ws = null;
+      }
+      connectionPool.delete(key);
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Trigger: state_changed
+// ---------------------------------------------------------------------------
+
+const state_changed_handler: ToolTriggerHandler = {
+  async subscribe(
+    credentials: Record<string, string>,
+    _settings: Record<string, string>,
+    emit: (event: TriggerEvent) => void,
+  ): Promise<() => void> {
+    const cfg = getConfig(credentials);
+
+    const release = getSharedConnection(cfg, (event) => {
+      emit({
+        triggerId: "state_changed",
+        toolId: "home-assistant",
+        summary: `${event.entity_id} changed from "${event.old_state?.state ?? "unknown"}" to "${event.new_state?.state ?? "unknown"}"`,
+        data: {
+          entity_id: event.entity_id,
+          old_state: event.old_state?.state ?? null,
+          new_state: event.new_state?.state ?? null,
+          new_attributes: event.new_state?.attributes ?? {},
+        },
+      });
+    });
+
+    return release;
+  },
+
+  filter(event: TriggerEvent, taskConfig: Record<string, unknown>): boolean {
+    const entities = taskConfig["entities"];
+    if (!Array.isArray(entities) || entities.length === 0) return true;
+
+    const data = event.data as { entity_id?: string } | undefined;
+    const entityId = data?.entity_id;
+    if (!entityId) return false;
+
+    return entities.some((pattern: unknown) => {
+      if (typeof pattern !== "string") return false;
+      // Support wildcard domain matching: "light.*" matches any light entity
+      if (pattern.endsWith(".*")) {
+        const domain = pattern.slice(0, -2);
+        return entityId.startsWith(domain + ".");
+      }
+      return entityId === pattern;
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Trigger: device_unavailable
+// ---------------------------------------------------------------------------
+
+const device_unavailable_handler: ToolTriggerHandler = {
+  async subscribe(
+    credentials: Record<string, string>,
+    _settings: Record<string, string>,
+    emit: (event: TriggerEvent) => void,
+  ): Promise<() => void> {
+    const cfg = getConfig(credentials);
+
+    const release = getSharedConnection(cfg, (event) => {
+      const oldState = event.old_state?.state;
+      const newState = event.new_state?.state;
+
+      // Only fire when transitioning TO unavailable/unknown from a different state
+      if (
+        (newState === "unavailable" || newState === "unknown") &&
+        oldState !== "unavailable" &&
+        oldState !== "unknown"
+      ) {
+        emit({
+          triggerId: "device_unavailable",
+          toolId: "home-assistant",
+          summary: `${event.entity_id} became ${newState} (was "${oldState ?? "none"}")`,
+          data: {
+            entity_id: event.entity_id,
+            old_state: oldState ?? null,
+            new_state: newState,
+          },
+        });
+      }
+    });
+
+    return release;
+  },
+
+  filter(event: TriggerEvent, taskConfig: Record<string, unknown>): boolean {
+    const data = event.data as { entity_id?: string } | undefined;
+    const entityId = data?.entity_id;
+    if (!entityId) return false;
+
+    // Check entities filter
+    const entities = taskConfig["entities"];
+    if (Array.isArray(entities) && entities.length > 0) {
+      const entityMatch = entities.some((pattern: unknown) => {
+        if (typeof pattern !== "string") return false;
+        if (pattern.endsWith(".*")) {
+          const domain = pattern.slice(0, -2);
+          return entityId.startsWith(domain + ".");
+        }
+        return entityId === pattern;
+      });
+      if (!entityMatch) return false;
+    }
+
+    // Check domains filter
+    const domains = taskConfig["domains"];
+    if (Array.isArray(domains) && domains.length > 0) {
+      const entityDomain = entityId.split(".")[0];
+      if (!domains.includes(entityDomain)) return false;
+    }
+
+    return true;
+  },
+};
+
+export const triggers: Record<string, ToolTriggerHandler> = {
+  state_changed: state_changed_handler,
+  device_unavailable: device_unavailable_handler,
+};
 
 // ---------------------------------------------------------------------------
 // Export all handlers

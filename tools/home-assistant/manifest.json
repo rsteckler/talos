@@ -18,6 +18,62 @@
       "required": true
     }
   ],
+  "triggers": [
+    {
+      "id": "state_changed",
+      "label": "Entity state changed",
+      "description": "Fires when a Home Assistant entity changes state (e.g. light turned on, sensor value changed)",
+      "params": [
+        {
+          "key": "entities",
+          "label": "Entities to watch",
+          "type": "multi-select",
+          "description": "Leave empty to match all entities.",
+          "source": {
+            "function": "search_entities",
+            "args": { "limit": 0 },
+            "valuePath": "entities.entity_id",
+            "labelPath": "entities.friendly_name",
+            "groupPath": "entities.domain"
+          }
+        },
+        {
+          "key": "cooldown_seconds",
+          "label": "Cooldown (seconds)",
+          "type": "number",
+          "description": "Minimum seconds between task executions.",
+          "default": 60
+        }
+      ]
+    },
+    {
+      "id": "device_unavailable",
+      "label": "Device unavailable",
+      "description": "Fires when a device becomes unavailable or unknown",
+      "params": [
+        {
+          "key": "entities",
+          "label": "Entities to watch",
+          "type": "multi-select",
+          "description": "Leave empty to match all entities.",
+          "source": {
+            "function": "search_entities",
+            "args": { "limit": 0 },
+            "valuePath": "entities.entity_id",
+            "labelPath": "entities.friendly_name",
+            "groupPath": "entities.domain"
+          }
+        },
+        {
+          "key": "cooldown_seconds",
+          "label": "Cooldown (seconds)",
+          "type": "number",
+          "description": "Minimum seconds between task executions.",
+          "default": 60
+        }
+      ]
+    }
+  ],
   "functions": [
     {
       "name": "search_entities",

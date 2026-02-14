@@ -32,4 +32,10 @@ export const toolsApi = {
 
   getTriggerTypes: () =>
     request<TriggerTypeInfo[]>("/trigger-types"),
+
+  callFunction: (toolId: string, fn: string, args?: Record<string, unknown>) =>
+    request<unknown>(`/tools/${toolId}/call/${fn}`, {
+      method: "POST",
+      body: JSON.stringify({ args: args ?? {} }),
+    }),
 }

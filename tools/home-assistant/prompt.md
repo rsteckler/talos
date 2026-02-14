@@ -125,6 +125,21 @@ Control and query a Home Assistant smart home instance. Requires a Home Assistan
 - `home-assistant_list_addons` — List installed add-ons (requires HA Supervisor).
 - `home-assistant_get_error_log` — Get the HA error log.
 
+### Triggers
+
+Home Assistant supports real-time event triggers via WebSocket subscription. These fire automatically when state changes occur in Home Assistant.
+
+- **`home-assistant:state_changed`** — Fires when any entity changes state (e.g. light turned on, sensor value changed). Configure `entities` in the task trigger config to filter which entities to watch.
+  - `entities`: string array of entity IDs or domain wildcards (e.g. `["light.living_room", "sensor.*"]`). Empty or omitted = match all.
+  - `cooldown_seconds`: minimum seconds between task executions (default: 60). Prevents event storms.
+
+- **`home-assistant:device_unavailable`** — Fires when a device transitions to `unavailable` or `unknown` state from a previously available state.
+  - `entities`: string array of entity IDs or domain wildcards to watch.
+  - `domains`: string array of domains to watch (e.g. `["sensor", "light"]`).
+  - `cooldown_seconds`: minimum seconds between task executions (default: 60).
+
+Both triggers share a single persistent WebSocket connection per Home Assistant instance and reconnect automatically with exponential backoff if the connection drops.
+
 ### Usage Tips
 
 - Entity IDs follow the format `domain.object_id` (e.g. `light.living_room`, `sensor.outside_temperature`).
