@@ -2,7 +2,37 @@
   "id": "file-operations",
   "name": "File Operations",
   "description": "Read, write, and list files and directories on the host system.",
-  "version": "2.0.0",
+  "version": "2.1.0",
+  "settings": [
+    {
+      "name": "allow_read",
+      "label": "Allow Read",
+      "type": "boolean",
+      "default": "true",
+      "description": "Allow reading file contents."
+    },
+    {
+      "name": "allow_write",
+      "label": "Allow Write",
+      "type": "boolean",
+      "default": "true",
+      "description": "Allow writing and creating files."
+    },
+    {
+      "name": "allow_delete",
+      "label": "Allow Delete",
+      "type": "boolean",
+      "default": "false",
+      "description": "Allow deleting files and empty directories."
+    },
+    {
+      "name": "sandbox_path",
+      "label": "Sandbox Path",
+      "type": "string",
+      "default": "",
+      "description": "If set, restrict all file operations to this directory. Leave empty for unrestricted access."
+    }
+  ],
   "functions": [
     {
       "name": "read",
@@ -61,6 +91,20 @@
           "path": {
             "type": "string",
             "description": "Absolute or relative path to the directory."
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "delete",
+      "description": "Delete a file or empty directory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute or relative path to the file or empty directory to delete."
           }
         },
         "required": ["path"]

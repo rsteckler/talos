@@ -30,6 +30,16 @@ function toToolInfo(toolId: string): ToolInfo | null {
     ? !!storedConfig["refresh_token"]
     : undefined;
 
+  // Extract saved setting values (not credentials) from stored config
+  const settingSpecs = loaded.manifest.settings ?? [];
+  const settingNames = new Set(settingSpecs.map((s) => s.name));
+  const settingValues: Record<string, string> = {};
+  for (const [key, value] of Object.entries(storedConfig)) {
+    if (settingNames.has(key)) {
+      settingValues[key] = value;
+    }
+  }
+
   return {
     id: loaded.manifest.id,
     name: loaded.manifest.name,
@@ -41,6 +51,7 @@ function toToolInfo(toolId: string): ToolInfo | null {
     oauth: loaded.manifest.oauth,
     oauthConnected,
     settings: loaded.manifest.settings ?? [],
+    settingValues: Object.keys(settingValues).length > 0 ? settingValues : undefined,
     triggers: loaded.manifest.triggers ?? [],
     functions: loaded.manifest.functions,
     hasRequiredCredentials,

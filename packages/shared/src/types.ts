@@ -271,6 +271,7 @@ export interface ToolInfo {
   oauth?: ToolOAuthSpec;
   oauthConnected?: boolean;
   settings: ToolSettingSpec[];
+  settingValues?: Record<string, string>;
   triggers: ToolTriggerSpec[];
   functions: ToolFunctionSpec[];
   hasRequiredCredentials: boolean;

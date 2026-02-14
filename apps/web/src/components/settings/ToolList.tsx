@@ -101,7 +101,7 @@ export function ToolList() {
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {tool.credentials.length > 0 && (
+              {(tool.credentials.length > 0 || tool.settings.length > 0) && (
                 <Button
                   variant="ghost"
                   size="icon"
