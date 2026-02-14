@@ -44,6 +44,8 @@ export function ChatArea() {
 
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const shouldAutoScrollRef = useRef(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const resizeTextarea = useCallback(() => {
@@ -51,6 +53,13 @@ export function ChatArea() {
     if (!ta) return
     ta.style.height = "auto"
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
+  }, [])
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    shouldAutoScrollRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 80
   }, [])
 
   // Clear chat logs when switching conversations
@@ -76,8 +85,17 @@ export function ChatArea() {
   }, [messages, chatLogs, settings.showLogsInChat])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [timeline])
+    if (!shouldAutoScrollRef.current) return
+    const el = scrollContainerRef.current
+    if (!el) return
+
+    if (isStreaming) {
+      // During streaming: instant scroll to avoid competing smooth animations
+      el.scrollTop = el.scrollHeight
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [timeline, isStreaming])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -144,7 +162,6 @@ export function ChatArea() {
         }
       }
     }
-    if (totalTokens === 0) return null
     return { inputTokens, outputTokens, totalTokens, cost }
   }, [messages])
 
@@ -185,7 +202,7 @@ export function ChatArea() {
 
       {/* Messages */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div className="flex-1 font-chat scrollbar-thumb-only p-4 pb-20">
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 font-chat scrollbar-thumb-only p-4 pb-20">
           {messages.length === 0 && !inboxContext ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
               {!hasProvider ? (
@@ -221,12 +238,14 @@ export function ChatArea() {
                   <InlineChatLog key={item.data.id} entry={item.data} />
                 ),
               )}
-              {isStreaming && (
-                <div className="flex items-center gap-2 text-muted-foreground text-sm pl-2">
-                  <Loader2 className="size-3 animate-spin" />
-                  <span>Talos is thinking...</span>
-                </div>
-              )}
+              <div
+                className={`flex items-center gap-2 text-muted-foreground text-sm pl-2 overflow-hidden transition-all duration-200 ${
+                  isStreaming ? "max-h-8 opacity-100" : "max-h-0 opacity-0"
+                }`}
+              >
+                <Loader2 className="size-3 animate-spin" />
+                <span>Talos is thinking...</span>
+              </div>
               <div ref={messagesEndRef} />
             </div>
           )}
@@ -246,7 +265,7 @@ export function ChatArea() {
           </div>
           <form
             onSubmit={handleSubmit}
-            className="chatbox-ambient-glow pointer-events-auto flex w-full items-end gap-2 rounded-xl border border-border bg-card px-3 py-2 shadow-lg"
+            className="chatbox-ambient-glow pointer-events-auto flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 shadow-lg"
           >
             <textarea
               ref={textareaRef}
