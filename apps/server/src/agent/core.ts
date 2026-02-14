@@ -11,6 +11,114 @@ import type { ApprovalGate } from "../tools/index.js";
 
 const log = createLogger("agent");
 
+// ---------------------------------------------------------------------------
+// LLM error formatting
+// ---------------------------------------------------------------------------
+
+/**
+ * Recursively dig through nested JSON (common with OpenRouter / proxy providers)
+ * to find the deepest human-readable error message.
+ */
+function extractNestedMessage(data: unknown): string | null {
+  if (!data) return null;
+
+  if (typeof data === "string") {
+    try {
+      return extractNestedMessage(JSON.parse(data));
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof data !== "object") return null;
+  const obj = data as Record<string, unknown>;
+
+  // Recurse into .error object first (handles nested proxy wrappers)
+  if (obj["error"] && typeof obj["error"] === "object") {
+    const errObj = obj["error"] as Record<string, unknown>;
+
+    // OpenRouter nests the real error inside metadata.raw
+    if (errObj["metadata"] && typeof errObj["metadata"] === "object") {
+      const meta = errObj["metadata"] as Record<string, unknown>;
+      if (typeof meta["raw"] === "string") {
+        const deeper = extractNestedMessage(meta["raw"]);
+        if (deeper) return deeper;
+      }
+    }
+
+    if (typeof errObj["message"] === "string" && errObj["message"].length > 0) {
+      return errObj["message"];
+    }
+  }
+
+  if (typeof obj["message"] === "string" && obj["message"].length > 0) {
+    return obj["message"];
+  }
+
+  return null;
+}
+
+/** Turn a raw AI SDK / provider error into a short, readable string. */
+function formatStreamError(err: unknown): string {
+  // Handle plain objects (stream error events may not be Error instances)
+  if (err && typeof err === "object" && !(err instanceof Error)) {
+    const obj = err as Record<string, unknown>;
+    const statusCode = obj["statusCode"];
+    const inner =
+      extractNestedMessage(obj["responseBody"]) ??
+      extractNestedMessage(obj["data"]) ??
+      extractNestedMessage(obj);
+
+    if (typeof statusCode === "number") {
+      if (statusCode === 401) return "Authentication failed — check your API key in Settings.";
+      if (statusCode === 403) return "Access denied by the provider. Check your API key permissions.";
+      if (statusCode === 429) return "Rate limit exceeded — wait a moment and try again.";
+      if (inner) return `Provider error (${statusCode}): ${inner}`;
+      return `The provider returned an error (HTTP ${statusCode}).`;
+    }
+
+    if (inner) return inner;
+    return String(err);
+  }
+
+  if (!(err instanceof Error)) return String(err);
+
+  const errRecord = err as unknown as Record<string, unknown>;
+  const statusCode = errRecord["statusCode"];
+  const responseBody = errRecord["responseBody"];
+  const data = errRecord["data"];
+
+  // Try to extract the real message from nested response JSON
+  const inner =
+    extractNestedMessage(responseBody) ??
+    extractNestedMessage(data);
+
+  // Friendly messages for common HTTP status codes
+  if (typeof statusCode === "number") {
+    switch (statusCode) {
+      case 401:
+        return "Authentication failed — check your API key in Settings.";
+      case 403:
+        return "Access denied by the provider. Check your API key permissions.";
+      case 429:
+        return "Rate limit exceeded — wait a moment and try again.";
+    }
+
+    if (inner) return `Provider error (${statusCode}): ${inner}`;
+    return `The provider returned an error (HTTP ${statusCode}).`;
+  }
+
+  // Network / connection errors
+  if (err.message.includes("fetch failed") || err.message.includes("ECONNREFUSED")) {
+    return "Could not connect to the provider. Check your network and provider URL.";
+  }
+
+  // If we found a cleaner inner message, prefer it over the raw SDK wrapper
+  if (inner && inner !== err.message) return inner;
+
+  return err.message;
+}
+
 /** Map tool call names (e.g. "web-search_search") to friendly descriptions */
 function describeToolCall(toolName: string, args?: Record<string, unknown>): string {
   // Tool names are "{toolId}_{functionName}" — split on first underscore only
@@ -168,6 +276,7 @@ export async function streamChat(
     let stepCount = 0;
     let toolCallCount = 0;
     let lastFinishReason = "";
+    let streamError: unknown = null;
     const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Stream helper — runs the LLM, collects text, and accumulates token usage
@@ -179,6 +288,13 @@ export async function streamChat(
         ...(useTools && hasTools ? { tools, stopWhen: stepCountIs(10) } : {}),
         abortSignal: signal,
       });
+
+      // Suppress Node unhandled-rejection warnings on derived promises.
+      // Errors are handled via the fullStream "error" event below.
+      const noop = () => {};
+      Promise.resolve(streamResult.usage).catch(noop);
+      Promise.resolve(streamResult.response).catch(noop);
+      Promise.resolve(streamResult.text).catch(noop);
 
       for await (const part of streamResult.fullStream) {
         switch (part.type) {
@@ -203,16 +319,25 @@ export async function streamChat(
             log.dev.debug("Step finished", { step: stepCount, finishReason: part.finishReason, hasContent: fullContent.length > 0, toolCalls: toolCallCount });
             break;
           case "error":
-            log.error("LLM stream error", { error: part.error });
+            streamError = part.error;
+            log.error("LLM stream error", { error: formatStreamError(part.error) });
             break;
         }
       }
 
+      // If the stream errored, skip usage/cost fetching — those promises will reject
+      if (streamError) return;
+
       // Accumulate token usage from this stream
-      const usage = await streamResult.usage;
-      totalUsage.inputTokens += usage.inputTokens ?? 0;
-      totalUsage.outputTokens += usage.outputTokens ?? 0;
-      totalUsage.totalTokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+      try {
+        const usage = await streamResult.usage;
+        totalUsage.inputTokens += usage.inputTokens ?? 0;
+        totalUsage.outputTokens += usage.outputTokens ?? 0;
+        totalUsage.totalTokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+      } catch {
+        // Usage unavailable when stream errored
+        return;
+      }
 
       // For OpenRouter: attempt to fetch cost from generation stats
       if (active.providerType === "openrouter") {
@@ -239,6 +364,14 @@ export async function streamChat(
     // First attempt: with tools if available
     await runStream(true);
 
+    // If the stream produced an API-level error, report it immediately
+    // instead of retrying (the retry would likely fail the same way).
+    if (streamError && fullContent.length === 0) {
+      const friendly = formatStreamError(streamError);
+      onError(friendly);
+      return;
+    }
+
     // If the model returned nothing and tools were passed, retry without tools.
     // Some models don't support tool calling and silently return empty responses.
     if (fullContent.length === 0 && hasTools) {
@@ -250,7 +383,15 @@ export async function streamChat(
       stepCount = 0;
       toolCallCount = 0;
       lastFinishReason = "";
+      streamError = null;
       await runStream(false);
+    }
+
+    // If the retry also produced an error, report it
+    if (streamError && fullContent.length === 0) {
+      const friendly = formatStreamError(streamError);
+      onError(friendly);
+      return;
     }
 
     // Post-stream summary
@@ -308,8 +449,8 @@ export async function streamChat(
       onError("Stream cancelled");
       return;
     }
-    const message = err instanceof Error ? err.message : "Unknown error during streaming";
-    log.error("Stream error", { error: message });
-    onError(message);
+    const friendly = formatStreamError(err);
+    log.error("Stream error", { error: friendly });
+    onError(friendly);
   }
 }

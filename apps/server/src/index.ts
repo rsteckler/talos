@@ -1,3 +1,14 @@
+// Suppress verbose AI SDK error dumps to stderr. The AI SDK internally
+// console.error's the full error object (including all tool schemas) before
+// propagating it through the stream. We handle and format these errors
+// ourselves in agent/core.ts — no need for the raw dump.
+const _origConsoleError = console.error;
+console.error = (...args: unknown[]) => {
+  const first = args[0];
+  if (first instanceof Error && first.name === "AI_APICallError") return;
+  _origConsoleError(...args);
+};
+
 import http from "node:http";
 import express from "express";
 import cors from "cors";

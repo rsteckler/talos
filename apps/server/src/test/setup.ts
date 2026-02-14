@@ -109,13 +109,39 @@ export function createTestDb() {
       usage TEXT
     );
 
+    CREATE TABLE trigger_state (
+      trigger_id TEXT PRIMARY KEY,
+      state TEXT NOT NULL DEFAULT '{}',
+      last_poll_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE channel_configs (
+      channel_id TEXT PRIMARY KEY,
+      config TEXT NOT NULL DEFAULT '{}',
+      is_enabled INTEGER NOT NULL DEFAULT 0,
+      notifications_enabled INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE channel_sessions (
+      id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      external_chat_id TEXT NOT NULL,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE inbox (
       id TEXT PRIMARY KEY,
       task_run_id TEXT REFERENCES task_runs(id) ON DELETE SET NULL,
       title TEXT NOT NULL,
+      summary TEXT,
       content TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('task_result', 'schedule_result', 'notification')),
       is_read INTEGER NOT NULL DEFAULT 0,
+      is_pinned INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
   `);

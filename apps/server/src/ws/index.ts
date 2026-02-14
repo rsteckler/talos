@@ -206,12 +206,13 @@ function handleChat(
     signal: controller.signal,
   }).catch((err: unknown) => {
     // Safety net for any unhandled rejection in streamChat
-    log.error("Unhandled streamChat error", { error: err instanceof Error ? err.message : String(err) });
+    const brief = err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200);
+    log.error("Unhandled streamChat error", { error: brief });
     abortControllers.delete(conversationId);
     sendMessage(ws, {
       type: "error",
       conversationId,
-      error: err instanceof Error ? err.message : "Internal server error",
+      error: "An unexpected error occurred. Check server logs for details.",
     });
     sendMessage(ws, { type: "status", status: "idle" });
   });

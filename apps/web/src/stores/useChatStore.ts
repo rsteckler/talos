@@ -26,6 +26,7 @@ interface ChatState {
   // Messages
   addMessage: (message: Message) => void;
   appendToLastMessage: (content: string) => void;
+  markLastMessageAsError: () => void;
   setMessages: (messages: Message[]) => void;
   clearMessages: () => void;
   updateMessageId: (oldId: string, newId: string) => void;
@@ -84,6 +85,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const last = msgs[msgs.length - 1]
       if (last) {
         msgs[msgs.length - 1] = { ...last, content: last.content + content }
+      }
+      return { messages: msgs }
+    }),
+  markLastMessageAsError: () =>
+    set((state) => {
+      const msgs = [...state.messages]
+      const last = msgs[msgs.length - 1]
+      if (last) {
+        msgs[msgs.length - 1] = { ...last, isError: true }
       }
       return { messages: msgs }
     }),

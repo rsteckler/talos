@@ -137,17 +137,19 @@ function handleMessage(message: ServerMessage) {
       break
     case "error":
       if (streamingPlaceholderId) {
-        // Append the error to the streaming message
-        store.appendToLastMessage(`\n\n[Error: ${message.error}]`)
+        // Error arrived during streaming — mark in-progress message as error
+        store.appendToLastMessage(`\n\n${message.error}`)
+        store.markLastMessageAsError()
         streamingPlaceholderId = null
       } else {
-        // Error arrived before any chunks — show as a visible error message
+        // Error arrived before any chunks — show as a dedicated error message
         store.addMessage({
           id: `error-${crypto.randomUUID()}`,
           conversationId: message.conversationId ?? "",
           role: "assistant",
-          content: `[Error: ${message.error}]`,
+          content: message.error,
           created_at: new Date().toISOString(),
+          isError: true,
         })
       }
       store.setStreaming(false)

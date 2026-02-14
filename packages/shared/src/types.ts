@@ -83,6 +83,7 @@ export interface Message {
   created_at: string;
   toolCalls?: ToolCallInfo[];
   usage?: TokenUsage;
+  isError?: boolean;
 }
 
 export interface Conversation {
