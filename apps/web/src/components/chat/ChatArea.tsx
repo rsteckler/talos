@@ -5,7 +5,8 @@ import { InlineChatLog } from "@/components/chat/InlineChatLog"
 import { InboxContextCard } from "@/components/chat/InboxContextCard"
 import { ChatLogFilterDialog } from "@/components/chat/ChatLogFilterDialog"
 import { useSettings } from "@/contexts/SettingsContext"
-import { Send, Loader2, AlertCircle, ScrollText, Plus } from "lucide-react"
+import { ModelSwitcher } from "@/components/chat/ModelSwitcher"
+import { Send, Square, Loader2, AlertCircle, ScrollText, Plus } from "lucide-react"
 import type { FormEvent, KeyboardEvent } from "react"
 import type { Message, LogEntry } from "@talos/shared/types"
 
@@ -137,6 +138,12 @@ export function ChatArea() {
     send({ type: "chat", conversationId, content })
   }
 
+  const handleStop = useCallback(() => {
+    if (activeConversationId) {
+      send({ type: "cancel", conversationId: activeConversationId })
+    }
+  }, [activeConversationId, send])
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
@@ -179,9 +186,7 @@ export function ChatArea() {
           </div>
         </div>
         <div className="ml-auto flex flex-col items-end leading-none">
-          <span className="text-xs text-muted-foreground">
-            {activeModel.model?.displayName}
-          </span>
+          <ModelSwitcher />
           {sessionUsage && (
             <span className="text-[10px] text-muted-foreground/70">
               {sessionUsage.totalTokens.toLocaleString()} tokens
@@ -285,14 +290,24 @@ export function ChatArea() {
               className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
               style={{ maxHeight: 200 }}
             />
-            <button
-              type="submit"
-              disabled={!inputValue.trim() || isStreaming || connectionStatus !== "connected"}
-              className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: "var(--orb-primary)" }}
-            >
-              <Send className="size-4" />
-            </button>
+            {isStreaming && activeConversationId ? (
+              <button
+                type="button"
+                onClick={handleStop}
+                className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-white transition-colors bg-destructive hover:bg-destructive/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Square className="size-3.5" fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!inputValue.trim() || connectionStatus !== "connected"}
+                className="inline-flex shrink-0 items-center justify-center rounded-lg p-2 text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "var(--orb-primary)" }}
+              >
+                <Send className="size-4" />
+              </button>
+            )}
           </form>
         </div>
       </div>
