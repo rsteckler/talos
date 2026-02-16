@@ -225,13 +225,126 @@ export function getToolCatalog(): string {
   const lines = [
     "## Available Extended Tools",
     "",
-    "You have access to the tools below, but they are NOT in your direct tool set.",
-    "Always use `find_tools` first, then `use_tool` to execute. Never guess tool names.",
+    "You have access to the tools below via `plan_actions`.",
     "",
   ];
 
   for (const [category, names] of toolsByCategory) {
     lines.push(`- **${category}**: ${[...names].join(" · ")}`);
+  }
+
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Module catalog (for plan-then-execute architecture)
+// ---------------------------------------------------------------------------
+
+/** Module reference used by the planner. */
+export interface ModuleCatalogEntry {
+  moduleRef: string;     // "google:gmail", "todoist:todoist"
+  name: string;          // "Gmail"
+  service: string;       // "Google Workspace"
+  description: string;
+  category: string;
+}
+
+/**
+ * Get the full module catalog for the planner system prompt.
+ * Tools with explicit modules are split into entries per module.
+ * Tools without modules get a single implicit module using the tool's name/description.
+ */
+export function getModuleCatalog(): ModuleCatalogEntry[] {
+  // Collect tool IDs that are actually in the registry (enabled + credentialed)
+  const activeToolIds = new Set<string>();
+  for (const entry of registry) {
+    activeToolIds.add(entry.toolId);
+  }
+
+  const loadedTools = getLoadedTools();
+  const catalog: ModuleCatalogEntry[] = [];
+
+  for (const toolId of activeToolIds) {
+    const loaded = loadedTools.get(toolId);
+    if (!loaded) continue;
+
+    const category = loaded.manifest.category ?? "other";
+    const service = loaded.manifest.name;
+
+    if (loaded.manifest.modules && loaded.manifest.modules.length > 0) {
+      for (const mod of loaded.manifest.modules) {
+        // Only include modules that have at least one function in the registry
+        const hasRegisteredFunction = mod.functions.some(
+          (fn) => registry.some((e) => e.toolId === toolId && e.functionName === fn),
+        );
+        if (!hasRegisteredFunction) continue;
+
+        catalog.push({
+          moduleRef: `${toolId}:${mod.id}`,
+          name: mod.name,
+          service,
+          description: mod.description,
+          category,
+        });
+      }
+    } else {
+      // Implicit single module
+      catalog.push({
+        moduleRef: `${toolId}:${toolId}`,
+        name: service,
+        service,
+        description: loaded.manifest.description,
+        category,
+      });
+    }
+  }
+
+  return catalog;
+}
+
+/**
+ * Get function names for a specific module ref (e.g. "google:gmail").
+ * Returns full names (e.g. "google_gmail_search") for building tool sets.
+ */
+export function getModuleFunctions(moduleRef: string): string[] | null {
+  const [toolId, moduleId] = moduleRef.split(":");
+  if (!toolId || !moduleId) return null;
+
+  const loadedTools = getLoadedTools();
+  const loaded = loadedTools.get(toolId);
+  if (!loaded) return null;
+
+  if (loaded.manifest.modules && loaded.manifest.modules.length > 0) {
+    const mod = loaded.manifest.modules.find((m) => m.id === moduleId);
+    if (!mod) return null;
+    // Return only functions that exist in the registry (credentialed + enabled)
+    return mod.functions
+      .map((fn) => `${toolId}_${fn}`)
+      .filter((fullName) => registry.some((e) => e.fullName === fullName));
+  }
+
+  // Implicit module — return all functions for this tool
+  if (moduleId === toolId) {
+    return registry
+      .filter((e) => e.toolId === toolId)
+      .map((e) => e.fullName);
+  }
+
+  return null;
+}
+
+/**
+ * Format the module catalog as compact text for the LLM system prompt.
+ * Includes the moduleRef so the planner can reference modules correctly.
+ */
+export function formatModuleCatalog(entries: ModuleCatalogEntry[]): string {
+  if (entries.length === 0) return "";
+
+  const lines: string[] = [];
+  for (const entry of entries) {
+    // Show service name in parens if it differs from the module name
+    const serviceTag = entry.name !== entry.service ? ` (${entry.service})` : "";
+    lines.push(`- \`${entry.moduleRef}\` — ${entry.name}${serviceTag}: ${entry.description}`);
   }
 
   return lines.join("\n");

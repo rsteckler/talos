@@ -2,7 +2,7 @@ import { streamText, stepCountIs } from "ai";
 import { eq, asc, sql, and } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
-import { buildRoutedToolSet, lookupFunction } from "../tools/index.js";
+import { buildRoutedToolSet } from "../tools/index.js";
 import { createLogger } from "../logger/index.js";
 import { generateConversationTitle } from "./titleGenerator.js";
 import type { ModelMessage } from "ai";
@@ -121,9 +121,8 @@ function formatStreamError(err: unknown): string {
 
 /** Map tool call names (e.g. "web-search_search") to friendly descriptions */
 function describeToolCall(toolName: string, args?: Record<string, unknown>): string {
-  // Meta-tools (no underscore split needed)
-  if (toolName === "find_tools") return args?.["query"] ? `Searching for tools: "${String(args["query"]).slice(0, 60)}"` : "Searching available tools";
-  if (toolName === "use_tool") return args?.["tool_name"] ? `Using ${String(args["tool_name"])}` : "Using a tool";
+  // Meta-tool
+  if (toolName === "plan_actions") return args?.["request"] ? `Planning: "${String(args["request"]).slice(0, 60)}"` : "Planning actions";
 
   // Tool names are "{toolId}_{functionName}" — split on first underscore only
   const sepIdx = toolName.indexOf("_");
@@ -200,103 +199,13 @@ function describeToolCall(toolName: string, args?: Record<string, unknown>): str
   }
 }
 
-// ---------------------------------------------------------------------------
-// Text tool call fallback
-// ---------------------------------------------------------------------------
-
-interface TextToolCall {
-  toolName: string;
-  args: Record<string, unknown>;
-}
-
-/** Try to parse a tool invocation from a JSON object. */
-function parseToolCallJson(parsed: Record<string, unknown>): TextToolCall | null {
-  // {"name": "use_tool", "arguments": {"tool_name": "...", "args": {...}}}
-  if (parsed["name"] === "use_tool") {
-    const inner = parsed["arguments"] as Record<string, unknown> | undefined;
-    const toolName = inner?.["tool_name"];
-    if (typeof toolName === "string") {
-      return { toolName, args: (inner?.["args"] ?? {}) as Record<string, unknown> };
-    }
-  }
-
-  // {"tool_name": "...", "args": {...}} — bare use_tool arguments
-  if (typeof parsed["tool_name"] === "string") {
-    return {
-      toolName: parsed["tool_name"],
-      args: (parsed["args"] ?? {}) as Record<string, unknown>,
-    };
-  }
-
-  // {"name": "obsidian_search_notes", "arguments": {...}} — direct routed call
-  if (typeof parsed["name"] === "string" && parsed["name"] !== "find_tools") {
-    return {
-      toolName: parsed["name"],
-      args: (parsed["arguments"] ?? parsed["args"] ?? {}) as Record<string, unknown>,
-    };
-  }
-
-  return null;
-}
-
-/**
- * Attempt to parse JSON, tolerating common LLM mistakes like missing
- * trailing braces (models often truncate before closing all brackets).
- */
-function tryParseJson(text: string): Record<string, unknown> | null {
-  // Try as-is first
-  try {
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    // Try appending up to 3 missing closing braces
-    let attempt = text.trimEnd();
-    for (let i = 0; i < 3; i++) {
-      attempt += "}";
-      try {
-        return JSON.parse(attempt) as Record<string, unknown>;
-      } catch {
-        continue;
-      }
-    }
-    return null;
-  }
-}
-
-/**
- * Extract a tool call emitted as text instead of a proper function call.
- * Some models (especially smaller/free ones) output tool calls as
- * `<tool_call>` tags or JSON code blocks instead of using the API.
- */
-function extractTextToolCall(text: string): TextToolCall | null {
-  const jsonCandidates: string[] = [];
-
-  // <tool_call>JSON</tool_call>
-  const tagMatch = text.match(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/);
-  if (tagMatch?.[1]) jsonCandidates.push(tagMatch[1].trim());
-
-  // ```json\nJSON\n``` containing tool-like keys
-  const codeMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
-  if (codeMatch?.[1] && (codeMatch[1].includes('"name"') || codeMatch[1].includes('"tool_name"'))) {
-    jsonCandidates.push(codeMatch[1].trim());
-  }
-
-  for (const candidate of jsonCandidates) {
-    const parsed = tryParseJson(candidate);
-    if (parsed) {
-      const result = parseToolCallJson(parsed);
-      if (result) return result;
-    }
-  }
-
-  return null;
-}
-
 interface StreamCallbacks {
   onChunk: (content: string) => void;
   onEnd: (messageId: string, usage?: TokenUsage) => void;
   onError: (error: string) => void;
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown) => void;
+  onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "error") => void;
   approvalGate?: ApprovalGate;
   signal?: AbortSignal;
 }
@@ -306,7 +215,7 @@ export async function streamChat(
   userContent: string,
   callbacks: StreamCallbacks,
 ): Promise<void> {
-  const { onChunk, onEnd, onError, onToolCall, onToolResult, approvalGate, signal } = callbacks;
+  const { onChunk, onEnd, onError, onToolCall, onToolResult, onPlanStep, approvalGate, signal } = callbacks;
 
   const active = getActiveProvider();
   if (!active) {
@@ -349,8 +258,12 @@ export async function streamChat(
       .where(eq(schema.conversations.id, conversationId))
       .run();
 
-    // Build routed tool set: direct tools + find_tools/use_tool meta-tools
-    const { tools, toolPrompts } = buildRoutedToolSet(approvalGate);
+    // Build routed tool set: direct tools + plan_actions meta-tool
+    const { tools, toolPrompts } = buildRoutedToolSet(approvalGate, {
+      onPlanStep,
+      onToolCall,
+      onToolResult,
+    });
     const hasTools = Object.keys(tools).length > 0;
 
     // Append tool prompts to system prompt
@@ -373,9 +286,6 @@ export async function streamChat(
     let lastFinishReason = "";
     let streamError: unknown = null;
     const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-
-    // Track tool calls that never received a result (hallucinated/unsupported calls)
-    const unresolvedToolCalls = new Map<string, { toolName: string; args: Record<string, unknown> }>();
 
     // Stream helper — runs the LLM, collects text, and accumulates token usage
     const runStream = async (useTools: boolean) => {
@@ -402,13 +312,11 @@ export async function streamChat(
             break;
           case "tool-call":
             toolCallCount++;
-            unresolvedToolCalls.set(part.toolCallId, { toolName: part.toolName, args: part.input as Record<string, unknown> });
             log.user.high(describeToolCall(part.toolName, part.input as Record<string, unknown>), { tool: part.toolName, args: part.input });
             log.dev.debug("Tool call args", { toolCallId: part.toolCallId, toolName: part.toolName, args: part.input });
             onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>);
             break;
           case "tool-result":
-            unresolvedToolCalls.delete(part.toolCallId);
             log.user.medium("Tool finished", { tool: part.toolName, result: part.output });
             log.dev.debug("Tool result detail", { toolCallId: part.toolCallId, toolName: part.toolName });
             onToolResult?.(part.toolCallId, part.toolName, part.output);
@@ -492,80 +400,6 @@ export async function streamChat(
       const friendly = formatStreamError(streamError);
       onError(friendly);
       return;
-    }
-
-    // --- Tool call fallback ---
-    // Weak models often: (a) call routed tools directly (hallucinated, no result
-    // from the SDK), or (b) emit tool calls as text (<tool_call>JSON</tool_call>).
-    // Detect both, execute the first match, and re-stream for a natural response.
-    if (!streamError) {
-      let fallbackTool: TextToolCall | null = null;
-      let fallbackSource = "";
-
-      // Priority 1: Unresolved direct tool calls that exist in the registry
-      for (const [, call] of unresolvedToolCalls) {
-        if (call.toolName === "find_tools" || call.toolName === "use_tool") continue;
-        if (lookupFunction(call.toolName)) {
-          fallbackTool = call;
-          fallbackSource = "unresolved";
-          break;
-        }
-      }
-
-      // Priority 2: Text-encoded tool calls in the response
-      if (!fallbackTool) {
-        fallbackTool = extractTextToolCall(fullContent);
-        if (fallbackTool) fallbackSource = "text";
-      }
-
-      if (fallbackTool) {
-        const syntheticId = `fallback-${crypto.randomUUID()}`;
-        const sourceLabel = fallbackSource === "unresolved"
-          ? `Model called ${fallbackTool.toolName} directly (not in tool set) — executing fallback`
-          : `Model emitted tool call as text — executing fallback for ${fallbackTool.toolName}`;
-        log.user.high(sourceLabel, { tool: fallbackTool.toolName, args: fallbackTool.args, fallbackSource });
-        log.dev.debug("Tool call fallback detected", { toolName: fallbackTool.toolName, args: fallbackTool.args, source: fallbackSource });
-
-        const lookup = lookupFunction(fallbackTool.toolName);
-        if (lookup) {
-          let approved = true;
-          onToolCall?.(syntheticId, fallbackTool.toolName, fallbackTool.args);
-
-          if (!lookup.autoAllow && approvalGate) {
-            approved = await approvalGate(syntheticId, fallbackTool.toolName, fallbackTool.args);
-            if (!approved) {
-              log.user.medium("Tool denied", { tool: fallbackTool.toolName });
-            }
-          }
-
-          if (approved) {
-            try {
-              const result = await lookup.handler(fallbackTool.args, lookup.credentials);
-              log.dev.debug("Fallback tool executed", { toolName: fallbackTool.toolName, resultPreview: JSON.stringify(result).slice(0, 100) });
-              onToolResult?.(syntheticId, fallbackTool.toolName, result);
-
-              // Re-stream with tool result for a natural language response
-              const resultJson = JSON.stringify(result, null, 2);
-              const truncated = resultJson.length > 8000 ? resultJson.slice(0, 8000) + "\n...(truncated)" : resultJson;
-
-              messages.push(
-                { role: "assistant" as const, content: fullContent },
-                { role: "user" as const, content: `[The tool "${fallbackTool.toolName}" returned this result:]\n\n${truncated}\n\nRespond to the user's original request using this data. Do not include any tool call syntax in your response.` },
-              );
-
-              onChunk("\n\n");
-              fullContent += "\n\n";
-              toolCallCount++;
-              await runStream(false);
-            } catch (err: unknown) {
-              const message = err instanceof Error ? err.message : String(err);
-              log.error("Fallback tool execution failed", { toolName: fallbackTool.toolName, error: message });
-            }
-          }
-        } else {
-          log.warn("Fallback: tool not found in registry", { toolName: fallbackTool.toolName });
-        }
-      }
     }
 
     // Post-stream summary

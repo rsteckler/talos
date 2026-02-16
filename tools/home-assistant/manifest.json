@@ -75,6 +75,15 @@
       ]
     }
   ],
+  "modules": [
+    { "id": "entities", "name": "Entity Control", "description": "Search, query, and control smart home entities and devices", "functions": ["search_entities", "get_state", "get_overview", "list_services", "call_service", "bulk_control", "get_entity", "set_entity", "list_devices", "get_device", "update_device", "list_helpers", "set_helper", "remove_helper"] },
+    { "id": "history", "name": "Entity History", "description": "Get state history, long-term statistics, and logbook entries", "functions": ["get_history", "get_statistics", "get_logbook"] },
+    { "id": "automations", "name": "Automations & Scripts", "description": "Manage automations and scripts with traces for debugging", "functions": ["get_automation", "set_automation", "remove_automation", "get_automation_traces", "get_script", "set_script", "remove_script"] },
+    { "id": "organization", "name": "Areas & Organization", "description": "Manage areas, floors, zones, groups, and labels", "functions": ["list_areas", "set_area", "remove_area", "list_floors", "set_floor", "remove_floor", "list_zones", "set_zone", "remove_zone", "list_groups", "set_group", "remove_group", "list_labels", "set_label", "remove_label"] },
+    { "id": "dashboards", "name": "Dashboards", "description": "Manage Lovelace dashboards and resources", "functions": ["list_dashboards", "get_dashboard", "set_dashboard", "delete_dashboard", "list_dashboard_resources", "set_dashboard_resource"] },
+    { "id": "calendar-todo", "name": "Calendar & Todo", "description": "Manage calendar events and todo list items", "functions": ["get_calendar_events", "create_calendar_event", "delete_calendar_event", "get_todo_items", "add_todo_item", "update_todo_item", "remove_todo_item"] },
+    { "id": "system", "name": "System Administration", "description": "Check config, restart, reload, health, updates, integrations, blueprints, add-ons, and error logs", "functions": ["check_config", "restart", "reload", "get_system_health", "get_updates", "list_integrations", "delete_integration", "set_integration_enabled", "render_template", "get_camera_image", "list_blueprints", "import_blueprint", "list_addons", "get_error_log"] }
+  ],
   "functions": [
     {
       "name": "search_entities",

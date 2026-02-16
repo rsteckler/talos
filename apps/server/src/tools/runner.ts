@@ -2,8 +2,10 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { getLoadedTools } from "./loader.js";
-import { DIRECT_TOOL_IDS, searchRegistry, lookupFunction, getCategories, getToolCatalog } from "./registry.js";
+import { DIRECT_TOOL_IDS, lookupFunction, getModuleCatalog, getModuleFunctions, formatModuleCatalog } from "./registry.js";
 import { createLogger } from "../logger/index.js";
+import { generatePlan } from "../agent/planner.js";
+import { executePlan } from "../agent/executor.js";
 import type { ToolSet } from "ai";
 
 const log = createLogger("tools");
@@ -144,86 +146,145 @@ export function buildToolSet(filterToolIds?: string[], approvalGate?: ApprovalGa
 }
 
 /**
- * Build a routed tool set for chat: direct tools + find_tools/use_tool meta-tools.
- * Keeps LLM context small (~18 schemas) while supporting unlimited tools via search.
+ * Build a tool set containing only the functions for a specific module.
+ * Used by the executor to give each step a focused set of tools.
  */
-export function buildRoutedToolSet(approvalGate?: ApprovalGate): { tools: ToolSet; toolPrompts: string[] } {
+export function buildModuleToolSet(
+  moduleRef: string,
+  approvalGate?: ApprovalGate,
+): { tools: ToolSet; toolPrompts: string[] } | null {
+  const functionNames = getModuleFunctions(moduleRef);
+  if (!functionNames || functionNames.length === 0) return null;
+
+  const loadedTools = getLoadedTools();
+  const tools: ToolSet = {};
+  const toolPrompts: string[] = [];
+  const addedPrompts = new Set<string>();
+
+  for (const fullName of functionNames) {
+    const lookup = lookupFunction(fullName);
+    if (!lookup) continue;
+
+    const toolId = fullName.substring(0, fullName.indexOf("_"));
+    const fnName = fullName.substring(fullName.indexOf("_") + 1);
+    const fnSpec = lookup.manifest.functions.find((f) => f.name === fnName);
+    if (!fnSpec) continue;
+
+    // Add prompt.md once per tool
+    const loaded = loadedTools.get(toolId);
+    if (loaded?.promptMd && !addedPrompts.has(toolId)) {
+      toolPrompts.push(loaded.promptMd);
+      addedPrompts.add(toolId);
+    }
+
+    const inputSchema = jsonSchemaToZod(fnSpec.parameters);
+
+    tools[fullName] = {
+      description: fnSpec.description,
+      inputSchema,
+      execute: async (args: Record<string, unknown>, { toolCallId }: { toolCallId: string }) => {
+        if (!lookup.autoAllow && approvalGate) {
+          const approved = await approvalGate(toolCallId, fullName, args);
+          if (!approved) {
+            log.user.medium("Tool denied", { tool: fullName });
+            return { denied: true, message: "User denied tool execution" };
+          }
+        }
+
+        log.dev.debug(`Executing ${fullName}`, { args });
+        try {
+          const result = await lookup.handler(args, lookup.credentials);
+          log.dev.debug(`Completed ${fullName}`, { resultPreview: JSON.stringify(result).slice(0, 100) });
+          return result;
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          log.error(`Tool ${fullName} threw`, { error: message });
+          return { error: message };
+        }
+      },
+    };
+  }
+
+  if (Object.keys(tools).length === 0) return null;
+  return { tools, toolPrompts };
+}
+
+export interface PlanActionCallbacks {
+  onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "error") => void;
+  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>) => void;
+  onToolResult?: (toolCallId: string, toolName: string, result: unknown) => void;
+}
+
+/**
+ * Build a routed tool set for chat: direct tools + plan_actions meta-tool.
+ * Keeps LLM context small (~18 schemas) while supporting unlimited tools
+ * via the plan-then-execute pipeline.
+ */
+export function buildRoutedToolSet(
+  approvalGate?: ApprovalGate,
+  planCallbacks?: PlanActionCallbacks,
+): { tools: ToolSet; toolPrompts: string[] } {
   // Build direct tools only
   const { tools, toolPrompts } = buildToolSet(DIRECT_TOOL_IDS, approvalGate);
 
-  // Prepend tool catalog so the LLM knows what extended tools are available
-  const catalog = getToolCatalog();
-  if (catalog) {
-    toolPrompts.unshift(catalog);
+  // Build module catalog for the plan_actions description and system prompt
+  const catalog = getModuleCatalog();
+  const catalogText = formatModuleCatalog(catalog);
+
+  if (catalogText) {
+    toolPrompts.unshift(
+      "## Extended Tools\n\n"
+      + "Beyond your direct tools, you can access many more capabilities via `plan_actions`.\n"
+      + "Call `plan_actions` whenever the user's request requires capabilities not in your direct tool set.\n\n"
+      + "**IMPORTANT**: Always pass the user's COMPLETE request in a single `plan_actions` call. "
+      + "Do NOT split a multi-step request into multiple calls — the planner handles multi-step orchestration and data flow between steps internally. "
+      + "For example, \"search my notes for X and email the result to Y\" should be ONE plan_actions call with the full request.\n\n"
+      + "Available modules:\n" + catalogText,
+    );
   }
 
-  // Add find_tools meta-tool
-  tools["find_tools"] = {
-    description: "Search for available tool functions by keyword. Call this FIRST to discover tools, then pass the returned tool name to use_tool. Never call extended tools directly — they are only accessible through find_tools + use_tool.",
-    inputSchema: z.object({
-      query: z.string().describe("Natural language search query (e.g. 'turn on lights', 'search the web', 'create a task')"),
-      category: z.string().optional().describe("Optional category filter: productivity, smart-home, search, system"),
-      limit: z.number().optional().describe("Maximum results to return. Defaults to 10."),
-    }),
-    execute: async (args: Record<string, unknown>) => {
-      const query = args["query"] as string;
-      const category = args["category"] as string | undefined;
-      const limit = args["limit"] as number | undefined;
+  // Only add plan_actions if there are extended tools available
+  if (catalog.length > 0) {
+    tools["plan_actions"] = {
+      description: `Execute a multi-step action plan using extended tools. The system will automatically plan and execute all necessary steps, passing data between them.\n\nIMPORTANT: Always pass the user's COMPLETE request in a single call. Do NOT break a multi-step request into separate plan_actions calls — the planner handles multi-step orchestration internally. For example, "search my notes and email the result" should be ONE call, not two.\n\nAvailable modules:\n${catalogText}`,
+      inputSchema: z.object({
+        request: z.string().describe("The user's COMPLETE request — include the full goal, not just one part of it"),
+      }),
+      execute: async (args: Record<string, unknown>) => {
+        const request = args["request"] as string;
 
-      log.dev.debug("find_tools search", { query, category, limit });
+        log.user.high("Planning actions", { request: request.slice(0, 100) });
+        log.dev.debug("plan_actions called", { request });
 
-      const results = searchRegistry(query, category, limit);
-      if (results.length === 0) {
-        const categories = getCategories();
-        return {
-          results: [],
-          message: "No matching tools found. Try a different query.",
-          available_categories: categories,
-        };
-      }
+        try {
+          const plan = await generatePlan(request, catalogText);
+          log.user.high(`Plan created: ${plan.length} step(s)`, { steps: plan.map((s) => s.description) });
+          log.dev.debug("Plan details", { plan });
 
-      return { results };
-    },
-  };
+          const result = await executePlan(
+            plan,
+            request,
+            approvalGate,
+            (stepId, description, status) => {
+              planCallbacks?.onPlanStep?.(stepId, description, status);
+            },
+            (toolCallId, toolName, toolArgs) => {
+              planCallbacks?.onToolCall?.(toolCallId, toolName, toolArgs);
+            },
+            (toolCallId, toolName, toolResult) => {
+              planCallbacks?.onToolResult?.(toolCallId, toolName, toolResult);
+            },
+          );
 
-  // Add use_tool meta-tool
-  tools["use_tool"] = {
-    description: "Execute a tool function discovered via find_tools. Pass the exact tool name and its required arguments.",
-    inputSchema: z.object({
-      tool_name: z.string().describe("Exact tool name from find_tools results (e.g. 'home-assistant_turn_on')"),
-      args: z.record(z.unknown()).optional().describe("Arguments for the tool function").default({}),
-    }),
-    execute: async (args: Record<string, unknown>, { toolCallId }: { toolCallId: string }) => {
-      const toolName = args["tool_name"] as string;
-      const toolArgs = (args["args"] ?? {}) as Record<string, unknown>;
-
-      const lookup = lookupFunction(toolName);
-      if (!lookup) {
-        log.warn(`use_tool: unknown tool "${toolName}"`);
-        return { error: `Tool "${toolName}" not found. Use find_tools to discover available tools.` };
-      }
-
-      // Gate on approval if not auto-allowed
-      if (!lookup.autoAllow && approvalGate) {
-        const approved = await approvalGate(toolCallId, toolName, toolArgs);
-        if (!approved) {
-          log.user.medium("Tool denied", { tool: toolName });
-          return { denied: true, message: "User denied tool execution" };
+          return result;
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          log.error("plan_actions failed", { error: message });
+          return { error: message };
         }
-      }
-
-      log.dev.debug(`use_tool executing ${toolName}`, { args: toolArgs });
-      try {
-        const result = await lookup.handler(toolArgs, lookup.credentials);
-        log.dev.debug(`use_tool completed ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 100) });
-        return result;
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        log.error(`use_tool ${toolName} threw`, { error: message });
-        return { error: message };
-      }
-    },
-  };
+      },
+    };
+  }
 
   return { tools, toolPrompts };
 }

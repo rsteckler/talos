@@ -188,6 +188,15 @@ function handleChat(
         result,
       });
     },
+    onPlanStep: (stepId, description, status) => {
+      sendMessage(ws, {
+        type: "plan_step",
+        conversationId,
+        stepId,
+        description,
+        status,
+      });
+    },
     onEnd: (messageId, usage) => {
       abortControllers.delete(conversationId);
       sendMessage(ws, { type: "end", conversationId, messageId, usage });

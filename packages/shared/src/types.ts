@@ -278,6 +278,31 @@ export interface ToolOAuthSpec {
   authorizeUrl: string;
 }
 
+export interface ToolModuleSpec {
+  id: string;           // e.g. "gmail", "calendar"
+  name: string;         // e.g. "Gmail", "Google Calendar"
+  description: string;  // e.g. "Search, read, send, reply, archive emails"
+  functions: string[];  // function names from this module
+}
+
+export interface PlanStep {
+  id: string;              // "step_1", "step_2", etc.
+  type: "tool" | "think";
+  module?: string;         // "{toolId}:{moduleId}" for tool steps
+  description: string;     // what this step accomplishes
+  depends_on?: string[];   // step IDs this depends on
+}
+
+export interface PlanResult {
+  steps: Array<{
+    id: string;
+    status: "complete" | "error";
+    result?: unknown;
+    error?: string;
+  }>;
+  summary: string;
+}
+
 export interface ToolManifest {
   id: string;
   name: string;
@@ -290,6 +315,7 @@ export interface ToolManifest {
   oauth?: ToolOAuthSpec;
   settings?: ToolSettingSpec[];
   triggers?: ToolTriggerSpec[];
+  modules?: ToolModuleSpec[];  // optional grouping — if absent, all functions form one implicit module
   functions: ToolFunctionSpec[];
 }
 
@@ -432,6 +458,7 @@ export type ServerMessage =
   | { type: "tool_result"; conversationId: string; toolCallId: string; toolName: string; result: unknown }
   | { type: "tool_approval_request"; conversationId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
   | { type: "status"; status: AgentStatus }
+  | { type: "plan_step"; conversationId: string; stepId: string; description: string; status: "running" | "complete" | "error" }
   | { type: "inbox"; item: InboxItem }
   | { type: "log"; entry: LogEntry }
   | { type: "conversation_title_update"; conversationId: string; title: string };

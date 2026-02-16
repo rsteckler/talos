@@ -83,6 +83,14 @@
       "description": "Fires when a new file is shared with you in Google Drive"
     }
   ],
+  "modules": [
+    { "id": "gmail", "name": "Gmail", "description": "Search, read, send, reply, and archive emails", "functions": ["gmail_search", "gmail_read", "gmail_send", "gmail_reply", "gmail_archive"] },
+    { "id": "calendar", "name": "Google Calendar", "description": "List upcoming events and create new events", "functions": ["calendar_list_events", "calendar_create_event"] },
+    { "id": "drive", "name": "Google Drive", "description": "List and read files from Drive", "functions": ["drive_list", "drive_read"] },
+    { "id": "sheets", "name": "Google Sheets", "description": "Read and write spreadsheet data", "functions": ["sheets_read", "sheets_write"] },
+    { "id": "docs", "name": "Google Docs", "description": "Read document content", "functions": ["docs_read"] },
+    { "id": "slides", "name": "Google Slides", "description": "Read presentation content", "functions": ["slides_read"] }
+  ],
   "functions": [
     {
       "name": "gmail_search",
