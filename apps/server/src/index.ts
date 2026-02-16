@@ -13,6 +13,7 @@ import http from "node:http";
 import express from "express";
 import cors from "cors";
 import { runMigrations } from "./db/migrate.js";
+import { seedDataFiles } from "./data/seed.js";
 import { providerRouter } from "./api/providers.js";
 import { conversationRouter } from "./api/conversations.js";
 import { soulRouter } from "./api/soul.js";
@@ -39,6 +40,9 @@ const PORT = process.env["PORT"] ?? 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// Seed default data files (before migrations so files exist early)
+seedDataFiles();
 
 // Run database migrations
 runMigrations();
