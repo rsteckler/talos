@@ -12,6 +12,7 @@ out/
 # Runtime data
 apps/server/data/
 !apps/server/data/.gitkeep
+!apps/server/data/TOOLS.md
 
 # Environment
 .env
