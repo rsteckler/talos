@@ -20,11 +20,11 @@ const pollingNow = new Set<string>();
 
 const DEFAULT_POLL_INTERVAL_MINUTES = 5;
 
-function getToolConfig(toolId: string): Record<string, string> {
+function getPluginConfig(pluginId: string): Record<string, string> {
   const row = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
   if (!row?.config) return {};
   return JSON.parse(row.config) as Record<string, string>;
@@ -89,7 +89,7 @@ async function pollTrigger(reg: RegisteredTrigger): Promise<void> {
 
   try {
     log.dev.debug(`Polling ${reg.fullId}...`);
-    const config = getToolConfig(reg.toolId);
+    const config = getPluginConfig(reg.pluginId);
     const state = getTriggerState(reg.fullId);
     const handler = reg.handler;
 
@@ -142,7 +142,7 @@ async function pollTrigger(reg: RegisteredTrigger): Promise<void> {
 function startPoller(reg: RegisteredTrigger): void {
   if (activePollers.has(reg.fullId)) return;
 
-  const config = getToolConfig(reg.toolId);
+  const config = getPluginConfig(reg.pluginId);
   const intervalMs = getPollIntervalMs(reg, config);
 
   // Do an initial poll after a short delay

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { readSoulFile, writeSoulFile, readToolsFile, writeToolsFile, readHumanFile, writeHumanFile } from "../providers/llm.js";
+import { readSoulFile, writeSoulFile, readPluginsFile, writePluginsFile, readHumanFile, writeHumanFile } from "../providers/llm.js";
 
 const router = Router();
 
@@ -21,21 +21,21 @@ router.put("/agent/soul", (req, res) => {
   res.json({ data: { content } });
 });
 
-// GET /api/agent/tools
-router.get("/agent/tools", (_req, res) => {
-  const content = readToolsFile();
+// GET /api/agent/plugins
+router.get("/agent/plugins", (_req, res) => {
+  const content = readPluginsFile();
   res.json({ data: { content } });
 });
 
-// PUT /api/agent/tools
-router.put("/agent/tools", (req, res) => {
+// PUT /api/agent/plugins
+router.put("/agent/plugins", (req, res) => {
   const { content } = req.body;
   if (typeof content !== "string") {
     res.status(400).json({ error: "content must be a string" });
     return;
   }
 
-  writeToolsFile(content);
+  writePluginsFile(content);
   res.json({ data: { content } });
 });
 

@@ -14,11 +14,11 @@ export const soulApi = {
     }),
 };
 
-export const toolsPromptApi = {
-  get: () => request<SoulContent>("/agent/tools"),
+export const pluginsPromptApi = {
+  get: () => request<SoulContent>("/agent/plugins"),
 
   update: (content: string) =>
-    request<SoulContent>("/agent/tools", {
+    request<SoulContent>("/agent/plugins", {
       method: "PUT",
       body: JSON.stringify({ content }),
     }),

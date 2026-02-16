@@ -5,12 +5,12 @@ import type { TriggerParamSpec } from "@talos/shared/types"
 
 interface TriggerParamEditorProps {
   params: TriggerParamSpec[]
-  toolId: string
+  pluginId: string
   values: Record<string, unknown>
   onChange: (values: Record<string, unknown>) => void
 }
 
-export function TriggerParamEditor({ params, toolId, values, onChange }: TriggerParamEditorProps) {
+export function TriggerParamEditor({ params, pluginId, values, onChange }: TriggerParamEditorProps) {
   function updateValue(key: string, value: unknown) {
     onChange({ ...values, [key]: value })
   }
@@ -28,7 +28,7 @@ export function TriggerParamEditor({ params, toolId, values, onChange }: Trigger
               )}
               <MultiSelectParam
                 param={param}
-                toolId={toolId}
+                pluginId={pluginId}
                 selected={selected}
                 onChange={(v) => updateValue(param.key, v)}
               />

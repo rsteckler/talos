@@ -1,11 +1,11 @@
-import type { ToolTriggerHandler, ToolTriggerSpec, TriggerTypeInfo } from "@talos/shared/types";
+import type { PluginTriggerHandler, PluginTriggerSpec, TriggerTypeInfo } from "@talos/shared/types";
 
 export interface RegisteredTrigger {
-  toolId: string;
+  pluginId: string;
   localId: string;
   fullId: string;
-  spec: ToolTriggerSpec;
-  handler: ToolTriggerHandler;
+  spec: PluginTriggerSpec;
+  handler: PluginTriggerHandler;
 }
 
 const triggers = new Map<string, RegisteredTrigger>();
@@ -18,13 +18,13 @@ const BUILTIN_TYPES: TriggerTypeInfo[] = [
 ];
 
 export function registerTrigger(
-  toolId: string,
+  pluginId: string,
   localId: string,
-  spec: ToolTriggerSpec,
-  handler: ToolTriggerHandler,
+  spec: PluginTriggerSpec,
+  handler: PluginTriggerHandler,
 ): void {
-  const fullId = `${toolId}:${localId}`;
-  triggers.set(fullId, { toolId, localId, fullId, spec, handler });
+  const fullId = `${pluginId}:${localId}`;
+  triggers.set(fullId, { pluginId, localId, fullId, spec, handler });
 }
 
 export function getTrigger(fullId: string): RegisteredTrigger | undefined {
@@ -37,8 +37,8 @@ export function getAllTriggerTypes(): TriggerTypeInfo[] {
     toolTypes.push({
       id: reg.fullId,
       label: reg.spec.label,
-      category: "tool",
-      toolId: reg.toolId,
+      category: "plugin",
+      pluginId: reg.pluginId,
       description: reg.spec.description,
       params: reg.spec.params,
     });

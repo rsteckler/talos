@@ -14,9 +14,9 @@ import {
 } from "@/components/ui/select"
 import { useSettings, type Theme } from "@/contexts/SettingsContext"
 import { ProviderList } from "@/components/settings/ProviderList"
-import { ToolList } from "@/components/settings/ToolList"
+import { PluginList } from "@/components/settings/PluginList"
 import { ChannelList } from "@/components/settings/ChannelList"
-import { soulApi, toolsPromptApi, humanPromptApi } from "@/api/soul"
+import { soulApi, pluginsPromptApi, humanPromptApi } from "@/api/soul"
 
 export function SettingsPage() {
   const { settings, updateSettings } = useSettings()
@@ -27,11 +27,11 @@ export function SettingsPage() {
   const [soulSaved, setSoulSaved] = useState(false)
   const [soulError, setSoulError] = useState<string | null>(null)
 
-  const [toolsContent, setToolsContent] = useState("")
-  const [toolsLoading, setToolsLoading] = useState(true)
-  const [toolsSaving, setToolsSaving] = useState(false)
-  const [toolsSaved, setToolsSaved] = useState(false)
-  const [toolsError, setToolsError] = useState<string | null>(null)
+  const [pluginsContent, setPluginsContent] = useState("")
+  const [pluginsLoading, setPluginsLoading] = useState(true)
+  const [pluginsSaving, setPluginsSaving] = useState(false)
+  const [pluginsSaved, setPluginsSaved] = useState(false)
+  const [pluginsError, setPluginsError] = useState<string | null>(null)
 
   const [humanContent, setHumanContent] = useState("")
   const [humanLoading, setHumanLoading] = useState(true)
@@ -49,14 +49,14 @@ export function SettingsPage() {
         setSoulError(err instanceof Error ? err.message : "Failed to load")
         setSoulLoading(false)
       })
-    toolsPromptApi.get()
+    pluginsPromptApi.get()
       .then((data) => {
-        setToolsContent(data.content)
-        setToolsLoading(false)
+        setPluginsContent(data.content)
+        setPluginsLoading(false)
       })
       .catch((err) => {
-        setToolsError(err instanceof Error ? err.message : "Failed to load")
-        setToolsLoading(false)
+        setPluginsError(err instanceof Error ? err.message : "Failed to load")
+        setPluginsLoading(false)
       })
     humanPromptApi.get()
       .then((data) => {
@@ -83,19 +83,19 @@ export function SettingsPage() {
     }
   }, [soulContent])
 
-  const handleToolsSave = useCallback(async () => {
-    setToolsSaving(true)
-    setToolsError(null)
+  const handlePluginsSave = useCallback(async () => {
+    setPluginsSaving(true)
+    setPluginsError(null)
     try {
-      await toolsPromptApi.update(toolsContent)
-      setToolsSaved(true)
-      setTimeout(() => setToolsSaved(false), 2000)
+      await pluginsPromptApi.update(pluginsContent)
+      setPluginsSaved(true)
+      setTimeout(() => setPluginsSaved(false), 2000)
     } catch (err) {
-      setToolsError(err instanceof Error ? err.message : "Failed to save")
+      setPluginsError(err instanceof Error ? err.message : "Failed to save")
     } finally {
-      setToolsSaving(false)
+      setPluginsSaving(false)
     }
-  }, [toolsContent])
+  }, [pluginsContent])
 
   const handleHumanSave = useCallback(async () => {
     setHumanSaving(true)
@@ -172,13 +172,13 @@ export function SettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Tools</CardTitle>
+              <CardTitle>Plugins</CardTitle>
               <CardDescription>
-                Enable and configure tools that Talos can use during conversations.
+                Enable and configure plugins that Talos can use during conversations.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ToolList />
+              <PluginList />
             </CardContent>
           </Card>
 
@@ -284,13 +284,13 @@ export function SettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Tool Instructions (TOOLS.md)</CardTitle>
+              <CardTitle>Plugin Instructions (PLUGINS.md)</CardTitle>
               <CardDescription>
-                Instructions for how Talos should use its tools. Injected into the system prompt alongside SOUL.md.
+                Instructions for how Talos should use its plugins. Injected into the system prompt alongside SOUL.md.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {toolsLoading ? (
+              {pluginsLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
                   Loading...
@@ -298,28 +298,28 @@ export function SettingsPage() {
               ) : (
                 <>
                   <textarea
-                    value={toolsContent}
-                    onChange={(e) => setToolsContent(e.target.value)}
+                    value={pluginsContent}
+                    onChange={(e) => setPluginsContent(e.target.value)}
                     rows={12}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
                   />
-                  {toolsError && (
-                    <p className="text-sm text-destructive">{toolsError}</p>
+                  {pluginsError && (
+                    <p className="text-sm text-destructive">{pluginsError}</p>
                   )}
                   <div className="flex justify-end">
                     <Button
-                      onClick={handleToolsSave}
-                      disabled={toolsSaving}
+                      onClick={handlePluginsSave}
+                      disabled={pluginsSaving}
                       size="sm"
                     >
-                      {toolsSaving ? (
+                      {pluginsSaving ? (
                         <Loader2 className="mr-2 size-4 animate-spin" />
-                      ) : toolsSaved ? (
+                      ) : pluginsSaved ? (
                         <Check className="mr-2 size-4" />
                       ) : (
                         <Save className="mr-2 size-4" />
                       )}
-                      {toolsSaved ? "Saved" : "Save"}
+                      {pluginsSaved ? "Saved" : "Save"}
                     </Button>
                   </div>
                 </>

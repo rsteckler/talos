@@ -5,14 +5,14 @@ import { getLoadedChannels, getLoadedChannel } from "./loader.js";
 import { broadcastStatus } from "../ws/index.js";
 import { createLogger, ensureLogArea } from "../logger/index.js";
 import type { ChannelContext } from "./types.js";
-import type { InboxItem, ToolLogger } from "@talos/shared/types";
-import type { ApprovalGate } from "../tools/index.js";
+import type { InboxItem, PluginLogger } from "@talos/shared/types";
+import type { ApprovalGate } from "../plugins/index.js";
 
 const log = createLogger("channels");
 
 const activeChannels = new Set<string>();
 
-function createChannelLogger(channelId: string, logName?: string): ToolLogger {
+function createChannelLogger(channelId: string, logName?: string): PluginLogger {
   const area = `channel:${logName ?? channelId}`;
   ensureLogArea(area);
   const inner = createLogger(area);

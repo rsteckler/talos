@@ -1,9 +1,9 @@
 import { streamText, generateText, stepCountIs } from "ai";
 import { getActiveProvider } from "../providers/llm.js";
-import { buildModuleToolSet } from "../tools/runner.js";
+import { buildModulePluginToolSet } from "../plugins/runner.js";
 import { createLogger } from "../logger/index.js";
 import type { PlanStep, PlanResult } from "@talos/shared/types";
-import type { ApprovalGate } from "../tools/runner.js";
+import type { ApprovalGate } from "../plugins/runner.js";
 
 const log = createLogger("executor");
 
@@ -147,14 +147,14 @@ async function executeToolStep(
     throw new Error(`Tool step ${step.id} is missing a module reference`);
   }
 
-  const moduleToolSet = buildModuleToolSet(step.module, approvalGate);
+  const moduleToolSet = buildModulePluginToolSet(step.module, approvalGate);
   if (!moduleToolSet) {
     throw new Error(`Module "${step.module}" not found or has no available tools`);
   }
 
   const basePrompt = "You are a focused tool executor. Use the available tools to accomplish the task. Be efficient: stop as soon as you have the information needed — do not exhaustively search every possible variation. Be concise in your output.";
-  const systemPrompt = moduleToolSet.toolPrompts.length > 0
-    ? `${basePrompt}\n\n${moduleToolSet.toolPrompts.join("\n\n")}`
+  const systemPrompt = moduleToolSet.pluginPrompts.length > 0
+    ? `${basePrompt}\n\n${moduleToolSet.pluginPrompts.join("\n\n")}`
     : basePrompt;
 
   let fullText = "";

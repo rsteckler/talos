@@ -19,7 +19,7 @@ const sidebars: SidebarsConfig = {
         "user-guide/chat",
         "user-guide/tasks",
         "user-guide/inbox",
-        "user-guide/tools",
+        "user-guide/plugins",
         "user-guide/channels",
         "user-guide/settings",
       ],
@@ -35,13 +35,13 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "category",
-      label: "Tool Development",
+      label: "Plugin Development",
       items: [
-        "tool-development/overview",
-        "tool-development/manifest-schema",
-        "tool-development/handler-functions",
-        "tool-development/prompt-engineering",
-        "tool-development/example-tool",
+        "plugin-development/overview",
+        "plugin-development/manifest-schema",
+        "plugin-development/handler-functions",
+        "plugin-development/prompt-engineering",
+        "plugin-development/example-tool",
       ],
     },
     {

@@ -20,9 +20,9 @@ Each provider row shows:
 - Currently active model (if any)
 - Edit and delete actions
 
-## Tools
+## Plugins
 
-Enable and configure tool plugins. Each tool shows its name, description, and status. Tools that require credentials show a configure button.
+Enable and configure plugins. Each plugin shows its name, description, and status. Plugins that require credentials show a configure button.
 
 ## Logging
 

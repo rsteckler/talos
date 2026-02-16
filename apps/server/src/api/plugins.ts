@@ -2,20 +2,20 @@ import { Router } from "express";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
-import { getLoadedTools, getLoadedTool } from "../tools/index.js";
+import { getLoadedPlugins, getLoadedPlugin } from "../plugins/index.js";
 import { getAllTriggerTypes } from "../triggers/index.js";
-import type { ToolInfo } from "@talos/shared/types";
+import type { PluginInfo } from "@talos/shared/types";
 
 const router = Router();
 
-function toToolInfo(toolId: string): ToolInfo | null {
-  const loaded = getLoadedTool(toolId);
+function toPluginInfo(pluginId: string): PluginInfo | null {
+  const loaded = getLoadedPlugin(pluginId);
   if (!loaded) return null;
 
   const configRow = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
 
   const storedConfig: Record<string, string> = configRow?.config
@@ -58,40 +58,40 @@ function toToolInfo(toolId: string): ToolInfo | null {
   };
 }
 
-// GET /api/tools
-router.get("/tools", (_req, res) => {
-  const loadedTools = getLoadedTools();
-  const tools: ToolInfo[] = [];
+// GET /api/plugins
+router.get("/plugins", (_req, res) => {
+  const loadedPlugins = getLoadedPlugins();
+  const plugins: PluginInfo[] = [];
 
-  for (const toolId of loadedTools.keys()) {
-    const info = toToolInfo(toolId);
-    if (info) tools.push(info);
+  for (const pluginId of loadedPlugins.keys()) {
+    const info = toPluginInfo(pluginId);
+    if (info) plugins.push(info);
   }
 
-  res.json({ data: tools });
+  res.json({ data: plugins });
 });
 
-// GET /api/tools/:id
-router.get("/tools/:id", (req, res) => {
-  const info = toToolInfo(req.params["id"]!);
+// GET /api/plugins/:id
+router.get("/plugins/:id", (req, res) => {
+  const info = toPluginInfo(req.params["id"]!);
   if (!info) {
-    res.status(404).json({ error: "Tool not found" });
+    res.status(404).json({ error: "Plugin not found" });
     return;
   }
 
   res.json({ data: info });
 });
 
-// PUT /api/tools/:id/config — Update credentials
+// PUT /api/plugins/:id/config — Update credentials
 const updateConfigSchema = z.object({
   config: z.record(z.string()),
 });
 
-router.put("/tools/:id/config", (req, res) => {
-  const toolId = req.params["id"]!;
-  const loaded = getLoadedTool(toolId);
+router.put("/plugins/:id/config", (req, res) => {
+  const pluginId = req.params["id"]!;
+  const loaded = getLoadedPlugin(pluginId);
   if (!loaded) {
-    res.status(404).json({ error: "Tool not found" });
+    res.status(404).json({ error: "Plugin not found" });
     return;
   }
 
@@ -103,21 +103,21 @@ router.put("/tools/:id/config", (req, res) => {
 
   const existing = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
 
   const configJson = JSON.stringify(parsed.data.config);
 
   if (existing) {
-    db.update(schema.toolConfigs)
+    db.update(schema.pluginConfigs)
       .set({ config: configJson })
-      .where(eq(schema.toolConfigs.toolId, toolId))
+      .where(eq(schema.pluginConfigs.pluginId, pluginId))
       .run();
   } else {
-    db.insert(schema.toolConfigs)
+    db.insert(schema.pluginConfigs)
       .values({
-        toolId,
+        pluginId,
         config: configJson,
         isEnabled: false,
         createdAt: new Date().toISOString(),
@@ -125,34 +125,34 @@ router.put("/tools/:id/config", (req, res) => {
       .run();
   }
 
-  const info = toToolInfo(toolId);
+  const info = toPluginInfo(pluginId);
   res.json({ data: info });
 });
 
-// POST /api/tools/:id/enable
-router.post("/tools/:id/enable", (req, res) => {
-  const toolId = req.params["id"]!;
-  const loaded = getLoadedTool(toolId);
+// POST /api/plugins/:id/enable
+router.post("/plugins/:id/enable", (req, res) => {
+  const pluginId = req.params["id"]!;
+  const loaded = getLoadedPlugin(pluginId);
   if (!loaded) {
-    res.status(404).json({ error: "Tool not found" });
+    res.status(404).json({ error: "Plugin not found" });
     return;
   }
 
   const existing = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
 
   if (existing) {
-    db.update(schema.toolConfigs)
+    db.update(schema.pluginConfigs)
       .set({ isEnabled: true })
-      .where(eq(schema.toolConfigs.toolId, toolId))
+      .where(eq(schema.pluginConfigs.pluginId, pluginId))
       .run();
   } else {
-    db.insert(schema.toolConfigs)
+    db.insert(schema.pluginConfigs)
       .values({
-        toolId,
+        pluginId,
         config: "{}",
         isEnabled: true,
         createdAt: new Date().toISOString(),
@@ -160,34 +160,34 @@ router.post("/tools/:id/enable", (req, res) => {
       .run();
   }
 
-  const info = toToolInfo(toolId);
+  const info = toPluginInfo(pluginId);
   res.json({ data: info });
 });
 
-// POST /api/tools/:id/disable
-router.post("/tools/:id/disable", (req, res) => {
-  const toolId = req.params["id"]!;
-  const loaded = getLoadedTool(toolId);
+// POST /api/plugins/:id/disable
+router.post("/plugins/:id/disable", (req, res) => {
+  const pluginId = req.params["id"]!;
+  const loaded = getLoadedPlugin(pluginId);
   if (!loaded) {
-    res.status(404).json({ error: "Tool not found" });
+    res.status(404).json({ error: "Plugin not found" });
     return;
   }
 
   const existing = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
 
   if (existing) {
-    db.update(schema.toolConfigs)
+    db.update(schema.pluginConfigs)
       .set({ isEnabled: false })
-      .where(eq(schema.toolConfigs.toolId, toolId))
+      .where(eq(schema.pluginConfigs.pluginId, pluginId))
       .run();
   } else {
-    db.insert(schema.toolConfigs)
+    db.insert(schema.pluginConfigs)
       .values({
-        toolId,
+        pluginId,
         config: "{}",
         isEnabled: false,
         createdAt: new Date().toISOString(),
@@ -195,20 +195,20 @@ router.post("/tools/:id/disable", (req, res) => {
       .run();
   }
 
-  const info = toToolInfo(toolId);
+  const info = toPluginInfo(pluginId);
   res.json({ data: info });
 });
 
-// POST /api/tools/:id/allow-without-asking
+// POST /api/plugins/:id/allow-without-asking
 const allowWithoutAskingSchema = z.object({
   allow: z.boolean(),
 });
 
-router.post("/tools/:id/allow-without-asking", (req, res) => {
-  const toolId = req.params["id"]!;
-  const loaded = getLoadedTool(toolId);
+router.post("/plugins/:id/allow-without-asking", (req, res) => {
+  const pluginId = req.params["id"]!;
+  const loaded = getLoadedPlugin(pluginId);
   if (!loaded) {
-    res.status(404).json({ error: "Tool not found" });
+    res.status(404).json({ error: "Plugin not found" });
     return;
   }
 
@@ -220,19 +220,19 @@ router.post("/tools/:id/allow-without-asking", (req, res) => {
 
   const existing = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
 
   if (existing) {
-    db.update(schema.toolConfigs)
+    db.update(schema.pluginConfigs)
       .set({ allowWithoutAsking: parsed.data.allow })
-      .where(eq(schema.toolConfigs.toolId, toolId))
+      .where(eq(schema.pluginConfigs.pluginId, pluginId))
       .run();
   } else {
-    db.insert(schema.toolConfigs)
+    db.insert(schema.pluginConfigs)
       .values({
-        toolId,
+        pluginId,
         config: "{}",
         isEnabled: false,
         allowWithoutAsking: parsed.data.allow,
@@ -241,32 +241,32 @@ router.post("/tools/:id/allow-without-asking", (req, res) => {
       .run();
   }
 
-  const info = toToolInfo(toolId);
+  const info = toPluginInfo(pluginId);
   res.json({ data: info });
 });
 
-// POST /api/tools/:id/call/:functionName — Call a tool function directly
-router.post("/tools/:id/call/:functionName", async (req, res) => {
-  const toolId = req.params["id"]!;
+// POST /api/plugins/:id/call/:functionName — Call a plugin function directly
+router.post("/plugins/:id/call/:functionName", async (req, res) => {
+  const pluginId = req.params["id"]!;
   const functionName = req.params["functionName"]!;
 
-  const loaded = getLoadedTool(toolId);
+  const loaded = getLoadedPlugin(pluginId);
   if (!loaded) {
-    res.status(404).json({ error: "Tool not found" });
+    res.status(404).json({ error: "Plugin not found" });
     return;
   }
 
   const handler = loaded.handlers[functionName];
   if (!handler) {
-    res.status(404).json({ error: `Function '${functionName}' not found on tool '${toolId}'` });
+    res.status(404).json({ error: `Function '${functionName}' not found on plugin '${pluginId}'` });
     return;
   }
 
   // Get stored credentials
   const configRow = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
 
   const storedConfig: Record<string, string> = configRow?.config
@@ -289,4 +289,4 @@ router.get("/trigger-types", (_req, res) => {
   res.json({ data: getAllTriggerTypes() });
 });
 
-export { router as toolRouter };
+export { router as pluginRouter };

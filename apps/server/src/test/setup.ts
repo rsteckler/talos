@@ -52,8 +52,8 @@ export function createTestDb() {
       created_at TEXT NOT NULL
     );
 
-    CREATE TABLE tool_configs (
-      tool_id TEXT PRIMARY KEY,
+    CREATE TABLE plugin_configs (
+      plugin_id TEXT PRIMARY KEY,
       config TEXT NOT NULL DEFAULT '{}',
       is_enabled INTEGER NOT NULL DEFAULT 0,
       allow_without_asking INTEGER NOT NULL DEFAULT 0,

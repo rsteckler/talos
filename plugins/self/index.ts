@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-interface ToolLogger {
+interface PluginLogger {
   info(message: string): void;
   warn(message: string): void;
   error(message: string): void;
@@ -22,13 +22,13 @@ const Database = require("better-sqlite3") as typeof import("better-sqlite3").de
 
 const DOCUMENTS: Record<string, string> = {
   soul: path.join(DATA_DIR, "SOUL.md"),
-  tools: path.join(DATA_DIR, "TOOLS.md"),
+  plugins: path.join(DATA_DIR, "PLUGINS.md"),
   human: path.join(DATA_DIR, "HUMAN.md"),
 };
 
 function resolveDocument(name: unknown): { path: string } | { error: string } {
   if (typeof name !== "string" || !DOCUMENTS[name]) {
-    return { error: `Unknown document: "${String(name)}". Must be one of: soul, tools, human.` };
+    return { error: `Unknown document: "${String(name)}". Must be one of: soul, plugins, human.` };
   }
   return { path: DOCUMENTS[name] };
 }
@@ -84,7 +84,7 @@ const DAILY_REVIEW_PROMPT = `You are running a scheduled daily self-reflection t
 - For SOUL.md changes, phrase adjustments as positive instructions ("Be direct and concise") rather than negatives ("Don't be verbose").
 - Summarize what you updated in your final response so it appears in the inbox.`;
 
-export function init(logger: ToolLogger): void {
+export function init(logger: PluginLogger): void {
   try {
     const db = new Database(DB_PATH);
     try {

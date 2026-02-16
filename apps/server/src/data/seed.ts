@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
 const DEFAULTS_DIR = path.join(__dirname, "..", "..", "defaults");
 
-const FILES = ["SOUL.md", "TOOLS.md", "HUMAN.md", "ONBOARDING.md"];
+const FILES = ["SOUL.md", "PLUGINS.md", "HUMAN.md", "ONBOARDING.md"];
 
 /**
  * Copy default markdown files into the data directory if they don't already exist.
@@ -19,6 +19,14 @@ export function seedDataFiles(): void {
   // Ensure data directory exists
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+
+  // Migrate TOOLS.md → PLUGINS.md for existing installations
+  const oldToolsPath = path.join(DATA_DIR, "TOOLS.md");
+  const newPluginsPath = path.join(DATA_DIR, "PLUGINS.md");
+  if (fs.existsSync(oldToolsPath) && !fs.existsSync(newPluginsPath)) {
+    fs.renameSync(oldToolsPath, newPluginsPath);
+    log.info("Renamed TOOLS.md → PLUGINS.md");
   }
 
   for (const file of FILES) {

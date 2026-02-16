@@ -1,17 +1,17 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
-import { getLoadedTools } from "./loader.js";
+import { getLoadedPlugins } from "./loader.js";
 import { createLogger } from "../logger/index.js";
-import type { ToolHandler } from "./types.js";
-import type { ToolManifest } from "@talos/shared/types";
+import type { PluginHandler } from "./types.js";
+import type { PluginManifest } from "@talos/shared/types";
 
-const log = createLogger("tools");
+const log = createLogger("plugins");
 
-/** IDs of tools that are always sent directly to the LLM (not routed). */
-export const DIRECT_TOOL_IDS = ["datetime", "self", "chat-history", "settings"];
+/** IDs of plugins that are always sent directly to the LLM (not routed). */
+export const DIRECT_PLUGIN_IDS = ["datetime", "self", "chat-history", "settings"];
 
-export interface ToolRegistryEntry {
-  toolId: string;
+export interface PluginRegistryEntry {
+  pluginId: string;
   functionName: string;       // e.g. "turn_on"
   fullName: string;           // e.g. "home-assistant_turn_on"
   description: string;
@@ -20,14 +20,14 @@ export interface ToolRegistryEntry {
   keywords: string[];         // tokenized from name + description
 }
 
-export interface ToolLookupResult {
-  handler: ToolHandler;
+export interface PluginLookupResult {
+  handler: PluginHandler;
   credentials: Record<string, string>;
-  manifest: ToolManifest;
+  manifest: PluginManifest;
   autoAllow: boolean;
 }
 
-let registry: ToolRegistryEntry[] = [];
+let registry: PluginRegistryEntry[] = [];
 
 /** Tokenize a string into lowercase keywords for matching. */
 function tokenize(text: string): string[] {
@@ -55,22 +55,22 @@ function buildParamSummary(parameters: Record<string, unknown>): string[] {
 
 /**
  * Rebuild the in-memory registry of routed tool functions.
- * Called after all tools are loaded. Only indexes enabled, non-direct tools
+ * Called after all plugins are loaded. Only indexes enabled, non-direct plugins
  * that have their required credentials configured.
  */
 export function rebuildRegistry(): void {
-  const loadedTools = getLoadedTools();
-  const entries: ToolRegistryEntry[] = [];
+  const loadedPlugins = getLoadedPlugins();
+  const entries: PluginRegistryEntry[] = [];
 
-  for (const [toolId, loaded] of loadedTools) {
-    // Skip direct tools — they're sent to the LLM directly
-    if (DIRECT_TOOL_IDS.includes(toolId)) continue;
+  for (const [pluginId, loaded] of loadedPlugins) {
+    // Skip direct plugins — they're sent to the LLM directly
+    if (DIRECT_PLUGIN_IDS.includes(pluginId)) continue;
 
-    // Check if tool is enabled
+    // Check if plugin is enabled
     const configRow = db
       .select()
-      .from(schema.toolConfigs)
-      .where(eq(schema.toolConfigs.toolId, toolId))
+      .from(schema.pluginConfigs)
+      .where(eq(schema.pluginConfigs.pluginId, pluginId))
       .get();
 
     if (!configRow?.isEnabled) continue;
@@ -89,9 +89,9 @@ export function rebuildRegistry(): void {
     const category = loaded.manifest.category ?? "other";
 
     for (const fnSpec of loaded.manifest.functions) {
-      const fullName = `${toolId}_${fnSpec.name}`;
+      const fullName = `${pluginId}_${fnSpec.name}`;
       const keywords = [
-        ...tokenize(toolId),
+        ...tokenize(pluginId),
         ...tokenize(fnSpec.name),
         ...tokenize(fnSpec.description),
         ...tokenize(loaded.manifest.name),
@@ -99,7 +99,7 @@ export function rebuildRegistry(): void {
       ];
 
       entries.push({
-        toolId,
+        pluginId,
         functionName: fnSpec.name,
         fullName,
         description: fnSpec.description,
@@ -111,7 +111,7 @@ export function rebuildRegistry(): void {
   }
 
   registry = entries;
-  log.dev.debug(`Tool registry rebuilt: ${entries.length} routed functions`);
+  log.dev.debug(`Plugin registry rebuilt: ${entries.length} routed functions`);
 }
 
 /**
@@ -169,12 +169,12 @@ export function searchRegistry(
  * Look up a specific tool function by its full name (e.g. "home-assistant_turn_on").
  * Returns the handler, credentials, and manifest needed to execute it.
  */
-export function lookupFunction(fullName: string): ToolLookupResult | null {
+export function lookupFunction(fullName: string): PluginLookupResult | null {
   const entry = registry.find((e) => e.fullName === fullName);
   if (!entry) return null;
 
-  const loadedTools = getLoadedTools();
-  const loaded = loadedTools.get(entry.toolId);
+  const loadedPlugins = getLoadedPlugins();
+  const loaded = loadedPlugins.get(entry.pluginId);
   if (!loaded) return null;
 
   const handler = loaded.handlers[entry.functionName];
@@ -182,8 +182,8 @@ export function lookupFunction(fullName: string): ToolLookupResult | null {
 
   const configRow = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, entry.toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, entry.pluginId))
     .get();
 
   if (!configRow?.isEnabled) return null;
@@ -204,23 +204,23 @@ export function lookupFunction(fullName: string): ToolLookupResult | null {
  * Generate a compact text catalog of all routed tools, grouped by category.
  * Used in the system prompt so the LLM knows what extended tools are available.
  *
- * Intentionally omits function names and tool IDs to prevent models from
+ * Intentionally omits function names and plugin IDs to prevent models from
  * constructing direct tool calls. Only display names are shown.
  */
-export function getToolCatalog(): string {
-  // Collect unique tool display names per category
-  const toolsByCategory = new Map<string, Set<string>>();
+export function getPluginCatalog(): string {
+  // Collect unique plugin display names per category
+  const pluginsByCategory = new Map<string, Set<string>>();
 
   for (const entry of registry) {
-    if (!toolsByCategory.has(entry.category)) {
-      toolsByCategory.set(entry.category, new Set());
+    if (!pluginsByCategory.has(entry.category)) {
+      pluginsByCategory.set(entry.category, new Set());
     }
-    const loaded = getLoadedTools().get(entry.toolId);
-    const displayName = loaded?.manifest.name ?? entry.toolId;
-    toolsByCategory.get(entry.category)!.add(displayName);
+    const loaded = getLoadedPlugins().get(entry.pluginId);
+    const displayName = loaded?.manifest.name ?? entry.pluginId;
+    pluginsByCategory.get(entry.category)!.add(displayName);
   }
 
-  if (toolsByCategory.size === 0) return "";
+  if (pluginsByCategory.size === 0) return "";
 
   const lines = [
     "## Available Extended Tools",
@@ -229,7 +229,7 @@ export function getToolCatalog(): string {
     "",
   ];
 
-  for (const [category, names] of toolsByCategory) {
+  for (const [category, names] of pluginsByCategory) {
     lines.push(`- **${category}**: ${[...names].join(" · ")}`);
   }
 
@@ -251,21 +251,21 @@ export interface ModuleCatalogEntry {
 
 /**
  * Get the full module catalog for the planner system prompt.
- * Tools with explicit modules are split into entries per module.
- * Tools without modules get a single implicit module using the tool's name/description.
+ * Plugins with explicit modules are split into entries per module.
+ * Plugins without modules get a single implicit module using the plugin's name/description.
  */
 export function getModuleCatalog(): ModuleCatalogEntry[] {
-  // Collect tool IDs that are actually in the registry (enabled + credentialed)
-  const activeToolIds = new Set<string>();
+  // Collect plugin IDs that are actually in the registry (enabled + credentialed)
+  const activePluginIds = new Set<string>();
   for (const entry of registry) {
-    activeToolIds.add(entry.toolId);
+    activePluginIds.add(entry.pluginId);
   }
 
-  const loadedTools = getLoadedTools();
+  const loadedPlugins = getLoadedPlugins();
   const catalog: ModuleCatalogEntry[] = [];
 
-  for (const toolId of activeToolIds) {
-    const loaded = loadedTools.get(toolId);
+  for (const pluginId of activePluginIds) {
+    const loaded = loadedPlugins.get(pluginId);
     if (!loaded) continue;
 
     const category = loaded.manifest.category ?? "other";
@@ -275,12 +275,12 @@ export function getModuleCatalog(): ModuleCatalogEntry[] {
       for (const mod of loaded.manifest.modules) {
         // Only include modules that have at least one function in the registry
         const hasRegisteredFunction = mod.functions.some(
-          (fn) => registry.some((e) => e.toolId === toolId && e.functionName === fn),
+          (fn) => registry.some((e) => e.pluginId === pluginId && e.functionName === fn),
         );
         if (!hasRegisteredFunction) continue;
 
         catalog.push({
-          moduleRef: `${toolId}:${mod.id}`,
+          moduleRef: `${pluginId}:${mod.id}`,
           name: mod.name,
           service,
           description: mod.description,
@@ -290,7 +290,7 @@ export function getModuleCatalog(): ModuleCatalogEntry[] {
     } else {
       // Implicit single module
       catalog.push({
-        moduleRef: `${toolId}:${toolId}`,
+        moduleRef: `${pluginId}:${pluginId}`,
         name: service,
         service,
         description: loaded.manifest.description,
@@ -307,11 +307,11 @@ export function getModuleCatalog(): ModuleCatalogEntry[] {
  * Returns full names (e.g. "google_gmail_search") for building tool sets.
  */
 export function getModuleFunctions(moduleRef: string): string[] | null {
-  const [toolId, moduleId] = moduleRef.split(":");
-  if (!toolId || !moduleId) return null;
+  const [pluginId, moduleId] = moduleRef.split(":");
+  if (!pluginId || !moduleId) return null;
 
-  const loadedTools = getLoadedTools();
-  const loaded = loadedTools.get(toolId);
+  const loadedPlugins = getLoadedPlugins();
+  const loaded = loadedPlugins.get(pluginId);
   if (!loaded) return null;
 
   if (loaded.manifest.modules && loaded.manifest.modules.length > 0) {
@@ -319,14 +319,14 @@ export function getModuleFunctions(moduleRef: string): string[] | null {
     if (!mod) return null;
     // Return only functions that exist in the registry (credentialed + enabled)
     return mod.functions
-      .map((fn) => `${toolId}_${fn}`)
+      .map((fn) => `${pluginId}_${fn}`)
       .filter((fullName) => registry.some((e) => e.fullName === fullName));
   }
 
-  // Implicit module — return all functions for this tool
-  if (moduleId === toolId) {
+  // Implicit module — return all functions for this plugin
+  if (moduleId === pluginId) {
     return registry
-      .filter((e) => e.toolId === toolId)
+      .filter((e) => e.pluginId === pluginId)
       .map((e) => e.fullName);
   }
 

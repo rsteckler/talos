@@ -2,19 +2,19 @@
 sidebar_position: 5
 ---
 
-# Example: Building a Weather Tool
+# Example: Building a Weather Plugin
 
-This tutorial walks through creating a complete tool from scratch.
+This tutorial walks through creating a complete plugin from scratch.
 
 ## 1. Create the Directory
 
 ```bash
-mkdir tools/weather
+mkdir plugins/weather
 ```
 
 ## 2. Write the Manifest
 
-Create `tools/weather/manifest.json`:
+Create `plugins/weather/manifest.json`:
 
 ```json
 {
@@ -56,10 +56,10 @@ Create `tools/weather/manifest.json`:
 
 ## 3. Write the Handler
 
-Create `tools/weather/index.ts`:
+Create `plugins/weather/index.ts`:
 
 ```typescript
-import type { ToolContext } from "@talos/server/tools";
+import type { ToolContext } from "@talos/server/plugins";
 
 export async function get_current(
   args: { location: string; units?: string },
@@ -92,7 +92,7 @@ export async function get_current(
 
 ## 4. Write the Prompt
 
-Create `tools/weather/prompt.md`:
+Create `plugins/weather/prompt.md`:
 
 ```markdown
 # Weather Tool
@@ -109,10 +109,10 @@ You can look up current weather conditions for any location.
 - Results include temperature, conditions, and humidity
 ```
 
-## 5. Enable the Tool
+## 5. Enable the Plugin
 
-1. Restart the server (tools are loaded on startup)
-2. Go to **Settings → Tools**
+1. Restart the server (plugins are loaded on startup)
+2. Go to **Settings → Plugins**
 3. Find "Weather" and toggle it on
 4. Click **Configure** and enter your API key
 

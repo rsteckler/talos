@@ -2,13 +2,13 @@
 sidebar_position: 4
 ---
 
-# Tools
+# Plugins
 
-Tools extend Talos's capabilities by giving the LLM the ability to execute actions locally. Tools are file-based plugins loaded from the `tools/` directory.
+Plugins extend Talos's capabilities by giving the LLM the ability to execute actions locally. Plugins are file-based packages loaded from the `plugins/` directory.
 
-## Bundled Tools
+## Bundled Plugins
 
-Talos ships with several built-in tools:
+Talos ships with several built-in plugins:
 
 ### Shell
 
@@ -47,27 +47,27 @@ Search places, get directions, calculate distances, and geocode addresses.
 - **Requires:** Google Maps API Key (configured in Settings)
 - **Setup guide:** [Google Maps Setup](../guides/google-maps-setup)
 
-## Enabling Tools
+## Enabling Plugins
 
-1. Go to **Settings → Tools**
-2. Toggle tools on/off
-3. For tools that require credentials (e.g., Web Search), click **Configure** and enter the required API key
+1. Go to **Settings → Plugins**
+2. Toggle plugins on/off
+3. For plugins that require credentials (e.g., Web Search), click **Configure** and enter the required API key
 
-## Tool Permissions
+## Plugin Permissions
 
-Some tools require user approval before execution. When the LLM calls a tool that needs approval, an inline prompt appears in the chat with the tool name and arguments. You can:
+Some plugins require user approval before execution. When the LLM calls a tool that needs approval, an inline prompt appears in the chat with the tool name and arguments. You can:
 
 - **Approve** — Execute the tool call
 - **Deny** — Block the execution and let the LLM know
 
-Tools like Shell always require approval by default. Other tools can declare their own permission requirements in their manifest.
+Plugins like Shell always require approval by default. Other plugins can declare their own permission requirements in their manifest.
 
-## How Tools Work in Chat
+## How Plugins Work in Chat
 
-When tools are enabled, their JSON schemas are included in every LLM request. The LLM decides when to call a tool based on the conversation context.
+When plugins are enabled, their JSON schemas are included in every LLM request. The LLM decides when to call a tool based on the conversation context.
 
 During chat, tool calls appear as inline indicators showing the tool name, arguments, and result.
 
-## Adding Custom Tools
+## Adding Custom Plugins
 
-See the [Tool Development](../tool-development/overview) guide for creating your own tools.
+See the [Plugin Development](../plugin-development/overview) guide for creating your own plugins.

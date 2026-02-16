@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { toolsApi } from "@/api/tools"
+import { pluginsApi } from "@/api/plugins"
 import type { TriggerParamSpec } from "@talos/shared/types"
 import { ChevronRight, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -17,7 +17,7 @@ interface Option {
 
 interface MultiSelectParamProps {
   param: TriggerParamSpec
-  toolId: string
+  pluginId: string
   selected: string[]
   onChange: (values: string[]) => void
   className?: string
@@ -40,7 +40,7 @@ function resolvePath(data: unknown, path: string): unknown[] {
   })
 }
 
-export function MultiSelectParam({ param, toolId, selected, onChange, className }: MultiSelectParamProps) {
+export function MultiSelectParam({ param, pluginId, selected, onChange, className }: MultiSelectParamProps) {
   const [options, setOptions] = useState<Option[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -54,8 +54,8 @@ export function MultiSelectParam({ param, toolId, selected, onChange, className 
     setLoading(true)
     setError(null)
 
-    toolsApi
-      .callFunction(toolId, param.source.function, param.source.args)
+    pluginsApi
+      .callFunction(pluginId, param.source.function, param.source.args)
       .then((data) => {
         const values = resolvePath(data, param.source!.valuePath)
         const labels = resolvePath(data, param.source!.labelPath)
@@ -99,7 +99,7 @@ export function MultiSelectParam({ param, toolId, selected, onChange, className 
       })
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toolId, param.source?.function])
+  }, [pluginId, param.source?.function])
 
   useEffect(() => {
     fetchOptions()

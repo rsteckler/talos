@@ -171,26 +171,26 @@ PUT /api/agent/soul
 
 ---
 
-## Tools
+## Plugins
 
-### List Tools
-
-```
-GET /api/tools
-```
-
-**Response:** `{ data: Tool[] }` — includes enabled status and credential requirements.
-
-### Get Tool
+### List Plugins
 
 ```
-GET /api/tools/:id
+GET /api/plugins
 ```
 
-### Update Tool Config
+**Response:** `{ data: Plugin[] }` — includes enabled status and credential requirements.
+
+### Get Plugin
 
 ```
-PUT /api/tools/:id/config
+GET /api/plugins/:id
+```
+
+### Update Plugin Config
+
+```
+PUT /api/plugins/:id/config
 ```
 
 **Body:**
@@ -199,16 +199,16 @@ PUT /api/tools/:id/config
 { "config": { "api_key": "..." } }
 ```
 
-### Enable Tool
+### Enable Plugin
 
 ```
-POST /api/tools/:id/enable
+POST /api/plugins/:id/enable
 ```
 
-### Disable Tool
+### Disable Plugin
 
 ```
-POST /api/tools/:id/disable
+POST /api/plugins/:id/disable
 ```
 
 ---
@@ -235,7 +235,7 @@ POST /api/tasks
   "trigger_type": "cron",
   "trigger_config": "{\"cron\": \"0 9 * * *\"}",
   "action_prompt": "Summarize today's priorities.",
-  "tools": ["web-search"],
+  "plugins": ["web-search"],
   "is_active": true
 }
 ```

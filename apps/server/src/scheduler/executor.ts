@@ -2,7 +2,7 @@ import { generateText, stepCountIs } from "ai";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
-import { buildToolSet } from "../tools/runner.js";
+import { buildPluginToolSet } from "../plugins/runner.js";
 import { createLogger } from "../logger/index.js";
 import { broadcastInbox, broadcastStatus } from "../ws/index.js";
 import { generateInboxSummary } from "../agent/summaryGenerator.js";
@@ -41,11 +41,11 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
 
     // Build tool set — filter to specific tools if specified
     const filterToolIds = task.tools ? (JSON.parse(task.tools) as string[]) : undefined;
-    const { tools, toolPrompts } = buildToolSet(filterToolIds);
+    const { tools, pluginPrompts } = buildPluginToolSet(filterToolIds);
     const hasTools = Object.keys(tools).length > 0;
 
-    const fullSystemPrompt = toolPrompts.length > 0
-      ? `${systemPrompt}\n\n${toolPrompts.join("\n\n")}`
+    const fullSystemPrompt = pluginPrompts.length > 0
+      ? `${systemPrompt}\n\n${pluginPrompts.join("\n\n")}`
       : systemPrompt;
 
     // Prepend trigger context to the action prompt if present

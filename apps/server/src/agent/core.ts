@@ -2,12 +2,12 @@ import { streamText, stepCountIs } from "ai";
 import { eq, asc, sql, and } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
-import { buildRoutedToolSet } from "../tools/index.js";
+import { buildRoutedPluginToolSet } from "../plugins/index.js";
 import { createLogger } from "../logger/index.js";
 import { generateConversationTitle } from "./titleGenerator.js";
 import type { ModelMessage } from "ai";
 import type { TokenUsage } from "@talos/shared/types";
-import type { ApprovalGate } from "../tools/index.js";
+import type { ApprovalGate } from "../plugins/index.js";
 
 const log = createLogger("agent");
 
@@ -259,7 +259,7 @@ export async function streamChat(
       .run();
 
     // Build routed tool set: direct tools + plan_actions meta-tool
-    const { tools, toolPrompts } = buildRoutedToolSet(approvalGate, {
+    const { tools, pluginPrompts } = buildRoutedPluginToolSet(approvalGate, {
       onPlanStep,
       onToolCall,
       onToolResult,
@@ -267,8 +267,8 @@ export async function streamChat(
     const hasTools = Object.keys(tools).length > 0;
 
     // Append tool prompts to system prompt
-    const fullSystemPrompt = toolPrompts.length > 0
-      ? `${systemPrompt}\n\n${toolPrompts.join("\n\n")}`
+    const fullSystemPrompt = pluginPrompts.length > 0
+      ? `${systemPrompt}\n\n${pluginPrompts.join("\n\n")}`
       : systemPrompt;
 
     // Build messages array for the LLM

@@ -2,29 +2,29 @@ import { Router } from "express";
 import { google } from "googleapis";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
-import { getLoadedTool } from "../tools/index.js";
+import { getLoadedPlugin } from "../plugins/index.js";
 import { createLogger } from "../logger/index.js";
-import type { ToolInfo } from "@talos/shared/types";
+import type { PluginInfo } from "@talos/shared/types";
 
 const log = createLogger("oauth");
 const router = Router();
 
-/** Read the stored config JSON for a tool, or empty object. */
-function getStoredConfig(toolId: string): Record<string, string> {
+/** Read the stored config JSON for a plugin, or empty object. */
+function getStoredConfig(pluginId: string): Record<string, string> {
   const row = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
   return row?.config ? (JSON.parse(row.config) as Record<string, string>) : {};
 }
 
-/** Merge keys into a tool's stored config JSON. */
-function mergeStoredConfig(toolId: string, updates: Record<string, string | undefined>): void {
+/** Merge keys into a plugin's stored config JSON. */
+function mergeStoredConfig(pluginId: string, updates: Record<string, string | undefined>): void {
   const existing = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
 
   const current: Record<string, string> = existing?.config
@@ -42,14 +42,14 @@ function mergeStoredConfig(toolId: string, updates: Record<string, string | unde
   const configJson = JSON.stringify(current);
 
   if (existing) {
-    db.update(schema.toolConfigs)
+    db.update(schema.pluginConfigs)
       .set({ config: configJson })
-      .where(eq(schema.toolConfigs.toolId, toolId))
+      .where(eq(schema.pluginConfigs.pluginId, pluginId))
       .run();
   } else {
-    db.insert(schema.toolConfigs)
+    db.insert(schema.pluginConfigs)
       .values({
-        toolId,
+        pluginId,
         config: configJson,
         isEnabled: false,
         createdAt: new Date().toISOString(),
@@ -58,15 +58,15 @@ function mergeStoredConfig(toolId: string, updates: Record<string, string | unde
   }
 }
 
-/** Build a ToolInfo response (same logic as tools.ts toToolInfo). */
-function toToolInfo(toolId: string): ToolInfo | null {
-  const loaded = getLoadedTool(toolId);
+/** Build a PluginInfo response (same logic as plugins.ts toPluginInfo). */
+function toPluginInfo(pluginId: string): PluginInfo | null {
+  const loaded = getLoadedPlugin(pluginId);
   if (!loaded) return null;
 
   const configRow = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
 
   const storedConfig: Record<string, string> = configRow?.config
@@ -109,7 +109,7 @@ router.get("/oauth/google/authorize", (req, res) => {
     return;
   }
 
-  const loaded = getLoadedTool("google");
+  const loaded = getLoadedPlugin("google");
   const scopes = loaded?.manifest.oauth?.scopes ?? [];
 
   const redirectUri = `${req.protocol}://${req.get("host")}/api/oauth/google/callback`;
@@ -203,7 +203,7 @@ router.post("/oauth/google/disconnect", (_req, res) => {
 
   log.info("Google OAuth disconnected");
 
-  const info = toToolInfo("google");
+  const info = toPluginInfo("google");
   res.json({ data: info });
 });
 
@@ -234,7 +234,7 @@ function createReauthTask(config: Record<string, string>): void {
       triggerType: "interval",
       triggerConfig: JSON.stringify({ interval_minutes: 8640 }),
       actionPrompt:
-        "The user's Google OAuth refresh token will expire in approximately 24 hours. Send a notification reminding them to reconnect their Google account in Settings > Tools > Google Workspace. This is important — without re-authentication, Gmail, Calendar, Drive, and other Google tools will stop working.",
+        "The user's Google OAuth refresh token will expire in approximately 24 hours. Send a notification reminding them to reconnect their Google account in Settings > Plugins > Google Workspace. This is important — without re-authentication, Gmail, Calendar, Drive, and other Google plugins will stop working.",
       tools: null,
       isActive: true,
       createdAt: now,

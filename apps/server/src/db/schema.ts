@@ -39,8 +39,8 @@ export const messages = sqliteTable("messages", {
   createdAt: text("created_at").notNull(),
 });
 
-export const toolConfigs = sqliteTable("tool_configs", {
-  toolId: text("tool_id").primaryKey(),
+export const pluginConfigs = sqliteTable("plugin_configs", {
+  pluginId: text("plugin_id").primaryKey(),
   config: text("config").notNull().default("{}"),
   isEnabled: integer("is_enabled", { mode: "boolean" }).notNull().default(false),
   allowWithoutAsking: integer("allow_without_asking", { mode: "boolean" }).notNull().default(false),
@@ -78,7 +78,7 @@ export const tasks = sqliteTable("tasks", {
   triggerType: text("trigger_type").notNull(),
   triggerConfig: text("trigger_config").notNull().default("{}"),
   actionPrompt: text("action_prompt").notNull(),
-  tools: text("tools"), // JSON array of tool IDs, null = all enabled
+  tools: text("tools"), // JSON array of plugin IDs, null = all enabled
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   lastRunAt: text("last_run_at"),
   nextRunAt: text("next_run_at"),

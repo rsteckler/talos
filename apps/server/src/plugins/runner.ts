@@ -1,18 +1,18 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
-import { getLoadedTools } from "./loader.js";
-import { DIRECT_TOOL_IDS, lookupFunction, getModuleCatalog, getModuleFunctions, formatModuleCatalog } from "./registry.js";
+import { getLoadedPlugins } from "./loader.js";
+import { DIRECT_PLUGIN_IDS, lookupFunction, getModuleCatalog, getModuleFunctions, formatModuleCatalog } from "./registry.js";
 import { createLogger } from "../logger/index.js";
 import { generatePlan } from "../agent/planner.js";
 import { executePlan } from "../agent/executor.js";
 import type { ToolSet } from "ai";
 
-const log = createLogger("tools");
+const log = createLogger("plugins");
 
 /**
  * Convert a JSON Schema property definition to a Zod schema.
- * Handles the basic types needed by tool manifests.
+ * Handles the basic types needed by plugin manifests.
  */
 function jsonSchemaPropertyToZod(prop: Record<string, unknown>): z.ZodTypeAny {
   switch (prop["type"]) {
@@ -54,25 +54,25 @@ function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodObject<Record<st
 export type ApprovalGate = (toolCallId: string, toolName: string, args: Record<string, unknown>) => Promise<boolean>;
 
 /**
- * Build an AI SDK ToolSet from all enabled, loaded tools.
+ * Build an AI SDK ToolSet from all enabled, loaded plugins.
  * Returns the toolset and any prompt.md content to append to the system prompt.
- * If filterToolIds is provided, only include those specific tool IDs.
+ * If filterPluginIds is provided, only include those specific plugin IDs.
  * If approvalGate is provided, tools without allowWithoutAsking will await approval.
  */
-export function buildToolSet(filterToolIds?: string[], approvalGate?: ApprovalGate): { tools: ToolSet; toolPrompts: string[] } {
-  const loadedTools = getLoadedTools();
+export function buildPluginToolSet(filterPluginIds?: string[], approvalGate?: ApprovalGate): { tools: ToolSet; pluginPrompts: string[] } {
+  const loadedPlugins = getLoadedPlugins();
   const tools: ToolSet = {};
-  const toolPrompts: string[] = [];
+  const pluginPrompts: string[] = [];
 
-  for (const [toolId, loaded] of loadedTools) {
-    // If a filter is specified, skip tools not in the list
-    if (filterToolIds && !filterToolIds.includes(toolId)) continue;
+  for (const [pluginId, loaded] of loadedPlugins) {
+    // If a filter is specified, skip plugins not in the list
+    if (filterPluginIds && !filterPluginIds.includes(pluginId)) continue;
 
-    // Check if tool is enabled in DB
+    // Check if plugin is enabled in DB
     const configRow = db
       .select()
-      .from(schema.toolConfigs)
-      .where(eq(schema.toolConfigs.toolId, toolId))
+      .from(schema.pluginConfigs)
+      .where(eq(schema.pluginConfigs.pluginId, pluginId))
       .get();
 
     if (!configRow?.isEnabled) continue;
@@ -86,24 +86,24 @@ export function buildToolSet(filterToolIds?: string[], approvalGate?: ApprovalGa
     const requiredCreds = loaded.manifest.credentials?.filter((c) => c.required) ?? [];
     const missingCreds = requiredCreds.filter((c) => !storedConfig[c.name]);
     if (missingCreds.length > 0) {
-      log.dev.debug(`Skipping ${toolId}: missing credentials: ${missingCreds.map((c) => c.name).join(", ")}`);
+      log.dev.debug(`Skipping ${pluginId}: missing credentials: ${missingCreds.map((c) => c.name).join(", ")}`);
       continue;
     }
 
     // Check OAuth connection if required
     if (loaded.manifest.oauth && !storedConfig["refresh_token"]) {
-      log.dev.debug(`Skipping ${toolId}: OAuth not connected`);
+      log.dev.debug(`Skipping ${pluginId}: OAuth not connected`);
       continue;
     }
 
     // Add prompt.md content
     if (loaded.promptMd) {
-      toolPrompts.push(loaded.promptMd);
+      pluginPrompts.push(loaded.promptMd);
     }
 
     // Convert each function to an AI SDK tool
     for (const fnSpec of loaded.manifest.functions) {
-      const toolName = `${toolId}_${fnSpec.name}`;
+      const toolName = `${pluginId}_${fnSpec.name}`;
       const handler = loaded.handlers[fnSpec.name];
 
       if (!handler) {
@@ -142,39 +142,39 @@ export function buildToolSet(filterToolIds?: string[], approvalGate?: ApprovalGa
     }
   }
 
-  return { tools, toolPrompts };
+  return { tools, pluginPrompts };
 }
 
 /**
  * Build a tool set containing only the functions for a specific module.
  * Used by the executor to give each step a focused set of tools.
  */
-export function buildModuleToolSet(
+export function buildModulePluginToolSet(
   moduleRef: string,
   approvalGate?: ApprovalGate,
-): { tools: ToolSet; toolPrompts: string[] } | null {
+): { tools: ToolSet; pluginPrompts: string[] } | null {
   const functionNames = getModuleFunctions(moduleRef);
   if (!functionNames || functionNames.length === 0) return null;
 
-  const loadedTools = getLoadedTools();
+  const loadedPlugins = getLoadedPlugins();
   const tools: ToolSet = {};
-  const toolPrompts: string[] = [];
+  const pluginPrompts: string[] = [];
   const addedPrompts = new Set<string>();
 
   for (const fullName of functionNames) {
     const lookup = lookupFunction(fullName);
     if (!lookup) continue;
 
-    const toolId = fullName.substring(0, fullName.indexOf("_"));
+    const pluginId = fullName.substring(0, fullName.indexOf("_"));
     const fnName = fullName.substring(fullName.indexOf("_") + 1);
     const fnSpec = lookup.manifest.functions.find((f) => f.name === fnName);
     if (!fnSpec) continue;
 
-    // Add prompt.md once per tool
-    const loaded = loadedTools.get(toolId);
-    if (loaded?.promptMd && !addedPrompts.has(toolId)) {
-      toolPrompts.push(loaded.promptMd);
-      addedPrompts.add(toolId);
+    // Add prompt.md once per plugin
+    const loaded = loadedPlugins.get(pluginId);
+    if (loaded?.promptMd && !addedPrompts.has(pluginId)) {
+      pluginPrompts.push(loaded.promptMd);
+      addedPrompts.add(pluginId);
     }
 
     const inputSchema = jsonSchemaToZod(fnSpec.parameters);
@@ -206,7 +206,7 @@ export function buildModuleToolSet(
   }
 
   if (Object.keys(tools).length === 0) return null;
-  return { tools, toolPrompts };
+  return { tools, pluginPrompts };
 }
 
 export interface PlanActionCallbacks {
@@ -216,23 +216,23 @@ export interface PlanActionCallbacks {
 }
 
 /**
- * Build a routed tool set for chat: direct tools + plan_actions meta-tool.
+ * Build a routed tool set for chat: direct plugins + plan_actions meta-tool.
  * Keeps LLM context small (~18 schemas) while supporting unlimited tools
  * via the plan-then-execute pipeline.
  */
-export function buildRoutedToolSet(
+export function buildRoutedPluginToolSet(
   approvalGate?: ApprovalGate,
   planCallbacks?: PlanActionCallbacks,
-): { tools: ToolSet; toolPrompts: string[] } {
-  // Build direct tools only
-  const { tools, toolPrompts } = buildToolSet(DIRECT_TOOL_IDS, approvalGate);
+): { tools: ToolSet; pluginPrompts: string[] } {
+  // Build direct plugins only
+  const { tools, pluginPrompts } = buildPluginToolSet(DIRECT_PLUGIN_IDS, approvalGate);
 
   // Build module catalog for the plan_actions description and system prompt
   const catalog = getModuleCatalog();
   const catalogText = formatModuleCatalog(catalog);
 
   if (catalogText) {
-    toolPrompts.unshift(
+    pluginPrompts.unshift(
       "## Extended Tools\n\n"
       + "Beyond your direct tools, you can access many more capabilities via `plan_actions`.\n"
       + "Call `plan_actions` whenever the user's request requires capabilities not in your direct tool set.\n\n"
@@ -286,5 +286,5 @@ export function buildRoutedToolSet(
     };
   }
 
-  return { tools, toolPrompts };
+  return { tools, pluginPrompts };
 }

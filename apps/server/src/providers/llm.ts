@@ -10,7 +10,7 @@ import { db, schema } from "../db/index.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SYSTEM_PATH = path.join(__dirname, "..", "agent", "SYSTEM.md");
 const SOUL_PATH = path.join(__dirname, "..", "..", "data", "SOUL.md");
-const TOOLS_PATH = path.join(__dirname, "..", "..", "data", "TOOLS.md");
+const PLUGINS_PATH = path.join(__dirname, "..", "..", "data", "PLUGINS.md");
 const HUMAN_PATH = path.join(__dirname, "..", "..", "data", "HUMAN.md");
 const ONBOARDING_PATH = path.join(__dirname, "..", "..", "data", "ONBOARDING.md");
 
@@ -90,11 +90,11 @@ export function loadSystemPrompt(): string {
     soul = "You are Talos, a helpful AI assistant.";
   }
 
-  let toolsInstructions = "";
+  let pluginsInstructions = "";
   try {
-    toolsInstructions = fs.readFileSync(TOOLS_PATH, "utf-8").trim();
+    pluginsInstructions = fs.readFileSync(PLUGINS_PATH, "utf-8").trim();
   } catch {
-    // TOOLS.md missing — continue without it
+    // PLUGINS.md missing — continue without it
   }
 
   let humanNotes = "";
@@ -120,8 +120,8 @@ export function loadSystemPrompt(): string {
   if (onboarding) {
     prompt += `\n\n---\n\n${onboarding}`;
   }
-  if (toolsInstructions) {
-    prompt += `\n\n---\n\n${toolsInstructions}`;
+  if (pluginsInstructions) {
+    prompt += `\n\n---\n\n${pluginsInstructions}`;
   }
   if (humanNotes && !needsOnboarding) {
     prompt += `\n\n---\n\n${humanNotes}`;
@@ -137,16 +137,16 @@ export function writeSoulFile(content: string): void {
   fs.writeFileSync(SOUL_PATH, content, "utf-8");
 }
 
-export function readToolsFile(): string {
+export function readPluginsFile(): string {
   try {
-    return fs.readFileSync(TOOLS_PATH, "utf-8");
+    return fs.readFileSync(PLUGINS_PATH, "utf-8");
   } catch {
     return "";
   }
 }
 
-export function writeToolsFile(content: string): void {
-  fs.writeFileSync(TOOLS_PATH, content, "utf-8");
+export function writePluginsFile(content: string): void {
+  fs.writeFileSync(PLUGINS_PATH, content, "utf-8");
 }
 
 export function readHumanFile(): string {

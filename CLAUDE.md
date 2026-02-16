@@ -43,7 +43,7 @@ This is a pnpm monorepo using Turborepo for task orchestration.
 - **apps/server** (`@talos/server`) - Express backend on port 3001. Handles API, WebSocket, agent orchestration, and scheduler. Uses tsx for development.
 - **apps/web** (`@talos/web`) - Vite + React + Tailwind + shadcn/ui frontend on port 5173. Proxies `/api` and `/health` to the server.
 - **packages/shared** (`@talos/shared`) - Shared TypeScript types and constants. Import from `@talos/shared`, `@talos/shared/types`, or `@talos/shared/constants`.
-- **tools/** - File-based tool plugins with manifest.json, prompt.md, and index.ts per tool.
+- **plugins/** - File-based plugins with manifest.json, prompt.md, and index.ts per plugin.
 - **website/docs/** - Docusaurus documentation (Phase 7).
 
 ### Agent Orchestration Pattern

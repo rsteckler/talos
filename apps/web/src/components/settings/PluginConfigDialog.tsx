@@ -12,44 +12,44 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { useToolStore } from "@/stores/useToolStore"
-import type { ToolInfo } from "@talos/shared/types"
+import { usePluginStore } from "@/stores/usePluginStore"
+import type { PluginInfo } from "@talos/shared/types"
 
-interface ToolConfigDialogProps {
-  tool: ToolInfo | null;
+interface PluginConfigDialogProps {
+  plugin: PluginInfo | null;
   onClose: () => void;
 }
 
-export function ToolConfigDialog({ tool, onClose }: ToolConfigDialogProps) {
+export function PluginConfigDialog({ plugin, onClose }: PluginConfigDialogProps) {
   const [values, setValues] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
-  const updateConfig = useToolStore((s) => s.updateConfig)
+  const updateConfig = usePluginStore((s) => s.updateConfig)
 
   useEffect(() => {
-    if (tool) {
+    if (plugin) {
       const initial: Record<string, string> = {}
       // Initialize credential fields as empty (user re-enters to update)
-      for (const cred of tool.credentials) {
+      for (const cred of plugin.credentials) {
         initial[cred.name] = ""
       }
       // Initialize settings: use saved value if available, otherwise default
-      for (const setting of tool.settings) {
-        initial[setting.name] = tool.settingValues?.[setting.name] ?? setting.default
+      for (const setting of plugin.settings) {
+        initial[setting.name] = plugin.settingValues?.[setting.name] ?? setting.default
       }
       setValues(initial)
     }
-  }, [tool])
+  }, [plugin])
 
-  if (!tool) return null
+  if (!plugin) return null
 
-  const hasCredentials = tool.credentials.length > 0
-  const hasSettings = tool.settings.length > 0
+  const hasCredentials = plugin.credentials.length > 0
+  const hasSettings = plugin.settings.length > 0
 
   const dialogDescription = hasCredentials && hasSettings
-    ? "Configure credentials and settings for this tool. Leave credential fields empty to keep existing values."
+    ? "Configure credentials and settings for this plugin. Leave credential fields empty to keep existing values."
     : hasCredentials
-      ? "Enter the credentials required by this tool. Leave fields empty to keep existing values."
-      : "Configure settings for this tool."
+      ? "Enter the credentials required by this plugin. Leave fields empty to keep existing values."
+      : "Configure settings for this plugin."
 
   const handleSave = async () => {
     setSaving(true)
@@ -61,21 +61,21 @@ export function ToolConfigDialog({ tool, onClose }: ToolConfigDialogProps) {
       }
     }
     if (Object.keys(nonEmpty).length > 0) {
-      await updateConfig(tool.id, nonEmpty)
+      await updateConfig(plugin.id, nonEmpty)
     }
     setSaving(false)
     onClose()
   }
 
   return (
-    <Dialog open={!!tool} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={!!plugin} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Configure {tool.name}</DialogTitle>
+          <DialogTitle>Configure {plugin.name}</DialogTitle>
           <DialogDescription>
             {dialogDescription}
           </DialogDescription>
-          {tool.oauth?.provider === "google" && (
+          {plugin.oauth?.provider === "google" && (
             <a
               href="/docs/guides/google-workspace-setup"
               target="_blank"
@@ -86,7 +86,7 @@ export function ToolConfigDialog({ tool, onClose }: ToolConfigDialogProps) {
               <ExternalLink className="size-3" />
             </a>
           )}
-          {tool.id === "google-maps" && (
+          {plugin.id === "google-maps" && (
             <a
               href="/docs/guides/google-maps-setup"
               target="_blank"
@@ -99,7 +99,7 @@ export function ToolConfigDialog({ tool, onClose }: ToolConfigDialogProps) {
           )}
         </DialogHeader>
         <div className="space-y-4 py-2">
-          {tool.credentials.map((cred) => (
+          {plugin.credentials.map((cred) => (
             <div key={cred.name} className="space-y-1.5">
               <Label htmlFor={`cred-${cred.name}`}>
                 {cred.label}
@@ -127,7 +127,7 @@ export function ToolConfigDialog({ tool, onClose }: ToolConfigDialogProps) {
                   <p className="text-sm font-medium mb-3">Settings</p>
                 </div>
               )}
-              {tool.settings.map((setting) => (
+              {plugin.settings.map((setting) => (
                 <div key={setting.name} className="space-y-1.5">
                   {setting.type === "boolean" ? (
                     <div className="flex items-center justify-between">

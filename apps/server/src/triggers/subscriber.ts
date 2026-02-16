@@ -16,11 +16,11 @@ const DEFAULT_COOLDOWN_SECONDS = 60;
 const activeSubscriptions = new Map<string, () => void>();
 const lastDispatch = new Map<string, number>();
 
-function getToolConfig(toolId: string): Record<string, string> {
+function getPluginConfig(pluginId: string): Record<string, string> {
   const row = db
     .select()
-    .from(schema.toolConfigs)
-    .where(eq(schema.toolConfigs.toolId, toolId))
+    .from(schema.pluginConfigs)
+    .where(eq(schema.pluginConfigs.pluginId, pluginId))
     .get();
   if (!row?.config) return {};
   return JSON.parse(row.config) as Record<string, string>;
@@ -97,7 +97,7 @@ async function startSubscription(reg: RegisteredTrigger): Promise<void> {
   if (activeSubscriptions.has(reg.fullId)) return;
   if (!reg.handler.subscribe) return;
 
-  const config = getToolConfig(reg.toolId);
+  const config = getPluginConfig(reg.pluginId);
 
   try {
     const unsubscribe = await reg.handler.subscribe(config, config, (event) => {

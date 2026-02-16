@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
 import { useChatStore } from "@/stores/useChatStore"
-import { useToolStore } from "@/stores/useToolStore"
+import { usePluginStore } from "@/stores/usePluginStore"
 import { useConnectionStore } from "@/stores"
 import type { ToolCallInfo } from "@talos/shared/types"
 
@@ -40,12 +40,12 @@ export function ToolCallDisplay({ toolCall }: ToolCallDisplayProps) {
   }
 
   const handleAlwaysAllow = async () => {
-    await useToolStore.getState().setAllowWithoutAsking(toolId, true)
+    await usePluginStore.getState().setAllowWithoutAsking(toolId, true)
     handleApprove()
   }
 
   const handleAlwaysDeny = async () => {
-    await useToolStore.getState().disableTool(toolId)
+    await usePluginStore.getState().disablePlugin(toolId)
     handleDeny()
   }
 

@@ -4,15 +4,15 @@ sidebar_position: 2
 
 # Manifest Schema
 
-Every tool must have a `manifest.json` in its root directory. This file defines the tool's identity, credentials, and callable functions.
+Every plugin must have a `manifest.json` in its root directory. This file defines the plugin's identity, credentials, and callable functions.
 
 ## Full Schema
 
 ```json
 {
-  "id": "my-tool",
-  "name": "My Tool",
-  "description": "A short description of what the tool does.",
+  "id": "my-plugin",
+  "name": "My Plugin",
+  "description": "A short description of what the plugin does.",
   "version": "1.0.0",
   "logName": "mytool",
   "credentials": [
@@ -66,9 +66,9 @@ Every tool must have a `manifest.json` in its root directory. This file defines 
 |---------------|----------|----------|--------------------------------------|
 | `id`          | string   | Yes      | Unique identifier (matches folder name) |
 | `name`        | string   | Yes      | Display name shown in the UI         |
-| `description` | string   | Yes      | Short description of the tool        |
+| `description` | string   | Yes      | Short description of the plugin      |
 | `version`     | string   | Yes      | Semantic version                     |
-| `logName`     | string   | No       | Name used in log area (appears as `tool:<logName>` in logs) |
+| `logName`     | string   | No       | Name used in log area (appears as `plugin:<logName>` in logs) |
 | `credentials` | array    | No       | Credential requirements              |
 | `settings`    | array    | No       | User-configurable settings (shown in Settings UI) |
 | `triggers`    | array    | No       | Event triggers for the task system   |
@@ -85,11 +85,11 @@ Every tool must have a `manifest.json` in its root directory. This file defines 
 
 ### Settings
 
-Settings are user-configurable values shown in **Settings → Tools** alongside credentials. Unlike credentials, settings use regular input fields (not password fields).
+Settings are user-configurable values shown in **Settings → Plugins** alongside credentials. Unlike credentials, settings use regular input fields (not password fields).
 
 | Field         | Type    | Required | Description                              |
 |---------------|---------|----------|------------------------------------------|
-| `name`        | string  | Yes      | Key name (stored in tool config JSON)    |
+| `name`        | string  | Yes      | Key name (stored in plugin config JSON)  |
 | `label`       | string  | Yes      | Label shown in the Settings UI           |
 | `type`        | string  | Yes      | `"number"`, `"string"`, or `"boolean"`   |
 | `default`     | string  | No       | Default value (as string)                |
@@ -97,11 +97,11 @@ Settings are user-configurable values shown in **Settings → Tools** alongside 
 
 ### Triggers
 
-Triggers declare background event sources that can fire tasks. Each trigger is a named event that the tool can detect via polling. Trigger IDs are scoped as `{toolId}:{triggerId}` (e.g., `google:gmail_new_email`).
+Triggers declare background event sources that can fire tasks. Each trigger is a named event that the plugin can detect via polling. Trigger IDs are scoped as `{pluginId}:{triggerId}` (e.g., `google:gmail_new_email`).
 
 | Field         | Type   | Required | Description                          |
 |---------------|--------|----------|--------------------------------------|
-| `id`          | string | Yes      | Local trigger ID (scoped by tool)    |
+| `id`          | string | Yes      | Local trigger ID (scoped by plugin)  |
 | `label`       | string | Yes      | Display name in the task dialog      |
 | `description` | string | No       | Description of when this trigger fires |
 
@@ -117,7 +117,7 @@ See [Handler Functions](handler-functions#triggers) for implementing the polling
 
 The `parameters` field follows the [JSON Schema](https://json-schema.org/) specification. The LLM uses this schema to understand what arguments to pass when calling the function.
 
-## Example: Shell Tool
+## Example: Shell Plugin
 
 ```json
 {

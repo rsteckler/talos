@@ -17,7 +17,7 @@ import { seedDataFiles } from "./data/seed.js";
 import { providerRouter } from "./api/providers.js";
 import { conversationRouter } from "./api/conversations.js";
 import { soulRouter } from "./api/soul.js";
-import { toolRouter } from "./api/tools.js";
+import { pluginRouter } from "./api/plugins.js";
 import { logRouter } from "./api/logs.js";
 import { taskRouter } from "./api/tasks.js";
 import { inboxRouter } from "./api/inbox.js";
@@ -27,7 +27,7 @@ import { oauthRouter } from "./api/oauth.js";
 import { channelRouter } from "./api/channels.js";
 import { errorHandler } from "./api/errorHandler.js";
 import { attachWebSocket } from "./ws/index.js";
-import { loadAllTools } from "./tools/index.js";
+import { loadAllPlugins } from "./plugins/index.js";
 import { loadAllChannels, initChannels, shutdownChannels } from "./channels/index.js";
 import { scheduler } from "./scheduler/index.js";
 import { triggerPoller, triggerSubscriber } from "./triggers/index.js";
@@ -58,7 +58,7 @@ app.get("/health", (_req, res) => {
 app.use("/api", providerRouter);
 app.use("/api", conversationRouter);
 app.use("/api", soulRouter);
-app.use("/api", toolRouter);
+app.use("/api", pluginRouter);
 app.use("/api", logRouter);
 app.use("/api", taskRouter);
 app.use("/api", inboxRouter);
@@ -73,8 +73,8 @@ app.use(errorHandler);
 const server = http.createServer(app);
 attachWebSocket(server);
 
-// Load tools and channels, init scheduler and trigger poller, then start listening
-Promise.all([loadAllTools(), loadAllChannels()]).then(async () => {
+// Load plugins and channels, init scheduler and trigger poller, then start listening
+Promise.all([loadAllPlugins(), loadAllChannels()]).then(async () => {
   scheduler.init();
   triggerPoller.init();
   triggerSubscriber.init();

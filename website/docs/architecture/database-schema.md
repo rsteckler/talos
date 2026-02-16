@@ -67,10 +67,10 @@ Scheduled and triggered tasks.
 | id            | text    | Primary key (UUID)                           |
 | name          | text    | Task name                                    |
 | description   | text    | Optional description                         |
-| triggerType   | text    | Open string: builtin (`cron`, `interval`, `webhook`, `manual`) or tool-provided (`toolId:triggerId`) |
+| triggerType   | text    | Open string: builtin (`cron`, `interval`, `webhook`, `manual`) or plugin-provided (`pluginId:triggerId`) |
 | triggerConfig | text    | JSON config (e.g., cron expression)          |
 | actionPrompt  | text    | Prompt sent to the LLM                       |
-| tools         | text    | JSON array of tool IDs, or null              |
+| plugins       | text    | JSON array of plugin IDs, or null            |
 | isActive      | boolean | Whether scheduling is enabled                |
 | lastRunAt     | text    | ISO timestamp of last execution              |
 | nextRunAt     | text    | ISO timestamp of next scheduled run          |
@@ -104,20 +104,20 @@ Async results and notifications.
 | isRead    | boolean | Read status                                          |
 | createdAt | text    | ISO timestamp                                        |
 
-### toolConfigs
+### pluginConfigs
 
-Tool enablement, credential, and settings storage.
+Plugin enablement, credential, and settings storage.
 
 | Column    | Type    | Notes                                        |
 |-----------|---------|----------------------------------------------|
-| toolId    | text    | Primary key (tool manifest ID)               |
+| pluginId  | text    | Primary key (plugin manifest ID)             |
 | config    | text    | JSON object with credentials and settings    |
-| isEnabled | boolean | Whether the tool is active                   |
+| isEnabled | boolean | Whether the plugin is active                 |
 | createdAt | text    | ISO timestamp                                |
 
 ### triggerState
 
-Persisted state for tool-provided trigger pollers.
+Persisted state for plugin-provided trigger pollers.
 
 | Column     | Type | Notes                                    |
 |------------|------|------------------------------------------|

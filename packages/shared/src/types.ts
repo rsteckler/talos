@@ -182,7 +182,7 @@ export interface LogSettings {
 
 export type ConnectionStatus = "connected" | "disconnected" | "reconnecting";
 
-// --- Tools ---
+// --- Plugins ---
 
 export interface TriggerParamSource {
   function: string;
@@ -201,14 +201,14 @@ export interface TriggerParamSpec {
   source?: TriggerParamSource; // required for multi-select
 }
 
-export interface ToolTriggerSpec {
+export interface PluginTriggerSpec {
   id: string;
   label: string;
   description?: string;
   params?: TriggerParamSpec[];
 }
 
-export interface ToolSettingSpec {
+export interface PluginSettingSpec {
   name: string;
   label: string;
   type: "number" | "string" | "boolean";
@@ -219,27 +219,27 @@ export interface ToolSettingSpec {
 export interface TriggerTypeInfo {
   id: string;
   label: string;
-  category: "builtin" | "tool";
-  toolId?: string;
+  category: "builtin" | "plugin";
+  pluginId?: string;
   description?: string;
   params?: TriggerParamSpec[];
 }
 
 export interface TriggerEvent {
   triggerId: string;
-  toolId: string;
+  pluginId: string;
   data?: unknown;
   summary?: string;
 }
 
-export interface ToolLogger {
+export interface PluginLogger {
   info(message: string): void;
   warn(message: string): void;
   error(message: string): void;
   debug(message: string): void;
 }
 
-export interface ToolTriggerHandler {
+export interface PluginTriggerHandler {
   poll?(
     credentials: Record<string, string>,
     state: Record<string, unknown>,
@@ -258,7 +258,7 @@ export interface ToolTriggerHandler {
   ): boolean;
 }
 
-export interface ToolCredentialSpec {
+export interface PluginCredentialSpec {
   name: string;
   label: string;
   description?: string;
@@ -266,19 +266,19 @@ export interface ToolCredentialSpec {
   secret?: boolean; // defaults to true — set false for non-sensitive values like URLs
 }
 
-export interface ToolFunctionSpec {
+export interface PluginFunctionSpec {
   name: string;
   description: string;
   parameters: Record<string, unknown>; // JSON Schema
 }
 
-export interface ToolOAuthSpec {
+export interface PluginOAuthSpec {
   provider: string;
   scopes: string[];
   authorizeUrl: string;
 }
 
-export interface ToolModuleSpec {
+export interface PluginModuleSpec {
   id: string;           // e.g. "gmail", "calendar"
   name: string;         // e.g. "Gmail", "Google Calendar"
   description: string;  // e.g. "Search, read, send, reply, archive emails"
@@ -303,7 +303,7 @@ export interface PlanResult {
   summary: string;
 }
 
-export interface ToolManifest {
+export interface PluginManifest {
   id: string;
   name: string;
   description: string;
@@ -311,33 +311,33 @@ export interface ToolManifest {
   logName?: string;
   category?: string; // e.g. "core", "productivity", "smart-home", "search", "system"
   defaultEnabled?: boolean;
-  credentials?: ToolCredentialSpec[];
-  oauth?: ToolOAuthSpec;
-  settings?: ToolSettingSpec[];
-  triggers?: ToolTriggerSpec[];
-  modules?: ToolModuleSpec[];  // optional grouping — if absent, all functions form one implicit module
-  functions: ToolFunctionSpec[];
+  credentials?: PluginCredentialSpec[];
+  oauth?: PluginOAuthSpec;
+  settings?: PluginSettingSpec[];
+  triggers?: PluginTriggerSpec[];
+  modules?: PluginModuleSpec[];  // optional grouping — if absent, all functions form one implicit module
+  functions: PluginFunctionSpec[];
 }
 
-export interface ToolInfo {
+export interface PluginInfo {
   id: string;
   name: string;
   description: string;
   version: string;
   isEnabled: boolean;
   allowWithoutAsking: boolean;
-  credentials: ToolCredentialSpec[];
-  oauth?: ToolOAuthSpec;
+  credentials: PluginCredentialSpec[];
+  oauth?: PluginOAuthSpec;
   oauthConnected?: boolean;
-  settings: ToolSettingSpec[];
+  settings: PluginSettingSpec[];
   settingValues?: Record<string, string>;
-  triggers: ToolTriggerSpec[];
-  functions: ToolFunctionSpec[];
+  triggers: PluginTriggerSpec[];
+  functions: PluginFunctionSpec[];
   hasRequiredCredentials: boolean;
 }
 
-export interface ToolConfig {
-  toolId: string;
+export interface PluginConfig {
+  pluginId: string;
   config: Record<string, string>;
   isEnabled: boolean;
 }

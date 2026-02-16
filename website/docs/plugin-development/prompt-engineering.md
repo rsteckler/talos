@@ -4,11 +4,11 @@ sidebar_position: 4
 
 # Prompt Engineering
 
-The `prompt.md` file provides instructions to the LLM about how and when to use your tool. This content is appended to the system prompt when the tool is enabled.
+The `prompt.md` file provides instructions to the LLM about how and when to use your plugin. This content is appended to the system prompt when the plugin is enabled.
 
 ## Purpose
 
-While the manifest's function descriptions tell the LLM *what* the tool does, `prompt.md` tells it *how* to use it effectively — when to call it, what patterns to follow, and what to avoid.
+While the manifest's function descriptions tell the LLM *what* the plugin does, `prompt.md` tells it *how* to use it effectively — when to call it, what patterns to follow, and what to avoid.
 
 ## Best Practices
 
@@ -75,4 +75,4 @@ You have access to web search. Use it to find current information.
 
 ## Length
 
-Keep prompt.md concise. The content is included in every LLM request when the tool is enabled, so shorter is better for token efficiency. Aim for 100-300 words.
+Keep prompt.md concise. The content is included in every LLM request when the plugin is enabled, so shorter is better for token efficiency. Aim for 100-300 words.

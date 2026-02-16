@@ -4,12 +4,12 @@ sidebar_position: 3
 
 # Handler Functions
 
-The `index.ts` file in each tool directory exports handler functions that match the function names defined in `manifest.json`.
+The `index.ts` file in each plugin directory exports handler functions that match the function names defined in `manifest.json`.
 
 ## Structure
 
 ```typescript
-import type { ToolContext } from "@talos/server/tools";
+import type { ToolContext } from "@talos/server/plugins";
 
 export async function my_function(
   args: { input: string },
@@ -44,7 +44,7 @@ export async function search(
 ): Promise<string> {
   const apiKey = context.config["api_key"];
   if (!apiKey) {
-    throw new Error("API key not configured. Please set it in Settings → Tools.");
+    throw new Error("API key not configured. Please set it in Settings → Plugins.");
   }
 
   // ... implementation
@@ -53,7 +53,7 @@ export async function search(
 
 ## Multiple Functions
 
-A single tool can export multiple functions. Each one must match a function name in the manifest:
+A single plugin can export multiple functions. Each one must match a function name in the manifest:
 
 ```typescript
 // manifest.json defines functions: "read" and "list"
@@ -69,7 +69,7 @@ export async function list(args: { path: string }): Promise<string> {
 
 ## Logging
 
-Tools can log to the server's structured logging system by exporting an optional `init` function. The server calls it at load time with a scoped `ToolLogger`.
+Plugins can log to the server's structured logging system by exporting an optional `init` function. The server calls it at load time with a scoped `PluginLogger`.
 
 ```typescript
 let log = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -85,13 +85,13 @@ export async function my_function(args: { input: string }, context: ToolContext)
 }
 ```
 
-Declare `logName` in your manifest to control the log area name. Without it, the tool ID is used (e.g., `tool:my-tool`). With `"logName": "mytool"`, logs appear under `tool:mytool`.
+Declare `logName` in your manifest to control the log area name. Without it, the plugin ID is used (e.g., `plugin:my-plugin`). With `"logName": "mytool"`, logs appear under `plugin:mytool`.
 
-The log area is automatically registered in the log viewer dropdown when the tool loads.
+The log area is automatically registered in the log viewer dropdown when the plugin loads.
 
 ## Triggers
 
-Tools can provide background triggers for the task system. Declare triggers in `manifest.json` and export a `triggers` object from `index.ts`.
+Plugins can provide background triggers for the task system. Declare triggers in `manifest.json` and export a `triggers` object from `index.ts`.
 
 ### Trigger Handler
 
@@ -99,7 +99,7 @@ Each trigger handler implements a `poll` function that checks for new events:
 
 ```typescript
 interface TriggerPollResult {
-  event: { triggerId: string; toolId: string; data?: unknown; summary?: string } | null;
+  event: { triggerId: string; pluginId: string; data?: unknown; summary?: string } | null;
   newState: Record<string, unknown>;
 }
 
@@ -117,7 +117,7 @@ export const triggers = {
         return {
           event: {
             triggerId: "my_event",
-            toolId: "my-tool",
+            pluginId: "my-plugin",
             summary: "New event detected: details here",
           },
           newState: { lastChecked: Date.now() },
@@ -133,7 +133,7 @@ export const triggers = {
 ### How Polling Works
 
 1. The poller only runs when at least one active task uses the trigger
-2. Poll interval is read from tool settings (falls back to 5 minutes)
+2. Poll interval is read from plugin settings (falls back to 5 minutes)
 3. `state` is persisted between polls in the `trigger_state` DB table
 4. When `event` is non-null, all matching tasks execute with the event summary prepended to the action prompt
 5. A concurrency guard prevents overlapping polls for the same trigger

@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useTaskStore } from "@/stores"
-import { toolsApi } from "@/api/tools"
+import { pluginsApi } from "@/api/plugins"
 import { TriggerParamEditor } from "./TriggerParamEditor"
 import type { Task, TriggerType, TriggerTypeInfo } from "@talos/shared/types"
 
@@ -52,18 +52,18 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
   // Fetch trigger types when dialog opens
   useEffect(() => {
     if (open) {
-      toolsApi.getTriggerTypes()
+      pluginsApi.getTriggerTypes()
         .then(setTriggerTypes)
         .catch(() => setTriggerTypes([]))
     }
   }, [open])
 
   const builtinTriggers = triggerTypes.filter((t) => t.category === "builtin")
-  const toolTriggers = triggerTypes.filter((t) => t.category === "tool")
-  const isToolTrigger = toolTriggers.some((t) => t.id === triggerType)
+  const pluginTriggers = triggerTypes.filter((t) => t.category === "plugin")
+  const isPluginTrigger = pluginTriggers.some((t) => t.id === triggerType)
   const selectedTriggerInfo = triggerTypes.find((t) => t.id === triggerType)
   const currentTriggerParams = selectedTriggerInfo?.params
-  const hasComplexTrigger = isToolTrigger
+  const hasComplexTrigger = isPluginTrigger
     && currentTriggerParams != null
     && currentTriggerParams.length > 0
     && currentTriggerParams.some((p) => p.type === "multi-select")
@@ -114,7 +114,7 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
     if (triggerType === "interval") {
       return JSON.stringify({ interval_minutes: Number(intervalMinutes) || 60 })
     }
-    if (isToolTrigger && Object.keys(triggerParams).length > 0) {
+    if (isPluginTrigger && Object.keys(triggerParams).length > 0) {
       return JSON.stringify(triggerParams)
     }
     return "{}"
@@ -250,10 +250,10 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
                       </>
                     )}
                   </SelectGroup>
-                  {toolTriggers.length > 0 && (
+                  {pluginTriggers.length > 0 && (
                     <SelectGroup>
-                      <SelectLabel>Tool Events</SelectLabel>
-                      {toolTriggers.map((t) => (
+                      <SelectLabel>Plugin Events</SelectLabel>
+                      {pluginTriggers.map((t) => (
                         <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
                       ))}
                     </SelectGroup>
@@ -306,21 +306,21 @@ export function TaskDialog({ task, open, onOpenChange }: TaskDialogProps) {
               </div>
             )}
 
-            {isToolTrigger && currentTriggerParams && currentTriggerParams.length > 0 && selectedTriggerInfo?.toolId && (
+            {isPluginTrigger && currentTriggerParams && currentTriggerParams.length > 0 && selectedTriggerInfo?.pluginId && (
               <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-4 border-l-2 border-l-primary/20">
                 <TriggerParamEditor
                   params={currentTriggerParams}
-                  toolId={selectedTriggerInfo.toolId}
+                  pluginId={selectedTriggerInfo.pluginId}
                   values={triggerParams}
                   onChange={setTriggerParams}
                 />
               </div>
             )}
 
-            {isToolTrigger && (!currentTriggerParams || currentTriggerParams.length === 0) && (
+            {isPluginTrigger && (!currentTriggerParams || currentTriggerParams.length === 0) && (
               <div className="rounded-lg border border-border/50 bg-muted/30 p-4 border-l-2 border-l-primary/20 text-sm text-muted-foreground">
-                <p>This trigger fires automatically based on tool settings.</p>
-                <p className="mt-1 text-xs">Configure the poll interval in Settings &gt; Tools.</p>
+                <p>This trigger fires automatically based on plugin settings.</p>
+                <p className="mt-1 text-xs">Configure the poll interval in Settings &gt; Plugins.</p>
               </div>
             )}
           </section>
