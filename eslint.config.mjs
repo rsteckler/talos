@@ -16,8 +16,8 @@ export default tseslint.config(
   // Base JS recommended rules
   js.configs.recommended,
 
-  // TS recommended rules for all TS files
-  ...tseslint.configs.recommended,
+  // TS strict rules for all TS files
+  ...tseslint.configs.strict,
 
   // Base rule tuning
   {
@@ -39,6 +39,19 @@ export default tseslint.config(
         },
       ],
       "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-non-null-assertion": "warn",
+      "@typescript-eslint/no-dynamic-delete": "warn",
+      "@typescript-eslint/explicit-function-return-type": [
+        "warn",
+        {
+          allowExpressions: true,
+          allowTypedFunctionExpressions: true,
+          allowHigherOrderFunctions: true,
+        },
+      ],
+      "max-lines-per-function": ["warn", { max: 80, skipBlankLines: true, skipComments: true }],
+      complexity: ["warn", { max: 15 }],
+      "max-params": ["warn", { max: 3 }],
     },
   },
 
@@ -68,6 +81,9 @@ export default tseslint.config(
     files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/explicit-function-return-type": "off",
+      "max-lines-per-function": "off",
     },
   },
 );
