@@ -50,7 +50,8 @@ export async function generatePlan(
     throw new Error("No active model configured");
   }
 
-  log.dev.debug("Generating plan", { request, moduleCount: moduleCatalog.split("\n").length });
+  const moduleLines = moduleCatalog.split("\n").filter((l) => l.trim().length > 0);
+  log.dev.debug("Generating plan", { request, moduleCount: moduleLines.length, modules: moduleLines.map((l) => l.trim()) });
 
   const result = await generateObject({
     model: active.model,

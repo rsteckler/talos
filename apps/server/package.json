@@ -15,6 +15,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.39",
     "@ai-sdk/google": "^3.0.22",
+    "@ai-sdk/mcp": "^1.0.21",
     "@ai-sdk/openai": "^3.0.26",
     "@googlemaps/google-maps-services-js": "^3.4.2",
     "@talos/shared": "workspace:*",

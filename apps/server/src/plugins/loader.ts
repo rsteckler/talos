@@ -8,6 +8,13 @@ import { db, schema } from "../db/index.js";
 import { createLogger, ensureLogArea } from "../logger/index.js";
 import { registerTrigger, clearRegistry } from "../triggers/registry.js";
 import { rebuildRegistry } from "./registry.js";
+import {
+  isDockerAvailable,
+  buildSidecarImage,
+  startSidecar,
+  stopSidecar,
+  stopAllSidecars,
+} from "./sidecar.js";
 
 const log = createLogger("plugins");
 
@@ -85,7 +92,15 @@ export async function loadAllPlugins(): Promise<void> {
         ? fs.readFileSync(promptPath, "utf-8")
         : undefined;
 
-      loadedPlugins.set(manifest.id, { manifest, handlers, triggers, promptMd });
+      // Capture optional lifecycle hooks
+      const startFn = typeof mod.start === "function"
+        ? (mod.start as LoadedPlugin["start"])
+        : undefined;
+      const stopFn = typeof mod.stop === "function"
+        ? (mod.stop as LoadedPlugin["stop"])
+        : undefined;
+
+      loadedPlugins.set(manifest.id, { manifest, handlers, triggers, promptMd, pluginDir, start: startFn, stop: stopFn });
 
       // Auto-enable plugins with defaultEnabled if no config row exists yet
       if (manifest.defaultEnabled) {
@@ -126,4 +141,110 @@ export function getLoadedPlugins(): Map<string, LoadedPlugin> {
 
 export function getLoadedPlugin(id: string): LoadedPlugin | undefined {
   return loadedPlugins.get(id);
+}
+
+// --- Plugin lifecycle (sidecars + start/stop hooks) ---
+
+const activePlugins = new Set<string>();
+
+export async function initPlugins(): Promise<void> {
+  let dockerAvailable: boolean | null = null; // lazy-checked on first sidecar
+
+  for (const [pluginId, loaded] of loadedPlugins) {
+    const hasSidecar = !!loaded.manifest.sidecar;
+    const hasStart = !!loaded.start;
+
+    if (!hasSidecar && !hasStart) continue;
+
+    // Check enabled + credentials (same pattern as channels registry)
+    const configRow = db
+      .select()
+      .from(schema.pluginConfigs)
+      .where(eq(schema.pluginConfigs.pluginId, pluginId))
+      .get();
+
+    if (!configRow?.isEnabled) continue;
+
+    const storedConfig: Record<string, string> = configRow.config
+      ? (JSON.parse(configRow.config) as Record<string, string>)
+      : {};
+
+    const requiredCreds = (loaded.manifest.credentials ?? []).filter((c) => c.required);
+    const hasRequired = requiredCreds.every((c) => !!storedConfig[c.name]);
+    if (!hasRequired) {
+      log.warn(`Plugin "${loaded.manifest.name}" enabled but missing required credentials, skipping init`);
+      continue;
+    }
+
+    // Extract credentials from stored config
+    const credentialNames = new Set((loaded.manifest.credentials ?? []).map((c) => c.name));
+    const credentials: Record<string, string> = {};
+    for (const [key, value] of Object.entries(storedConfig)) {
+      if (credentialNames.has(key)) {
+        credentials[key] = value;
+      }
+    }
+
+    const pluginLog = createPluginLogger(loaded.manifest);
+
+    // Handle sidecar
+    if (hasSidecar) {
+      const sidecar = loaded.manifest.sidecar!;
+
+      // Lazy Docker availability check
+      if (dockerAvailable === null) {
+        dockerAvailable = await isDockerAvailable();
+      }
+
+      if (!dockerAvailable) {
+        log.warn(`Docker not available — skipping sidecar for plugin "${loaded.manifest.name}"`);
+        continue;
+      }
+
+      try {
+        await buildSidecarImage(pluginId, loaded.pluginDir, sidecar, pluginLog);
+        await startSidecar(pluginId, loaded.pluginDir, sidecar, credentials, pluginLog);
+      } catch (err) {
+        log.error(`Failed to start sidecar for plugin "${loaded.manifest.name}"`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
+    }
+
+    // Call plugin start() if exported
+    if (hasStart) {
+      try {
+        await loaded.start!(credentials, pluginLog);
+      } catch (err) {
+        log.error(`Failed to start plugin "${loaded.manifest.name}"`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
+    }
+
+    activePlugins.add(pluginId);
+    log.info(`Plugin "${loaded.manifest.name}" initialized`);
+  }
+}
+
+export async function shutdownPlugins(): Promise<void> {
+  for (const pluginId of activePlugins) {
+    const loaded = loadedPlugins.get(pluginId);
+    if (!loaded) continue;
+
+    if (loaded.stop) {
+      try {
+        await loaded.stop();
+      } catch (err) {
+        log.error(`Failed to stop plugin "${loaded.manifest.name}"`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  activePlugins.clear();
+  await stopAllSidecars();
 }

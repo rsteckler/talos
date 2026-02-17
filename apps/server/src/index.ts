@@ -27,7 +27,7 @@ import { oauthRouter } from "./api/oauth.js";
 import { channelRouter } from "./api/channels.js";
 import { errorHandler } from "./api/errorHandler.js";
 import { attachWebSocket } from "./ws/index.js";
-import { loadAllPlugins } from "./plugins/index.js";
+import { loadAllPlugins, initPlugins, shutdownPlugins } from "./plugins/index.js";
 import { loadAllChannels, initChannels, shutdownChannels } from "./channels/index.js";
 import { scheduler } from "./scheduler/index.js";
 import { triggerPoller, triggerSubscriber } from "./triggers/index.js";
@@ -78,6 +78,9 @@ Promise.all([loadAllPlugins(), loadAllChannels()]).then(async () => {
   scheduler.init();
   triggerPoller.init();
   triggerSubscriber.init();
+  await initPlugins().catch((err) => {
+    log.error("Failed to init plugins", err instanceof Error ? { error: err.message } : undefined);
+  });
   await initChannels().catch((err) => {
     log.error("Failed to init channels", err instanceof Error ? { error: err.message } : undefined);
   });
@@ -98,6 +101,7 @@ Promise.all([loadAllPlugins(), loadAllChannels()]).then(async () => {
 // Graceful shutdown
 function handleShutdown() {
   log.info("Shutting down...");
+  shutdownPlugins().catch(() => {});
   shutdownChannels().catch(() => {});
   triggerSubscriber.shutdown();
   triggerPoller.shutdown();
