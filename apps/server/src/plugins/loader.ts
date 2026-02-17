@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import type { PluginManifest, PluginTriggerHandler, PluginLogger } from "@talos/shared/types";
 import type { LoadedPlugin, PluginHandler } from "./types.js";
+import { registerService, getService } from "../services/registry.js";
 import { db, schema } from "../db/index.js";
 import { createLogger, ensureLogArea } from "../logger/index.js";
 import { registerTrigger, clearRegistry } from "../triggers/registry.js";
@@ -62,10 +63,10 @@ export async function loadAllPlugins(): Promise<void> {
       const indexPath = path.join(pluginDir, "index.ts");
       const mod = await import(indexPath);
 
-      // Inject scoped logger if the plugin exports init()
+      // Inject scoped logger and services if the plugin exports init()
       const pluginLogger = createPluginLogger(manifest);
       if (typeof mod.init === "function") {
-        mod.init(pluginLogger);
+        mod.init(pluginLogger, { getService, registerService });
       }
 
       const handlers: Record<string, PluginHandler> = mod.handlers ?? {};

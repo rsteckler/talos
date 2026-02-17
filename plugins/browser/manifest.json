@@ -1,0 +1,331 @@
+{
+  "id": "browser",
+  "name": "Browser",
+  "description": "Browse the web using a headless Chromium browser. Navigate pages, interact with elements, extract content, manage tabs, and take screenshots.",
+  "version": "1.0.0",
+  "category": "core",
+  "defaultEnabled": true,
+  "settings": [
+    {
+      "name": "idle_timeout",
+      "label": "Idle timeout (minutes)",
+      "type": "number",
+      "default": "5",
+      "description": "Minutes of inactivity before the browser automatically closes"
+    },
+    {
+      "name": "headless",
+      "label": "Headless mode",
+      "type": "boolean",
+      "default": "true",
+      "description": "Run the browser without a visible window"
+    }
+  ],
+  "modules": [
+    { "id": "navigation", "name": "Navigation", "description": "Navigate to URLs, go back/forward, reload", "functions": ["navigate", "go_back", "go_forward", "reload", "get_current_url"] },
+    { "id": "interaction", "name": "Interaction", "description": "Click, type, select options, press keys", "functions": ["click", "type_text", "select_option", "check", "press_key"] },
+    { "id": "content", "name": "Content", "description": "Extract page content, take screenshots, run JS", "functions": ["get_page_content", "get_text", "screenshot", "evaluate_js"] },
+    { "id": "tabs", "name": "Tabs", "description": "Manage browser tabs", "functions": ["new_tab", "close_tab", "switch_tab", "list_tabs"] },
+    { "id": "waiting", "name": "Waiting", "description": "Wait for elements or navigation events", "functions": ["wait_for_selector", "wait_for_navigation"] }
+  ],
+  "functions": [
+    {
+      "name": "navigate",
+      "description": "Navigate to a URL in the current tab.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The URL to navigate to"
+          },
+          "wait_until": {
+            "type": "string",
+            "description": "When to consider navigation complete: 'load', 'domcontentloaded', or 'networkidle'"
+          }
+        },
+        "required": ["url"]
+      }
+    },
+    {
+      "name": "go_back",
+      "description": "Navigate back in browser history.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "go_forward",
+      "description": "Navigate forward in browser history.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "reload",
+      "description": "Reload the current page.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "get_current_url",
+      "description": "Get the current page URL and title.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "click",
+      "description": "Click an element on the page.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "CSS selector, text selector (text=Click me), or role selector (role=button) for the element"
+          },
+          "button": {
+            "type": "string",
+            "description": "Mouse button: 'left', 'right', or 'middle'. Defaults to 'left'."
+          },
+          "click_count": {
+            "type": "number",
+            "description": "Number of clicks (e.g. 2 for double-click). Defaults to 1."
+          }
+        },
+        "required": ["selector"]
+      }
+    },
+    {
+      "name": "type_text",
+      "description": "Type text into an input field or textarea.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "Selector for the input element"
+          },
+          "text": {
+            "type": "string",
+            "description": "The text to type"
+          },
+          "clear_first": {
+            "type": "boolean",
+            "description": "Clear the field before typing. Defaults to false."
+          }
+        },
+        "required": ["selector", "text"]
+      }
+    },
+    {
+      "name": "select_option",
+      "description": "Select an option from a dropdown/select element.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "Selector for the select element"
+          },
+          "value": {
+            "type": "string",
+            "description": "The value or visible text of the option to select"
+          }
+        },
+        "required": ["selector", "value"]
+      }
+    },
+    {
+      "name": "check",
+      "description": "Check or uncheck a checkbox.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "Selector for the checkbox element"
+          },
+          "checked": {
+            "type": "boolean",
+            "description": "true to check, false to uncheck"
+          }
+        },
+        "required": ["selector", "checked"]
+      }
+    },
+    {
+      "name": "press_key",
+      "description": "Press a keyboard key.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Key to press (e.g. 'Enter', 'Tab', 'Escape', 'ArrowDown', 'Control+a')"
+          }
+        },
+        "required": ["key"]
+      }
+    },
+    {
+      "name": "get_page_content",
+      "description": "Get the text content or HTML of the current page or a specific element.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "description": "'text' for readable text content or 'html' for raw HTML. Defaults to 'text'."
+          },
+          "selector": {
+            "type": "string",
+            "description": "Optional selector to scope content extraction to a specific element"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_text",
+      "description": "Get the inner text of a specific element.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "Selector for the element"
+          }
+        },
+        "required": ["selector"]
+      }
+    },
+    {
+      "name": "screenshot",
+      "description": "Take a screenshot of the page or a specific element. Returns base64-encoded PNG.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "Optional selector to screenshot a specific element instead of the full page"
+          },
+          "full_page": {
+            "type": "boolean",
+            "description": "Capture the full scrollable page. Defaults to false (viewport only)."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "evaluate_js",
+      "description": "Execute JavaScript in the page context and return the result.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "JavaScript expression to evaluate. The result will be serialized and returned."
+          }
+        },
+        "required": ["expression"]
+      }
+    },
+    {
+      "name": "new_tab",
+      "description": "Open a new empty browser tab and switch to it.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "close_tab",
+      "description": "Close a browser tab.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "tab_id": {
+            "type": "string",
+            "description": "ID of the tab to close (from list_tabs or new_tab)"
+          }
+        },
+        "required": ["tab_id"]
+      }
+    },
+    {
+      "name": "switch_tab",
+      "description": "Switch to a different browser tab.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "tab_id": {
+            "type": "string",
+            "description": "ID of the tab to switch to"
+          }
+        },
+        "required": ["tab_id"]
+      }
+    },
+    {
+      "name": "list_tabs",
+      "description": "List all open browser tabs with their IDs, URLs, and titles.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "wait_for_selector",
+      "description": "Wait for an element matching the selector to appear or reach a specific state.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "Selector for the element to wait for"
+          },
+          "state": {
+            "type": "string",
+            "description": "State to wait for: 'visible', 'hidden', 'attached', or 'detached'. Defaults to 'visible'."
+          },
+          "timeout": {
+            "type": "number",
+            "description": "Maximum wait time in milliseconds. Defaults to 30000."
+          }
+        },
+        "required": ["selector"]
+      }
+    },
+    {
+      "name": "wait_for_navigation",
+      "description": "Wait for a navigation event to complete.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL pattern to wait for (string match or glob pattern)"
+          },
+          "timeout": {
+            "type": "number",
+            "description": "Maximum wait time in milliseconds. Defaults to 30000."
+          }
+        },
+        "required": []
+      }
+    }
+  ]
+}

@@ -2,6 +2,11 @@ import type { PluginManifest, PluginTriggerHandler, PluginLogger } from "@talos/
 
 export type PluginHandler = (args: Record<string, unknown>, credentials?: Record<string, string>) => Promise<unknown>;
 
+export interface PluginServices {
+  getService: <T>(name: string) => T | undefined;
+  registerService: (name: string, instance: unknown) => void;
+}
+
 export interface LoadedPlugin {
   manifest: PluginManifest;
   handlers: Record<string, PluginHandler>;

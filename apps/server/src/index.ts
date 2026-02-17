@@ -10,6 +10,8 @@ console.error = (...args: unknown[]) => {
 };
 
 import http from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
 import { runMigrations } from "./db/migrate.js";
@@ -53,6 +55,11 @@ initLogger();
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "talos-server" });
 });
+
+// Static file serving for plugin-generated content
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const dataDir = path.join(__dirname, "..", "data");
+app.use("/api/screenshots", express.static(path.join(dataDir, "screenshots")));
 
 // API routes
 app.use("/api", providerRouter);

@@ -249,6 +249,9 @@ export function buildRoutedPluginToolSet(
       + "**IMPORTANT**: Always pass the user's COMPLETE request in a single `plan_actions` call. "
       + "Do NOT split a multi-step request into multiple calls — the planner handles multi-step orchestration and data flow between steps internally. "
       + "For example, \"search my notes for X and email the result to Y\" should be ONE plan_actions call with the full request.\n\n"
+      + "**Browser context**: The browser persists between turns. When the user asks to interact with the current page "
+      + "(click, type, screenshot, etc.), pass their request as-is — do NOT add the website name, URL, or navigation instructions. "
+      + "The page is already loaded.\n\n"
       + "Available modules:\n" + catalogText,
     );
   }
@@ -258,7 +261,7 @@ export function buildRoutedPluginToolSet(
     tools["plan_actions"] = {
       description: `Execute a multi-step action plan using extended tools. The system will automatically plan and execute all necessary steps, passing data between them.\n\nIMPORTANT: Always pass the user's COMPLETE request in a single call. Do NOT break a multi-step request into separate plan_actions calls — the planner handles multi-step orchestration internally. For example, "search my notes and email the result" should be ONE call, not two.\n\nAvailable modules:\n${catalogText}`,
       inputSchema: z.object({
-        request: z.string().describe("The user's COMPLETE request — include the full goal, not just one part of it"),
+        request: z.string().describe("The user's COMPLETE request in their own words. Pass it faithfully — do NOT add website names, URLs, or navigation instructions that the user did not say. The browser persists between turns, so interaction requests (click, type, screenshot) refer to the page already open."),
       }),
       execute: async (args: Record<string, unknown>) => {
         const request = args["request"] as string;

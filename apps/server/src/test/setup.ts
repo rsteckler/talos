@@ -49,6 +49,7 @@ export function createTestDb() {
       role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
       content TEXT NOT NULL,
       usage TEXT,
+      tool_calls TEXT,
       created_at TEXT NOT NULL
     );
 

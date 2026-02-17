@@ -34,8 +34,9 @@ For tool steps, the "module" field MUST be set to one of these exact references.
 2. Each tool step's "module" field must be an exact module reference from the catalog (e.g. "google:gmail", NOT "Gmail").
 3. Think steps are for processing data between tool steps (sorting, filtering, formatting, etc.). Do NOT use a think step if the result can be returned directly from a tool step.
 4. Steps can depend on previous steps via depends_on. A step only runs after its dependencies complete.
-5. Keep descriptions concise but specific — they guide the executor LLM.
-6. If the request only needs one module, create a single tool step — no think step needed.`;
+5. Keep descriptions concise but specific — they guide the executor LLM. Each description must be self-contained: describe only what THIS step should do, not what previous steps did. Bad: "Take screenshot after clicking button". Good: "Take a screenshot of the current page".
+6. If the request only needs one module, create a single tool step — no think step needed.
+7. **Browser session persistence**: The browser stays open between turns AND between steps. If the user asks to interact with a page (click, type, screenshot), do NOT add a navigation step — the page is already loaded. Only include a navigation step if the user explicitly asks to go to a new URL.`;
 
 /**
  * Generate a structured plan for executing a multi-step request.

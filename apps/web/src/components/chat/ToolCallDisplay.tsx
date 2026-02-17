@@ -11,6 +11,13 @@ import { usePluginStore } from "@/stores/usePluginStore"
 import { useConnectionStore } from "@/stores"
 import type { ToolCallInfo } from "@talos/shared/types"
 
+function getScreenshotUrl(result: unknown): string | null {
+  if (typeof result === "object" && result !== null && "screenshot_url" in result) {
+    return (result as { screenshot_url: string }).screenshot_url
+  }
+  return null
+}
+
 interface ToolCallDisplayProps {
   toolCall: ToolCallInfo;
 }
@@ -86,38 +93,49 @@ export function ToolCallDisplay({ toolCall }: ToolCallDisplayProps) {
     pending_approval: null, // handled above
   }[toolCall.status]
 
+  const screenshotUrl = toolCall.result !== undefined ? getScreenshotUrl(toolCall.result) : null
+
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="my-1.5">
-      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-300 transition-colors">
-        <ChevronRight
-          className={`size-3 transition-transform ${open ? "rotate-90" : ""}`}
-        />
-        {statusIcon}
-        <span className={`font-mono ${toolCall.status === "denied" ? "line-through text-zinc-500" : ""}`}>{displayName}</span>
-        {toolCall.status === "denied" && (
-          <span className="text-red-400/70 text-xs">denied</span>
-        )}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1 ml-5">
-        <div className="text-xs space-y-1.5">
-          <div>
-            <span className="text-zinc-500">Args:</span>
-            <pre className="mt-0.5 rounded bg-zinc-900 px-2 py-1.5 text-zinc-300 overflow-x-auto max-h-32 overflow-y-auto scrollbar-thumb-only">
-              {JSON.stringify(toolCall.args, null, 2)}
-            </pre>
-          </div>
-          {toolCall.result !== undefined && (
+    <div className="my-1.5">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-300 transition-colors">
+          <ChevronRight
+            className={`size-3 transition-transform ${open ? "rotate-90" : ""}`}
+          />
+          {statusIcon}
+          <span className={`font-mono ${toolCall.status === "denied" ? "line-through text-zinc-500" : ""}`}>{displayName}</span>
+          {toolCall.status === "denied" && (
+            <span className="text-red-400/70 text-xs">denied</span>
+          )}
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-1 ml-5">
+          <div className="text-xs space-y-1.5">
             <div>
-              <span className="text-zinc-500">Result:</span>
-              <pre className="mt-0.5 rounded bg-zinc-900 px-2 py-1.5 text-zinc-300 overflow-x-auto max-h-48 overflow-y-auto scrollbar-thumb-only">
-                {typeof toolCall.result === "string"
-                  ? toolCall.result
-                  : JSON.stringify(toolCall.result, null, 2)}
+              <span className="text-zinc-500">Args:</span>
+              <pre className="mt-0.5 rounded bg-zinc-900 px-2 py-1.5 text-zinc-300 overflow-x-auto max-h-32 overflow-y-auto scrollbar-thumb-only">
+                {JSON.stringify(toolCall.args, null, 2)}
               </pre>
             </div>
-          )}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+            {toolCall.result !== undefined && !screenshotUrl && (
+              <div>
+                <span className="text-zinc-500">Result:</span>
+                <pre className="mt-0.5 rounded bg-zinc-900 px-2 py-1.5 text-zinc-300 overflow-x-auto max-h-48 overflow-y-auto scrollbar-thumb-only">
+                  {typeof toolCall.result === "string"
+                    ? toolCall.result
+                    : JSON.stringify(toolCall.result, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+      {screenshotUrl && (
+        <img
+          src={screenshotUrl}
+          alt="Browser screenshot"
+          className="mt-2 rounded border border-zinc-700 max-w-full"
+        />
+      )}
+    </div>
   )
 }

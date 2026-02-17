@@ -55,7 +55,7 @@ export async function executePlan(
       log.user.high(`Step ${step.id}: ${step.description}`);
 
       try {
-        const stepResult = await executeStep(step, request, results, active, approvalGate, onToolCall, onToolResult);
+        const stepResult = await executeStep(step, request, results, plan, active, approvalGate, onToolCall, onToolResult);
         results.set(step.id, stepResult);
         stepResults.push({ id: step.id, status: "complete", result: stepResult });
         onProgress?.(step.id, step.description, "complete");
@@ -94,22 +94,32 @@ export async function executePlan(
   };
 }
 
-/** Build context string from dependency results. */
-function buildDependencyContext(step: PlanStep, results: Map<string, unknown>): string {
+/** Build context string from dependency results, including what each prior step accomplished. */
+function buildDependencyContext(step: PlanStep, results: Map<string, unknown>, plan: PlanStep[]): string {
   const deps = step.depends_on ?? [];
   if (deps.length === 0) return "";
 
+  const stepMap = new Map(plan.map((s) => [s.id, s]));
   const parts: string[] = [];
   for (const depId of deps) {
+    const depStep = stepMap.get(depId);
     const depResult = results.get(depId);
+    const label = depStep
+      ? `[${depId} — already completed: "${depStep.description}"]`
+      : `[${depId} — already completed]`;
+
     if (depResult !== undefined) {
       const json = JSON.stringify(depResult, null, 2);
       const truncated = json.length > 4000 ? json.slice(0, 4000) + "\n...(truncated)" : json;
-      parts.push(`[Result from ${depId}]:\n${truncated}`);
+      parts.push(`${label}:\n${truncated}`);
+    } else {
+      parts.push(`${label}: (no output)`);
     }
   }
 
-  return parts.length > 0 ? "\n\n" + parts.join("\n\n") : "";
+  return parts.length > 0
+    ? "\n\nThe following steps have ALREADY been completed. Do NOT repeat their actions:\n" + parts.join("\n\n")
+    : "";
 }
 
 /** Execute a single plan step. */
@@ -117,12 +127,13 @@ async function executeStep(
   step: PlanStep,
   originalRequest: string,
   results: Map<string, unknown>,
+  plan: PlanStep[],
   active: NonNullable<ReturnType<typeof getActiveProvider>>,
   approvalGate?: ApprovalGate,
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>) => void,
   onToolResult?: (toolCallId: string, toolName: string, result: unknown) => void,
 ): Promise<unknown> {
-  const depContext = buildDependencyContext(step, results);
+  const depContext = buildDependencyContext(step, results, plan);
 
   if (step.type === "think") {
     return executeThinkStep(step, originalRequest, depContext, active);
@@ -169,7 +180,7 @@ async function executeToolStep(
   const toolNames = Object.keys(moduleToolSet.tools);
   log.dev.debug(`Executor tools for ${step.module}`, { toolCount: toolNames.length, tools: toolNames });
 
-  const basePrompt = "You are a focused tool executor. Use the available tools to accomplish the task. Be efficient: stop as soon as you have the information needed — do not exhaustively search every possible variation. Be concise in your output.";
+  const basePrompt = "You are a focused tool executor. Use the available tools to accomplish the task. Be efficient: stop as soon as you have the information needed — do not exhaustively search every possible variation. Be concise in your output.\n\nIMPORTANT: If prior steps are listed as \"already completed\", their actions have ALREADY been performed. Do NOT repeat them. Focus only on what YOUR step needs to do with the tools available to you.";
   const systemPrompt = moduleToolSet.pluginPrompts.length > 0
     ? `${basePrompt}\n\n${moduleToolSet.pluginPrompts.join("\n\n")}`
     : basePrompt;

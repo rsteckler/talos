@@ -36,6 +36,7 @@ export const messages = sqliteTable("messages", {
   role: text("role", { enum: ["user", "assistant", "system"] }).notNull(),
   content: text("content").notNull(),
   usage: text("usage"),
+  toolCalls: text("tool_calls"),
   createdAt: text("created_at").notNull(),
 });
 

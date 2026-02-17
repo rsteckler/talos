@@ -258,11 +258,36 @@ export async function streamChat(
       .where(eq(schema.conversations.id, conversationId))
       .run();
 
+    let fullContent = "";
+    let stepCount = 0;
+    let toolCallCount = 0;
+    let lastFinishReason = "";
+    let streamError: unknown = null;
+    const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+    const collectedToolCalls: Array<{
+      toolCallId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+      result?: unknown;
+      status: string;
+    }> = [];
+
+    // Wrap callbacks so inner tool calls (from plan executor) are also persisted
+    const collectingOnToolCall = (toolCallId: string, toolName: string, args: Record<string, unknown>) => {
+      collectedToolCalls.push({ toolCallId, toolName, args, status: "calling" });
+      onToolCall?.(toolCallId, toolName, args);
+    };
+    const collectingOnToolResult = (toolCallId: string, toolName: string, result: unknown) => {
+      const tc = collectedToolCalls.find((c) => c.toolCallId === toolCallId);
+      if (tc) { tc.result = result; tc.status = "complete"; }
+      onToolResult?.(toolCallId, toolName, result);
+    };
+
     // Build routed tool set: direct tools + plan_actions meta-tool
     const { tools, pluginPrompts } = buildRoutedPluginToolSet(approvalGate, {
       onPlanStep,
-      onToolCall,
-      onToolResult,
+      onToolCall: collectingOnToolCall,
+      onToolResult: collectingOnToolResult,
     });
     const hasTools = Object.keys(tools).length > 0;
 
@@ -279,13 +304,6 @@ export async function streamChat(
 
     log.user.high("Thinking", { query: userContent.slice(0, 100) });
     log.dev.debug("Streaming started", { conversationId, modelId: active.modelId, providerType: active.providerType, toolCount: Object.keys(tools).length, tools: Object.keys(tools) });
-
-    let fullContent = "";
-    let stepCount = 0;
-    let toolCallCount = 0;
-    let lastFinishReason = "";
-    let streamError: unknown = null;
-    const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // Stream helper — runs the LLM, collects text, and accumulates token usage
     const runStream = async (useTools: boolean) => {
@@ -314,13 +332,25 @@ export async function streamChat(
             toolCallCount++;
             log.user.high(describeToolCall(part.toolName, part.input as Record<string, unknown>), { tool: part.toolName, args: part.input });
             log.dev.debug("Tool call args", { toolCallId: part.toolCallId, toolName: part.toolName, args: part.input });
+            collectedToolCalls.push({
+              toolCallId: part.toolCallId,
+              toolName: part.toolName,
+              args: part.input as Record<string, unknown>,
+              status: "calling",
+            });
             onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>);
             break;
-          case "tool-result":
+          case "tool-result": {
             log.user.medium("Tool finished", { tool: part.toolName, result: part.output });
             log.dev.debug("Tool result detail", { toolCallId: part.toolCallId, toolName: part.toolName });
+            const tc = collectedToolCalls.find((c) => c.toolCallId === part.toolCallId);
+            if (tc) {
+              tc.result = part.output;
+              tc.status = "complete";
+            }
             onToolResult?.(part.toolCallId, part.toolName, part.output);
             break;
+          }
           case "finish":
             stepCount++;
             lastFinishReason = part.finishReason;
@@ -414,7 +444,7 @@ export async function streamChat(
       return;
     }
 
-    // Persist assistant message (with usage if available)
+    // Persist assistant message (with usage and tool calls if available)
     const assistantMsgId = crypto.randomUUID();
     const hasUsage = totalUsage.totalTokens > 0;
     db.insert(schema.messages)
@@ -424,6 +454,7 @@ export async function streamChat(
         role: "assistant",
         content: fullContent,
         usage: hasUsage ? JSON.stringify(totalUsage) : null,
+        toolCalls: collectedToolCalls.length > 0 ? JSON.stringify(collectedToolCalls) : null,
         createdAt: new Date().toISOString(),
       })
       .run();
