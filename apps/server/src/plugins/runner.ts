@@ -54,6 +54,16 @@ function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodObject<Record<st
 export type ApprovalGate = (toolCallId: string, toolName: string, args: Record<string, unknown>) => Promise<boolean>;
 
 /**
+ * Resolve a module ref (e.g. "amazon-shopping:search") to its plugin's prompt.md content.
+ */
+export function getModulePrompt(moduleRef: string): string | null {
+  const pluginId = moduleRef.split(":")[0];
+  if (!pluginId) return null;
+  const loaded = getLoadedPlugins().get(pluginId);
+  return loaded?.promptMd ?? null;
+}
+
+/**
  * Build an AI SDK ToolSet from all enabled, loaded plugins.
  * Returns the toolset and any prompt.md content to append to the system prompt.
  * If filterPluginIds is provided, only include those specific plugin IDs.
@@ -276,6 +286,14 @@ export function buildRoutedPluginToolSet(
             },
           );
 
+          if (result.pluginPrompts && result.pluginPrompts.length > 0) {
+            return {
+              formattingInstructions:
+                "IMPORTANT: When presenting the results below to the user, follow these formatting rules:\n\n"
+                + result.pluginPrompts.join("\n\n---\n\n"),
+              results: result,
+            };
+          }
           return result;
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);

@@ -35,7 +35,7 @@ export const usePluginStore = create<PluginState>((set) => ({
     try {
       const updated = await pluginsApi.enable(id)
       set((state) => ({
-        plugins: state.plugins.map((t) => (t.id === id ? updated : t)),
+        plugins: state.plugins.map((p) => (p.id === id ? updated : p)),
       }))
     } catch (err) {
       console.error("[PluginStore] Failed to enable plugin:", err)
@@ -46,7 +46,7 @@ export const usePluginStore = create<PluginState>((set) => ({
     try {
       const updated = await pluginsApi.disable(id)
       set((state) => ({
-        plugins: state.plugins.map((t) => (t.id === id ? updated : t)),
+        plugins: state.plugins.map((p) => (p.id === id ? updated : p)),
       }))
     } catch (err) {
       console.error("[PluginStore] Failed to disable plugin:", err)
@@ -57,7 +57,7 @@ export const usePluginStore = create<PluginState>((set) => ({
     try {
       const updated = await pluginsApi.updateConfig(id, config)
       set((state) => ({
-        plugins: state.plugins.map((t) => (t.id === id ? updated : t)),
+        plugins: state.plugins.map((p) => (p.id === id ? updated : p)),
       }))
     } catch (err) {
       console.error("[PluginStore] Failed to update plugin config:", err)
@@ -68,7 +68,7 @@ export const usePluginStore = create<PluginState>((set) => ({
     try {
       const updated = await pluginsApi.setAllowWithoutAsking(id, allow)
       set((state) => ({
-        plugins: state.plugins.map((t) => (t.id === id ? updated : t)),
+        plugins: state.plugins.map((p) => (p.id === id ? updated : p)),
       }))
     } catch (err) {
       console.error("[PluginStore] Failed to update allow without asking:", err)
@@ -76,7 +76,7 @@ export const usePluginStore = create<PluginState>((set) => ({
   },
 
   connectOAuth: (pluginId) => {
-    const plugin = usePluginStore.getState().plugins.find((t) => t.id === pluginId)
+    const plugin = usePluginStore.getState().plugins.find((p) => p.id === pluginId)
     if (!plugin?.oauth) return
 
     const popup = window.open(
@@ -104,13 +104,13 @@ export const usePluginStore = create<PluginState>((set) => ({
   },
 
   disconnectOAuth: async (pluginId) => {
-    const plugin = usePluginStore.getState().plugins.find((t) => t.id === pluginId)
+    const plugin = usePluginStore.getState().plugins.find((p) => p.id === pluginId)
     if (!plugin?.oauth) return
 
     try {
       const updated = await pluginsApi.oauthDisconnect(plugin.oauth.provider)
       set((state) => ({
-        plugins: state.plugins.map((t) => (t.id === pluginId ? updated : t)),
+        plugins: state.plugins.map((p) => (p.id === pluginId ? updated : p)),
       }))
     } catch (err) {
       console.error("[PluginStore] Failed to disconnect OAuth:", err)

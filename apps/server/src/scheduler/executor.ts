@@ -39,9 +39,9 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
 
     const systemPrompt = loadSystemPrompt();
 
-    // Build tool set — filter to specific tools if specified
-    const filterToolIds = task.tools ? (JSON.parse(task.tools) as string[]) : undefined;
-    const { tools, pluginPrompts } = buildPluginToolSet(filterToolIds);
+    // Build plugin tool set — filter to specific plugins if specified
+    const filterPluginIds = task.tools ? (JSON.parse(task.tools) as string[]) : undefined;
+    const { tools, pluginPrompts } = buildPluginToolSet(filterPluginIds);
     const hasTools = Object.keys(tools).length > 0;
 
     const fullSystemPrompt = pluginPrompts.length > 0

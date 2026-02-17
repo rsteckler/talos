@@ -3,8 +3,8 @@ import { google } from "googleapis";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { getLoadedPlugin } from "../plugins/index.js";
+import { toPluginInfo } from "./plugins.js";
 import { createLogger } from "../logger/index.js";
-import type { PluginInfo } from "@talos/shared/types";
 
 const log = createLogger("oauth");
 const router = Router();
@@ -56,46 +56,6 @@ function mergeStoredConfig(pluginId: string, updates: Record<string, string | un
       })
       .run();
   }
-}
-
-/** Build a PluginInfo response (same logic as plugins.ts toPluginInfo). */
-function toPluginInfo(pluginId: string): PluginInfo | null {
-  const loaded = getLoadedPlugin(pluginId);
-  if (!loaded) return null;
-
-  const configRow = db
-    .select()
-    .from(schema.pluginConfigs)
-    .where(eq(schema.pluginConfigs.pluginId, pluginId))
-    .get();
-
-  const storedConfig: Record<string, string> = configRow?.config
-    ? (JSON.parse(configRow.config) as Record<string, string>)
-    : {};
-
-  const credentials = loaded.manifest.credentials ?? [];
-  const requiredCreds = credentials.filter((c) => c.required);
-  const hasRequiredCredentials = requiredCreds.every((c) => !!storedConfig[c.name]);
-
-  const oauthConnected = loaded.manifest.oauth
-    ? !!storedConfig["refresh_token"]
-    : undefined;
-
-  return {
-    id: loaded.manifest.id,
-    name: loaded.manifest.name,
-    description: loaded.manifest.description,
-    version: loaded.manifest.version,
-    isEnabled: configRow?.isEnabled ?? false,
-    allowWithoutAsking: configRow?.allowWithoutAsking ?? false,
-    credentials,
-    oauth: loaded.manifest.oauth,
-    oauthConnected,
-    settings: loaded.manifest.settings ?? [],
-    triggers: loaded.manifest.triggers ?? [],
-    functions: loaded.manifest.functions,
-    hasRequiredCredentials,
-  };
 }
 
 // GET /api/oauth/google/authorize

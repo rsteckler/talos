@@ -8,7 +8,11 @@ import type { PluginInfo } from "@talos/shared/types";
 
 const router = Router();
 
-function toPluginInfo(pluginId: string): PluginInfo | null {
+/**
+ * Build a PluginInfo response from a loaded plugin and its DB config.
+ * Shared by both the plugins API and the OAuth API.
+ */
+export function toPluginInfo(pluginId: string): PluginInfo | null {
   const loaded = getLoadedPlugin(pluginId);
   if (!loaded) return null;
 

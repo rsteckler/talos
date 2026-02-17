@@ -20,7 +20,7 @@ export interface Task {
   trigger_type: TriggerType;
   trigger_config: string; // JSON: { cron?: string, interval_minutes?: number }
   action_prompt: string;
-  tools: string | null; // JSON array of tool IDs, null = all enabled
+  tools: string | null; // JSON array of plugin IDs, null = all enabled
   is_active: boolean;
   last_run_at: string | null;
   next_run_at: string | null;
@@ -301,6 +301,22 @@ export interface PlanResult {
     error?: string;
   }>;
   summary: string;
+  pluginPrompts?: string[];
+}
+
+export interface PluginSidecarSpec {
+  /** Path to Dockerfile relative to plugin directory */
+  dockerfile: string;
+  /** Port the sidecar exposes (mapped 1:1 to host) */
+  port: number;
+  /** Env vars for the container. Supports {{credentials.key_name}} interpolation */
+  env?: Record<string, string>;
+  /** Communication protocol */
+  transport: "mcp-http" | "mcp-sse" | "http";
+  /** Health check endpoint relative to http://localhost:{port} */
+  healthCheck?: string;
+  /** Seconds to wait for healthy (default: 60) */
+  healthTimeout?: number;
 }
 
 export interface PluginManifest {
@@ -316,6 +332,7 @@ export interface PluginManifest {
   settings?: PluginSettingSpec[];
   triggers?: PluginTriggerSpec[];
   modules?: PluginModuleSpec[];  // optional grouping — if absent, all functions form one implicit module
+  sidecar?: PluginSidecarSpec;
   functions: PluginFunctionSpec[];
 }
 

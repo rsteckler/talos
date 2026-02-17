@@ -1,0 +1,93 @@
+{
+  "id": "amazon-shopping",
+  "name": "Amazon Shopping",
+  "description": "Search and browse Amazon products via Canopy API. Get product details, pricing, and reviews.",
+  "version": "3.0.0",
+  "category": "shopping",
+  "credentials": [
+    {
+      "name": "canopy_api_key",
+      "label": "Canopy API Key",
+      "description": "API key from canopyapi.co (100 free requests/month, then $0.01/req)",
+      "required": true
+    }
+  ],
+  "functions": [
+    {
+      "name": "amazon_search",
+      "description": "Search Amazon for products. Returns product listings with titles, prices, ratings, and ASINs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "search_term": {
+            "type": "string",
+            "description": "Search query string"
+          },
+          "domain": {
+            "type": "string",
+            "description": "Amazon domain (e.g. amazon.com, amazon.co.uk, amazon.de). Defaults to US."
+          },
+          "page": {
+            "type": "number",
+            "description": "Results page number"
+          },
+          "sort": {
+            "type": "string",
+            "description": "Sort order: FEATURED, MOST_RECENT, PRICE_ASCENDING, PRICE_DESCENDING, AVERAGE_CUSTOMER_REVIEW"
+          },
+          "min_price": {
+            "type": "number",
+            "description": "Minimum price filter"
+          },
+          "max_price": {
+            "type": "number",
+            "description": "Maximum price filter"
+          }
+        },
+        "required": ["search_term"]
+      }
+    },
+    {
+      "name": "amazon_product_details",
+      "description": "Get detailed information about a specific Amazon product by ASIN, URL, or product code (ISBN/UPC/EAN).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "asin": {
+            "type": "string",
+            "description": "Amazon Standard Identification Number"
+          },
+          "url": {
+            "type": "string",
+            "description": "Amazon product URL (alternative to ASIN)"
+          },
+          "domain": {
+            "type": "string",
+            "description": "Amazon domain. Defaults to US."
+          }
+        }
+      }
+    },
+    {
+      "name": "amazon_product_reviews",
+      "description": "Get top customer reviews for a product.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "asin": {
+            "type": "string",
+            "description": "Amazon Standard Identification Number"
+          },
+          "url": {
+            "type": "string",
+            "description": "Amazon product URL (alternative to ASIN)"
+          },
+          "domain": {
+            "type": "string",
+            "description": "Amazon domain. Defaults to US."
+          }
+        }
+      }
+    }
+  ]
+}
