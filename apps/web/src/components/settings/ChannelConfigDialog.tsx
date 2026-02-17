@@ -75,26 +75,32 @@ export function ChannelConfigDialog({ channel, onClose }: ChannelConfigDialogPro
           )}
         </DialogHeader>
         <div className="space-y-4 py-2">
-          {channel.credentials.map((cred) => (
-            <div key={cred.name} className="space-y-1.5">
-              <Label htmlFor={`cred-${cred.name}`}>
-                {cred.label}
-                {cred.required && <span className="text-destructive ml-1">*</span>}
-              </Label>
-              {cred.description && (
-                <p className="text-xs text-muted-foreground">{cred.description}</p>
-              )}
-              <Input
-                id={`cred-${cred.name}`}
-                type="password"
-                placeholder={`Enter ${cred.label.toLowerCase()}`}
-                value={values[cred.name] ?? ""}
-                onChange={(e) =>
-                  setValues((prev) => ({ ...prev, [cred.name]: e.target.value }))
-                }
-              />
-            </div>
-          ))}
+          {channel.credentials.map((cred) => {
+            const hasExisting = channel.credentialValues?.[cred.name] === "__SET__"
+            return (
+              <div key={cred.name} className="space-y-1.5">
+                <Label htmlFor={`cred-${cred.name}`}>
+                  {cred.label}
+                  {cred.required && <span className="text-destructive ml-1">*</span>}
+                  {hasExisting && !values[cred.name] && (
+                    <span className="text-xs text-muted-foreground ml-2">(configured)</span>
+                  )}
+                </Label>
+                {cred.description && (
+                  <p className="text-xs text-muted-foreground">{cred.description}</p>
+                )}
+                <Input
+                  id={`cred-${cred.name}`}
+                  type="password"
+                  placeholder={hasExisting ? "Leave empty to keep current value" : `Enter ${cred.label.toLowerCase()}`}
+                  value={values[cred.name] ?? ""}
+                  onChange={(e) =>
+                    setValues((prev) => ({ ...prev, [cred.name]: e.target.value }))
+                  }
+                />
+              </div>
+            )
+          })}
 
           {channel.settings.length > 0 && (
             <>

@@ -44,6 +44,14 @@ export function toPluginInfo(pluginId: string): PluginInfo | null {
     }
   }
 
+  // Build credential values: plain text for non-secret, "__SET__" sentinel for secret
+  const credentialValues: Record<string, string> = {};
+  for (const cred of credentials) {
+    const value = storedConfig[cred.name];
+    if (!value) continue;
+    credentialValues[cred.name] = cred.secret === false ? value : "__SET__";
+  }
+
   return {
     id: loaded.manifest.id,
     name: loaded.manifest.name,
@@ -56,6 +64,7 @@ export function toPluginInfo(pluginId: string): PluginInfo | null {
     oauthConnected,
     settings: loaded.manifest.settings ?? [],
     settingValues: Object.keys(settingValues).length > 0 ? settingValues : undefined,
+    credentialValues: Object.keys(credentialValues).length > 0 ? credentialValues : undefined,
     triggers: loaded.manifest.triggers ?? [],
     functions: loaded.manifest.functions,
     hasRequiredCredentials,

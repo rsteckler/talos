@@ -211,9 +211,10 @@ export interface PluginTriggerSpec {
 export interface PluginSettingSpec {
   name: string;
   label: string;
-  type: "number" | "string" | "boolean";
+  type: "number" | "string" | "boolean" | "select";
   default: string;
   description?: string;
+  options?: string[]; // required when type is "select"
 }
 
 export interface TriggerTypeInfo {
@@ -348,6 +349,8 @@ export interface PluginInfo {
   oauthConnected?: boolean;
   settings: PluginSettingSpec[];
   settingValues?: Record<string, string>;
+  /** Non-secret credential values + "__SET__" sentinel for secret ones that have a value */
+  credentialValues?: Record<string, string>;
   triggers: PluginTriggerSpec[];
   functions: PluginFunctionSpec[];
   hasRequiredCredentials: boolean;
@@ -403,6 +406,8 @@ export interface ChannelInfo {
   notificationsEnabled: boolean;
   credentials: ChannelCredentialSpec[];
   settings: ChannelSettingSpec[];
+  /** "__SET__" sentinel for credentials that have a value */
+  credentialValues?: Record<string, string>;
   hasRequiredCredentials: boolean;
 }
 

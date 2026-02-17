@@ -25,6 +25,14 @@ function toChannelInfo(channelId: string): ChannelInfo | null {
   const requiredCreds = credentials.filter((c) => c.required);
   const hasRequiredCredentials = requiredCreds.every((c) => !!storedConfig[c.name]);
 
+  // Build credential values: all channel credentials are secret, use "__SET__" sentinel
+  const credentialValues: Record<string, string> = {};
+  for (const cred of credentials) {
+    if (storedConfig[cred.name]) {
+      credentialValues[cred.name] = "__SET__";
+    }
+  }
+
   return {
     id: loaded.manifest.id,
     name: loaded.manifest.name,
@@ -34,6 +42,7 @@ function toChannelInfo(channelId: string): ChannelInfo | null {
     notificationsEnabled: configRow?.notificationsEnabled ?? false,
     credentials,
     settings: loaded.manifest.settings ?? [],
+    credentialValues: Object.keys(credentialValues).length > 0 ? credentialValues : undefined,
     hasRequiredCredentials,
   };
 }

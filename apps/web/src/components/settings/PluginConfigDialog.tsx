@@ -12,6 +12,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { usePluginStore } from "@/stores/usePluginStore"
 import type { PluginInfo } from "@talos/shared/types"
 
@@ -28,9 +35,14 @@ export function PluginConfigDialog({ plugin, onClose }: PluginConfigDialogProps)
   useEffect(() => {
     if (plugin) {
       const initial: Record<string, string> = {}
-      // Initialize credential fields as empty (user re-enters to update)
+      // Initialize non-secret credentials with saved values, secret ones as empty
       for (const cred of plugin.credentials) {
-        initial[cred.name] = ""
+        const saved = plugin.credentialValues?.[cred.name]
+        if (saved && saved !== "__SET__") {
+          initial[cred.name] = saved
+        } else {
+          initial[cred.name] = ""
+        }
       }
       // Initialize settings: use saved value if available, otherwise default
       for (const setting of plugin.settings) {
@@ -99,26 +111,33 @@ export function PluginConfigDialog({ plugin, onClose }: PluginConfigDialogProps)
           )}
         </DialogHeader>
         <div className="space-y-4 py-2">
-          {plugin.credentials.map((cred) => (
-            <div key={cred.name} className="space-y-1.5">
-              <Label htmlFor={`cred-${cred.name}`}>
-                {cred.label}
-                {cred.required && <span className="text-destructive ml-1">*</span>}
-              </Label>
-              {cred.description && (
-                <p className="text-xs text-muted-foreground">{cred.description}</p>
-              )}
-              <Input
-                id={`cred-${cred.name}`}
-                type={cred.secret === false ? "text" : "password"}
-                placeholder={`Enter ${cred.label.toLowerCase()}`}
-                value={values[cred.name] ?? ""}
-                onChange={(e) =>
-                  setValues((prev) => ({ ...prev, [cred.name]: e.target.value }))
-                }
-              />
-            </div>
-          ))}
+          {plugin.credentials.map((cred) => {
+            const isSecret = cred.secret !== false
+            const hasExisting = plugin.credentialValues?.[cred.name] === "__SET__"
+            return (
+              <div key={cred.name} className="space-y-1.5">
+                <Label htmlFor={`cred-${cred.name}`}>
+                  {cred.label}
+                  {cred.required && <span className="text-destructive ml-1">*</span>}
+                  {isSecret && hasExisting && !values[cred.name] && (
+                    <span className="text-xs text-muted-foreground ml-2">(configured)</span>
+                  )}
+                </Label>
+                {cred.description && (
+                  <p className="text-xs text-muted-foreground">{cred.description}</p>
+                )}
+                <Input
+                  id={`cred-${cred.name}`}
+                  type={isSecret ? "password" : "text"}
+                  placeholder={isSecret && hasExisting ? "Leave empty to keep current value" : `Enter ${cred.label.toLowerCase()}`}
+                  value={values[cred.name] ?? ""}
+                  onChange={(e) =>
+                    setValues((prev) => ({ ...prev, [cred.name]: e.target.value }))
+                  }
+                />
+              </div>
+            )
+          })}
 
           {hasSettings && (
             <>
@@ -147,6 +166,32 @@ export function PluginConfigDialog({ plugin, onClose }: PluginConfigDialogProps)
                         }
                       />
                     </div>
+                  ) : setting.type === "select" && setting.options ? (
+                    <>
+                      <Label htmlFor={`setting-${setting.name}`}>
+                        {setting.label}
+                      </Label>
+                      {setting.description && (
+                        <p className="text-xs text-muted-foreground">{setting.description}</p>
+                      )}
+                      <Select
+                        value={values[setting.name] ?? setting.default}
+                        onValueChange={(val) =>
+                          setValues((prev) => ({ ...prev, [setting.name]: val === "__none__" ? "" : val }))
+                        }
+                      >
+                        <SelectTrigger id={`setting-${setting.name}`}>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {setting.options.map((opt) => (
+                            <SelectItem key={opt || "__none__"} value={opt || "__none__"}>
+                              {opt || "(none)"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </>
                   ) : (
                     <>
                       <Label htmlFor={`setting-${setting.name}`}>
