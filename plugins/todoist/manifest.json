@@ -363,6 +363,60 @@
       }
     },
     {
+      "name": "add_section",
+      "description": "Create a new section within a project.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the section"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "The project ID to add the section to"
+          },
+          "order": {
+            "type": "number",
+            "description": "Position of the section among other sections in the project"
+          }
+        },
+        "required": ["name", "project_id"]
+      }
+    },
+    {
+      "name": "update_section",
+      "description": "Rename an existing section.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "section_id": {
+            "type": "string",
+            "description": "The section ID to update"
+          },
+          "name": {
+            "type": "string",
+            "description": "New name for the section"
+          }
+        },
+        "required": ["section_id", "name"]
+      }
+    },
+    {
+      "name": "delete_section",
+      "description": "Permanently delete a section and all its tasks. This cannot be undone.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "section_id": {
+            "type": "string",
+            "description": "The section ID to delete"
+          }
+        },
+        "required": ["section_id"]
+      }
+    },
+    {
       "name": "get_labels",
       "description": "List all personal labels.",
       "parameters": {

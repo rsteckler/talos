@@ -336,6 +336,33 @@ const get_sections = wrap(async (args, cfg) => {
   return fetchAll(cfg, "sections", params);
 });
 
+const add_section = wrap(async (args, cfg) => {
+  const { name, project_id, order } = args as {
+    name: string;
+    project_id: string;
+    order?: number;
+  };
+
+  const body: Record<string, unknown> = { name, project_id };
+  if (order !== undefined) body["order"] = order;
+
+  return todoistPost(cfg, "sections", body);
+});
+
+const update_section = wrap(async (args, cfg) => {
+  const { section_id, name } = args as {
+    section_id: string;
+    name: string;
+  };
+
+  return todoistPost(cfg, `sections/${section_id}`, { name });
+});
+
+const delete_section = wrap(async (args, cfg) => {
+  const { section_id } = args as { section_id: string };
+  return todoistDelete(cfg, `sections/${section_id}`);
+});
+
 // ---------------------------------------------------------------------------
 // Labels
 // ---------------------------------------------------------------------------
@@ -489,6 +516,9 @@ export const handlers: Record<string, Handler> = {
   update_project,
   delete_project,
   get_sections,
+  add_section,
+  update_section,
+  delete_section,
   get_labels,
   add_label,
   get_comments,

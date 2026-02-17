@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react"
-import { useConnectionStore, useChatStore, useInboxStore, useLogStore } from "@/stores"
+import { useConnectionStore, useChatStore, useInboxStore, useLogStore, useProviderStore } from "@/stores"
 import type { ClientMessage, ServerMessage } from "@talos/shared/types"
 
 const WS_URL = "ws://localhost:3001"
@@ -42,6 +42,10 @@ export function useWebSocket() {
         resetReconnectAttempts()
         // Always subscribe to logs for agent status display
         ws.send(JSON.stringify({ type: "subscribe_logs" }))
+        // Refresh app state now that the server is reachable
+        useProviderStore.getState().fetchActiveModel()
+        useChatStore.getState().fetchConversations()
+        useInboxStore.getState().fetchInbox()
       }
 
       ws.onmessage = (event) => {
