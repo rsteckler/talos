@@ -35,7 +35,7 @@ async function fetchAnthropic(baseUrl: string, apiKey: string): Promise<CatalogM
   const models: CatalogModel[] = [];
   let afterId: string | undefined;
 
-  // eslint-disable-next-line no-constant-condition
+   
   while (true) {
     const url = new URL(`${baseUrl}/models`);
     url.searchParams.set("limit", "100");

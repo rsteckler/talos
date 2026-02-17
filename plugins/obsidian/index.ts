@@ -465,7 +465,7 @@ const update_note = wrap(async (args, cfg) => {
   }
 
   // Merge frontmatter with existing
-  let mergedFm: Record<string, unknown> | null = null;
+  let mergedFm: Record<string, unknown> | null;
   if (frontmatter) {
     const existing = fs.readFileSync(absolute, "utf-8");
     const parsed = parseFrontmatter(existing);

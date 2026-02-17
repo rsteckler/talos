@@ -1,6 +1,6 @@
 import { streamText, generateText, stepCountIs } from "ai";
 import { getActiveProvider } from "../providers/llm.js";
-import { buildModulePluginToolSet } from "../plugins/runner.js";
+import { buildModulePluginToolSet, getModulePrompt } from "../plugins/runner.js";
 import { createLogger } from "../logger/index.js";
 import type { PlanStep, PlanResult } from "@talos/shared/types";
 import type { ApprovalGate } from "../plugins/runner.js";
@@ -27,6 +27,7 @@ export async function executePlan(
 
   const results = new Map<string, unknown>();
   const stepResults: PlanResult["steps"] = [];
+  const usedPluginPrompts = new Map<string, string>();
 
   // Build execution order respecting dependencies
   const executed = new Set<string>();
@@ -59,6 +60,15 @@ export async function executePlan(
         stepResults.push({ id: step.id, status: "complete", result: stepResult });
         onProgress?.(step.id, step.description, "complete");
         log.dev.debug(`Step ${step.id} complete`, { resultPreview: String(stepResult).slice(0, 200) });
+
+        // Collect prompt.md from the plugin used in this step
+        if (step.type === "tool" && step.module) {
+          const pluginId = step.module.split(":")[0];
+          if (pluginId && !usedPluginPrompts.has(pluginId)) {
+            const prompt = getModulePrompt(step.module);
+            if (prompt) usedPluginPrompts.set(pluginId, prompt);
+          }
+        }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         stepResults.push({ id: step.id, status: "error", error: message });
@@ -77,7 +87,11 @@ export async function executePlan(
     ? `All ${completedCount} step(s) completed successfully.`
     : `${completedCount}/${stepResults.length} step(s) completed.`;
 
-  return { steps: stepResults, summary };
+  return {
+    steps: stepResults,
+    summary,
+    pluginPrompts: usedPluginPrompts.size > 0 ? [...usedPluginPrompts.values()] : undefined,
+  };
 }
 
 /** Build context string from dependency results. */
@@ -152,13 +166,16 @@ async function executeToolStep(
     throw new Error(`Module "${step.module}" not found or has no available tools`);
   }
 
+  const toolNames = Object.keys(moduleToolSet.tools);
+  log.dev.debug(`Executor tools for ${step.module}`, { toolCount: toolNames.length, tools: toolNames });
+
   const basePrompt = "You are a focused tool executor. Use the available tools to accomplish the task. Be efficient: stop as soon as you have the information needed — do not exhaustively search every possible variation. Be concise in your output.";
   const systemPrompt = moduleToolSet.pluginPrompts.length > 0
     ? `${basePrompt}\n\n${moduleToolSet.pluginPrompts.join("\n\n")}`
     : basePrompt;
 
   let fullText = "";
-  let lastToolResults: unknown[] = [];
+  const lastToolResults: unknown[] = [];
 
   // Suppress unhandled rejection warnings on derived promises
   const noop = () => {};

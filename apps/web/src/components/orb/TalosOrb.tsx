@@ -326,7 +326,7 @@ export const TalosOrb = forwardRef<TalosOrbRef | null, TalosOrbProps>(({
 
   // Seed glow colors on mount — derive a triadic set from the orb's primary hue
   // so all 3 glow colors are always visually distinct (120° apart), boosted in saturation.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     const hexToHsl = (hex: string) => {
       const r = parseInt(hex.slice(1, 3), 16) / 255

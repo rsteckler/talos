@@ -4,13 +4,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["apps/server/src/**/*.test.ts", "tools/**/*.test.ts"],
+    include: ["apps/server/src/**/*.test.ts", "plugins/**/*.test.ts"],
     coverage: {
       provider: "v8",
       include: [
         "apps/server/src/api/**/*.ts",
         "apps/server/src/agent/**/*.ts",
-        "tools/**/index.ts",
+        "plugins/**/index.ts",
       ],
       exclude: ["**/*.test.ts"],
       reportsDirectory: "./coverage",

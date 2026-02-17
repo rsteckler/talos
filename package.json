@@ -13,6 +13,8 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm --filter @talos/server test",
     "test:coverage": "pnpm --filter @talos/server test:coverage",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "clean": "pnpm -r exec rm -rf dist node_modules && rm -rf node_modules dist"
   },
   "engines": {
@@ -20,7 +22,11 @@
   },
   "packageManager": "pnpm@9.0.0",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^10.0.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "typescript-eslint": "^8.56.0",
     "vitest": "^4.0.18"
   }
 }

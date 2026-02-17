@@ -83,7 +83,7 @@ export function loadSystemPrompt(): string {
     // SYSTEM.md missing — continue without it
   }
 
-  let soul = "";
+  let soul: string;
   try {
     soul = fs.readFileSync(SOUL_PATH, "utf-8");
   } catch {
