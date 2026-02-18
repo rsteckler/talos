@@ -9,7 +9,7 @@ You can browse the web using a headless Chromium browser. The browser launches a
 ## Available Functions
 
 ### Navigation
-- `browser_navigate` — Go to a URL. Use `wait_until: "networkidle"` for pages that load data dynamically.
+- `browser_navigate` — Go to a URL. Defaults to `wait_until: "domcontentloaded"`.
 - `browser_go_back` / `browser_go_forward` — Navigate browser history.
 - `browser_reload` — Reload the current page.
 - `browser_get_current_url` — Get the current page URL and title.
@@ -53,7 +53,7 @@ You can browse the web using a headless Chromium browser. The browser launches a
 
 5. **Use tabs for parallel research** — Open multiple tabs when comparing information from different pages, then close them when done.
 
-6. **Handle dynamic content** — Use `wait_for_selector` before interacting with elements that load asynchronously. Use `wait_until: "domcontentloaded"` for pages with heavy dynamic loading (avoid `networkidle` as many sites never fully stop network activity).
+6. **Handle dynamic content** — Use `wait_for_selector` before interacting with elements that load asynchronously. For SPAs and dynamic pages, rely on `wait_for_selector` rather than navigation wait strategies.
 
 7. **Security** — Never enter user credentials, passwords, or sensitive information unless the user has explicitly asked you to do so in the current conversation.
 

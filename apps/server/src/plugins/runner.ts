@@ -10,6 +10,22 @@ import type { ToolSet } from "ai";
 
 const log = createLogger("plugins");
 
+/** Default timeout for tool execution (ms). Prevents hanging promises from blocking the pipeline. */
+const TOOL_TIMEOUT_MS = 120_000;
+
+/** Race a promise against a timeout. Returns the result or throws on timeout. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Tool "${label}" timed out after ${ms / 1000}s`));
+    }, ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
 /**
  * Convert a JSON Schema property definition to a Zod schema.
  * Handles the basic types needed by plugin manifests.
@@ -139,7 +155,7 @@ export function buildPluginToolSet(filterPluginIds?: string[], approvalGate?: Ap
 
           log.dev.debug(`Executing ${toolName}`, { args });
           try {
-            const result = await handler(args, storedConfig);
+            const result = await withTimeout(handler(args, storedConfig), TOOL_TIMEOUT_MS, toolName);
             log.dev.debug(`Completed ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 100) });
             return result;
           } catch (err: unknown) {
@@ -203,7 +219,7 @@ export function buildModulePluginToolSet(
 
         log.dev.debug(`Executing ${fullName}`, { args });
         try {
-          const result = await lookup.handler(args, lookup.credentials);
+          const result = await withTimeout(lookup.handler(args, lookup.credentials), TOOL_TIMEOUT_MS, fullName);
           log.dev.debug(`Completed ${fullName}`, { resultPreview: JSON.stringify(result).slice(0, 100) });
           return result;
         } catch (err: unknown) {

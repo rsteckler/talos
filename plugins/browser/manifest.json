@@ -19,6 +19,13 @@
       "type": "boolean",
       "default": "true",
       "description": "Run the browser without a visible window"
+    },
+    {
+      "name": "persist_session",
+      "label": "Persist browser sessions",
+      "type": "boolean",
+      "default": "true",
+      "description": "Keep cookies and login sessions across browser restarts"
     }
   ],
   "modules": [
@@ -26,7 +33,8 @@
     { "id": "interaction", "name": "Interaction", "description": "Click, type, select options, press keys", "functions": ["click", "type_text", "select_option", "check", "press_key"] },
     { "id": "content", "name": "Content", "description": "Extract page content, take screenshots, run JS", "functions": ["get_page_content", "get_text", "screenshot", "evaluate_js"] },
     { "id": "tabs", "name": "Tabs", "description": "Manage browser tabs", "functions": ["new_tab", "close_tab", "switch_tab", "list_tabs"] },
-    { "id": "waiting", "name": "Waiting", "description": "Wait for elements or navigation events", "functions": ["wait_for_selector", "wait_for_navigation"] }
+    { "id": "waiting", "name": "Waiting", "description": "Wait for elements or navigation events", "functions": ["wait_for_selector", "wait_for_navigation"] },
+    { "id": "utility", "name": "Utility", "description": "Manage cookies and browser session state", "functions": ["get_cookies", "set_cookies", "clear_cookies"] }
   ],
   "functions": [
     {
@@ -41,7 +49,7 @@
           },
           "wait_until": {
             "type": "string",
-            "description": "When to consider navigation complete: 'load', 'domcontentloaded', or 'networkidle'"
+            "description": "When to consider navigation complete: 'load' or 'domcontentloaded'"
           }
         },
         "required": ["url"]
@@ -325,6 +333,43 @@
           }
         },
         "required": []
+      }
+    },
+    {
+      "name": "get_cookies",
+      "description": "Get browser cookies, optionally filtered by URL(s).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "urls": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Filter cookies by these URLs"
+          }
+        }
+      }
+    },
+    {
+      "name": "set_cookies",
+      "description": "Set browser cookies.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cookies": {
+            "type": "array",
+            "items": { "type": "object" },
+            "description": "Cookies to set (name, value, domain, path required)"
+          }
+        },
+        "required": ["cookies"]
+      }
+    },
+    {
+      "name": "clear_cookies",
+      "description": "Clear all browser cookies.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
       }
     }
   ]

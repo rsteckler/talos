@@ -17,6 +17,9 @@ const require = createRequire(path.join(serverDir, "package.json"));
 const SCREENSHOTS_DIR = path.join(serverDir, "data", "screenshots");
 fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
+const BROWSER_PROFILE_DIR = path.join(serverDir, "data", "browser-profile");
+fs.mkdirSync(BROWSER_PROFILE_DIR, { recursive: true });
+
 // Lazy-loaded playwright reference
 let pw: typeof import("playwright") | null = null;
 
@@ -39,6 +42,26 @@ interface BrowserLike {
   isConnected(): boolean;
   newPage(): Promise<PageLike>;
   close(): Promise<void>;
+}
+
+interface BrowserContextLike {
+  newPage(): Promise<PageLike>;
+  close(): Promise<void>;
+  cookies(urls?: string[]): Promise<CookieData[]>;
+  addCookies(cookies: CookieData[]): Promise<void>;
+  clearCookies(): Promise<void>;
+  pages(): PageLike[];
+}
+
+interface CookieData {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  expires: number;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: "Strict" | "Lax" | "None";
 }
 
 interface PageLike {
@@ -87,6 +110,8 @@ interface TabInfo {
 
 class BrowserService {
   private browser: BrowserLike | null = null;
+  private context: BrowserContextLike | null = null;
+  private persistSession = true;
   private pages = new Map<string, PageLike>();
   private activeTabId: string | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -100,6 +125,7 @@ class BrowserService {
     const timeout = Number(settings["idle_timeout"]);
     if (timeout > 0) this.idleTimeoutMs = timeout * 60_000;
     this.headless = settings["headless"] !== "false";
+    this.persistSession = settings["persist_session"] !== "false";
   }
 
   private resetIdleTimer(): void {
@@ -127,18 +153,51 @@ class BrowserService {
     }
 
     const { chromium } = getPlaywright();
-    this.log?.info(`Launching Chromium (headless=${String(this.headless)})`);
-    try {
-      this.browser = await chromium.launch({ headless: this.headless }) as BrowserLike;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("Executable doesn't exist")) {
-        this.installBrowser();
-        this.browser = await chromium.launch({ headless: this.headless }) as BrowserLike;
-      } else {
-        throw err;
+    const launchOpts = { headless: this.headless };
+
+    if (this.persistSession) {
+      this.log?.info(`Launching Chromium with persistent profile (headless=${String(this.headless)})`);
+      try {
+        const ctx = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, launchOpts) as unknown as BrowserContextLike;
+        this.context = ctx;
+        let closed = false;
+        this.browser = {
+          isConnected: () => !closed,
+          newPage: () => ctx.newPage(),
+          close: async () => { closed = true; await ctx.close(); },
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("Executable doesn't exist")) {
+          this.installBrowser();
+          const ctx = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, launchOpts) as unknown as BrowserContextLike;
+          this.context = ctx;
+          let closed = false;
+          this.browser = {
+            isConnected: () => !closed,
+            newPage: () => ctx.newPage(),
+            close: async () => { closed = true; await ctx.close(); },
+          };
+        } else {
+          throw err;
+        }
       }
+    } else {
+      this.log?.info(`Launching Chromium (headless=${String(this.headless)})`);
+      try {
+        this.browser = await chromium.launch(launchOpts) as BrowserLike;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("Executable doesn't exist")) {
+          this.installBrowser();
+          this.browser = await chromium.launch(launchOpts) as BrowserLike;
+        } else {
+          throw err;
+        }
+      }
+      this.context = null;
     }
+
     this.resetIdleTimer();
     return this.browser;
   }
@@ -234,6 +293,7 @@ class BrowserService {
       this.browser = null;
     }
 
+    this.context = null;
     this.activeTabId = null;
     this.log?.info("Browser shut down");
   }
@@ -242,7 +302,7 @@ class BrowserService {
 
   async navigate(url: string, waitUntil?: string): Promise<{ url: string; title: string }> {
     const page = await this.ensurePage();
-    const validWaits = ["load", "domcontentloaded", "networkidle"] as const;
+    const validWaits = ["load", "domcontentloaded"] as const;
     type WaitUntil = (typeof validWaits)[number];
     const waitOpt = validWaits.includes(waitUntil as WaitUntil)
       ? waitUntil
@@ -444,6 +504,26 @@ class BrowserService {
     await page.waitForURL(url ?? "**", { timeout: timeout ?? 30_000 });
     return { url: page.url(), ...await this.pageState() };
   }
+
+  // --- Cookies ---
+
+  async getCookies(urls?: string[]): Promise<{ cookies: CookieData[] }> {
+    if (!this.context) return { cookies: [] };
+    const cookies = urls ? await this.context.cookies(urls) : await this.context.cookies();
+    return { cookies: cookies as CookieData[] };
+  }
+
+  async setCookies(cookies: CookieData[]): Promise<{ success: true }> {
+    if (!this.context) throw new Error("No browser context available — enable persist_session or launch the browser first");
+    await this.context.addCookies(cookies);
+    return { success: true };
+  }
+
+  async clearCookies(): Promise<{ success: true }> {
+    if (!this.context) throw new Error("No browser context available — enable persist_session or launch the browser first");
+    await this.context.clearCookies();
+    return { success: true };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -608,6 +688,19 @@ const wait_for_navigation = wrap(async (args) => {
   );
 });
 
+// Cookies
+const get_cookies = wrap(async (args) => {
+  return svc().getCookies(args["urls"] as string[] | undefined);
+});
+
+const set_cookies = wrap(async (args) => {
+  return svc().setCookies(args["cookies"] as CookieData[]);
+});
+
+const clear_cookies = wrap(async () => {
+  return svc().clearCookies();
+});
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -633,4 +726,7 @@ export const handlers: Record<string, Handler> = {
   list_tabs,
   wait_for_selector,
   wait_for_navigation,
+  get_cookies,
+  set_cookies,
+  clear_cookies,
 };
