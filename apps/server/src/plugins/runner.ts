@@ -4,6 +4,7 @@ import { db, schema } from "../db/index.js";
 import { getLoadedPlugins } from "./loader.js";
 import { DIRECT_PLUGIN_IDS, lookupFunction, getModuleCatalog, getModuleFunctions, formatModuleCatalog } from "./registry.js";
 import { createLogger } from "../logger/index.js";
+import { loadPrompt } from "../prompts/index.js";
 import { generatePlan } from "../agent/planner.js";
 import { executePlan } from "../agent/executor.js";
 import type { ToolSet } from "ai";
@@ -259,25 +260,16 @@ export function buildRoutedPluginToolSet(
 
   if (catalogText) {
     pluginPrompts.unshift(
-      "## Extended Tools\n\n"
-      + "Beyond your direct tools, you can access many more capabilities via `plan_actions`.\n"
-      + "Call `plan_actions` whenever the user's request requires capabilities not in your direct tool set.\n\n"
-      + "**IMPORTANT**: Always pass the user's COMPLETE request in a single `plan_actions` call. "
-      + "Do NOT split a multi-step request into multiple calls — the planner handles multi-step orchestration and data flow between steps internally. "
-      + "For example, \"search my notes for X and email the result to Y\" should be ONE plan_actions call with the full request.\n\n"
-      + "**Browser context**: The browser persists between turns. When the user asks to interact with the current page "
-      + "(click, type, screenshot, etc.), pass their request as-is — do NOT add the website name, URL, or navigation instructions. "
-      + "The page is already loaded.\n\n"
-      + "Available modules:\n" + catalogText,
+      loadPrompt("extended-tools.md") + "\n\nAvailable modules:\n" + catalogText,
     );
   }
 
   // Only add plan_actions if there are extended tools available
   if (catalog.length > 0) {
     tools["plan_actions"] = {
-      description: `Execute a multi-step action plan using extended tools. The system will automatically plan and execute all necessary steps, passing data between them.\n\nIMPORTANT: Always pass the user's COMPLETE request in a single call. Do NOT break a multi-step request into separate plan_actions calls — the planner handles multi-step orchestration internally. For example, "search my notes and email the result" should be ONE call, not two.\n\nAvailable modules:\n${catalogText}`,
+      description: loadPrompt("plan-actions-description.md") + "\n\nAvailable modules:\n" + catalogText,
       inputSchema: z.object({
-        request: z.string().describe("The user's COMPLETE request in their own words. Pass it faithfully — do NOT add website names, URLs, or navigation instructions that the user did not say. The browser persists between turns, so interaction requests (click, type, screenshot) refer to the page already open."),
+        request: z.string().describe(loadPrompt("plan-actions-request.md")),
       }),
       execute: async (args: Record<string, unknown>) => {
         const request = args["request"] as string;

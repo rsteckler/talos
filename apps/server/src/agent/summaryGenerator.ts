@@ -4,12 +4,12 @@ import { db, schema } from "../db/index.js";
 import { getActiveProvider } from "../providers/llm.js";
 import { broadcastInbox } from "../ws/index.js";
 import { createLogger } from "../logger/index.js";
+import { loadPrompt } from "../prompts/index.js";
 import type { InboxItem } from "@talos/shared/types";
 
 const log = createLogger("summary-gen");
 
-const SUMMARY_SYSTEM_PROMPT =
-  "Summarize this task result in one concise sentence (under 80 characters). Be specific and descriptive about what happened. Output only the summary, nothing else.";
+const SUMMARY_SYSTEM_PROMPT = loadPrompt("summary-generator.md");
 
 export async function generateInboxSummary(
   inboxId: string,

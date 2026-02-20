@@ -4,11 +4,11 @@ import { db, schema } from "../db/index.js";
 import { getActiveProvider } from "../providers/llm.js";
 import { broadcastConversationTitleUpdate } from "../ws/index.js";
 import { createLogger } from "../logger/index.js";
+import { loadPrompt } from "../prompts/index.js";
 
 const log = createLogger("title-gen");
 
-const TITLE_SYSTEM_PROMPT =
-  "Generate a short conversational title (5-8 words max) for the following exchange. Return ONLY the title text, no quotes, no punctuation at the end.";
+const TITLE_SYSTEM_PROMPT = loadPrompt("title-generator.md");
 
 export async function generateConversationTitle(
   conversationId: string,

@@ -1,0 +1,1 @@
+The user's COMPLETE request in their own words. Pass it faithfully — do NOT add website names, URLs, or navigation instructions that the user did not say. The browser persists between turns, so interaction requests (click, type, screenshot) refer to the page already open.
