@@ -186,49 +186,171 @@ async function executeToolStep(
     ? `${basePrompt}\n\n${moduleToolSet.pluginPrompts.join("\n\n")}`
     : basePrompt;
 
-  let fullText = "";
-  const lastToolResults: unknown[] = [];
+  const messages = [
+    { role: "user" as const, content: `Original request: ${originalRequest}\n\nTask: ${step.description}${depContext}` },
+  ];
 
-  // Suppress unhandled rejection warnings on derived promises
-  const noop = () => {};
+  const runStream = async (useRequiredToolChoice: boolean) => {
+    let fullText = "";
+    const toolResults: unknown[] = [];
+    let streamError: unknown = null;
+    let stepCount = 0;
+    let lastFinishReason = "";
+    let toolCallCount = 0;
 
-  const streamResult = streamText({
-    model: active.model,
-    system: systemPrompt,
-    messages: [
-      { role: "user", content: `Original request: ${originalRequest}\n\nTask: ${step.description}${depContext}` },
-    ],
-    tools: moduleToolSet.tools,
-    stopWhen: stepCountIs(3),
-  });
+    // Track tool inputs that started but never completed as tool-call events
+    // (AI SDK v6 bug: empty-param tools via OpenRouter streaming don't emit tool-call)
+    const pendingToolInputs = new Map<string, { toolName: string; argsText: string }>();
 
-  Promise.resolve(streamResult.usage).catch(noop);
-  Promise.resolve(streamResult.response).catch(noop);
-  Promise.resolve(streamResult.text).catch(noop);
+    log.dev.debug(`Executor stream starting`, {
+      module: step.module,
+      toolChoice: useRequiredToolChoice ? "required" : "auto",
+      toolCount: toolNames.length,
+      tools: toolNames,
+    });
 
-  for await (const part of streamResult.fullStream) {
-    switch (part.type) {
-      case "text-delta":
-        fullText += part.text;
-        break;
-      case "tool-call":
-        log.dev.debug(`Executor tool call: ${part.toolName}`, { args: part.input });
-        onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>);
-        break;
-      case "tool-result":
-        log.dev.debug(`Executor tool result: ${part.toolName}`, { resultPreview: JSON.stringify(part.output).slice(0, 100) });
-        onToolResult?.(part.toolCallId, part.toolName, part.output);
-        lastToolResults.push(part.output);
-        break;
-      case "error":
-        log.error("Executor stream error", { error: part.error });
-        break;
+    // Suppress unhandled rejection warnings on derived promises
+    const noop = () => {};
+
+    const streamResult = streamText({
+      model: active.model,
+      system: systemPrompt,
+      messages,
+      tools: moduleToolSet.tools,
+      ...(useRequiredToolChoice ? { toolChoice: "required" as const } : {}),
+      stopWhen: stepCountIs(3),
+    });
+
+    Promise.resolve(streamResult.usage).catch(noop);
+    Promise.resolve(streamResult.response).catch(noop);
+    Promise.resolve(streamResult.text).catch(noop);
+
+    for await (const part of streamResult.fullStream) {
+      switch (part.type) {
+        case "text-delta":
+          fullText += part.text;
+          break;
+        case "tool-call":
+          toolCallCount++;
+          pendingToolInputs.delete(part.toolCallId);
+          log.dev.debug(`Executor tool call: ${part.toolName}`, { args: part.input });
+          onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>);
+          break;
+        case "tool-result":
+          log.dev.debug(`Executor tool result: ${part.toolName}`, { resultPreview: JSON.stringify(part.output).slice(0, 100) });
+          onToolResult?.(part.toolCallId, part.toolName, part.output);
+          toolResults.push(part.output);
+          break;
+        case "finish":
+          stepCount++;
+          lastFinishReason = (part as Record<string, unknown>)["finishReason"] as string ?? "unknown";
+          log.dev.debug(`Executor step ${String(stepCount)} finished`, {
+            finishReason: lastFinishReason,
+            toolCallsSoFar: toolCallCount,
+            textLength: fullText.length,
+          });
+          break;
+        case "error":
+          log.error("Executor stream error", { error: part.error });
+          streamError = part.error;
+          break;
+        default: {
+          const p = part as Record<string, unknown>;
+          const eventType = p["type"] as string;
+
+          // Track tool-input-start / tool-input-delta for fallback execution
+          if (eventType === "tool-input-start" && typeof p["id"] === "string" && typeof p["toolName"] === "string") {
+            pendingToolInputs.set(p["id"] as string, { toolName: p["toolName"] as string, argsText: "" });
+          } else if (eventType === "tool-input-delta" && typeof p["id"] === "string" && typeof p["delta"] === "string") {
+            const pending = pendingToolInputs.get(p["id"] as string);
+            if (pending) pending.argsText += p["delta"] as string;
+          }
+
+          break;
+        }
+      }
+    }
+
+    // Workaround: if the model made tool calls (tool-input-start) but the AI SDK
+    // never emitted tool-call events, execute the tools manually
+    if (pendingToolInputs.size > 0 && toolResults.length === 0) {
+      log.warn(`${String(pendingToolInputs.size)} tool input(s) started but never completed as tool-call events — executing manually`);
+
+      for (const [id, { toolName, argsText }] of pendingToolInputs) {
+        const tool = moduleToolSet.tools[toolName];
+        if (!tool || !tool.execute) {
+          log.error(`Cannot manually execute tool "${toolName}" — not found in tool set`);
+          continue;
+        }
+
+        let parsedArgs: Record<string, unknown> = {};
+        if (argsText.trim()) {
+          try {
+            parsedArgs = JSON.parse(argsText) as Record<string, unknown>;
+          } catch {
+            log.warn(`Could not parse tool args for "${toolName}", using empty args`, { argsText });
+          }
+        }
+
+        log.dev.debug(`Manual executor tool call: ${toolName}`, { args: parsedArgs, toolCallId: id });
+        onToolCall?.(id, toolName, parsedArgs);
+
+        try {
+          const result = await tool.execute(parsedArgs, { toolCallId: id, messages: [], abortSignal: undefined as unknown as AbortSignal });
+          log.dev.debug(`Manual executor tool result: ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 100) });
+          onToolResult?.(id, toolName, result);
+          toolResults.push(result);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          log.error(`Manual tool execution failed: ${toolName}`, { error: message });
+          toolResults.push({ error: message });
+        }
+      }
+    }
+
+    log.dev.debug(`Executor stream complete`, {
+      toolChoice: useRequiredToolChoice ? "required" : "auto",
+      totalSteps: stepCount,
+      totalToolCalls: toolCallCount,
+      totalToolResults: toolResults.length,
+      textLength: fullText.length,
+      lastFinishReason,
+      textPreview: fullText.slice(0, 150) || "(empty)",
+    });
+
+    // Re-throw stream errors so the caller can handle them
+    if (streamError) {
+      const errObj = streamError as Record<string, unknown>;
+      const body = typeof errObj["responseBody"] === "string" ? errObj["responseBody"] : "";
+      const name = typeof errObj["name"] === "string" ? errObj["name"] : "";
+      throw new Error(`${name}: ${body}`);
+    }
+
+    return { fullText, toolResults };
+  };
+
+  // Try with toolChoice: "required" first; fall back if provider doesn't support it
+  // or if it produces an empty result (model accepted the constraint but returned nothing)
+  let result: { fullText: string; toolResults: unknown[] };
+  try {
+    result = await runStream(true);
+    if (result.toolResults.length === 0 && !result.fullText) {
+      log.warn("toolChoice: required produced empty result, retrying without it");
+      result = await runStream(false);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("tool_choice") || msg.includes("toolChoice")) {
+      log.warn("Provider does not support toolChoice: required, retrying without it");
+      result = await runStream(false);
+    } else {
+      throw err;
     }
   }
 
   // Return the most useful result: tool outputs if available, otherwise text
-  if (lastToolResults.length > 0) {
-    return lastToolResults.length === 1 ? lastToolResults[0] : lastToolResults;
+  if (result.toolResults.length > 0) {
+    return result.toolResults.length === 1 ? result.toolResults[0] : result.toolResults;
   }
-  return fullText;
+  return result.fullText;
 }
