@@ -24,7 +24,7 @@
       "id": "gelsons",
       "name": "Gelson's",
       "description": "Gelson's grocery shopping automation",
-      "functions": ["login", "check_session"]
+      "functions": ["login", "search", "check_session", "add_to_cart"]
     }
   ],
   "functions": [
@@ -38,12 +38,48 @@
       }
     },
     {
+      "name": "search",
+      "description": "Search for products on Gelson's. Returns product names, prices, sizes, stock status, and URLs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The search term (e.g. 'fairlife milk', 'organic bananas')"
+          },
+          "max_results": {
+            "type": "number",
+            "description": "Maximum number of results to return. Defaults to 10."
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
       "name": "check_session",
       "description": "Check if the browser session is currently logged into Gelson's.",
       "parameters": {
         "type": "object",
         "properties": {},
         "required": []
+      }
+    },
+    {
+      "name": "add_to_cart",
+      "description": "Add a product to the Gelson's cart. The product must be visible on the current page (run search first). Specify quantity to add more than one.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "product_name": {
+            "type": "string",
+            "description": "The product name to add (must match a product currently on the page from search results)"
+          },
+          "quantity": {
+            "type": "number",
+            "description": "Number of items to add. Defaults to 1."
+          }
+        },
+        "required": ["product_name"]
       }
     }
   ]

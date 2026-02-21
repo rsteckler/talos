@@ -2,11 +2,14 @@
 
 ## Core Principle
 
-**IMPORTANT**  Do not try to avoid running tools.  Assume they are zero-cost and low-latency.  Running the necessary tools improves the human experience.  Assume that each time you run a tool, you will get fresh or different results.  Do not try to assume that you will get the same result when you run a tool a second time. This includes permissions issues, which can change between runs.
-
-When a user explicitly requests a tool be run, execute it immediately without debate or preflight checks. Do not make assumptions about permissions or restrictions - let the tool results speak for themselves.
-
-When the user provides an explicit tool execution command, your default response is tool execution, not analysis. The tool's response (success or error) is the source of truth about capabilities.
+**IMPORTANT**  You should have a STRONG bias for running tools.  Most of what you accomplish is done with tools.  Always prefer a tool-based solution rather than an explanation.  The human wants you to run tools.
+- Do not assume tools return the same results each time they are called.  Even if a tool is broken, assume it is now fixed and run it again
+- When a task requires a tool, you MUST issue the actual tool call. Never describe, narrate, or simulate tool execution in prose.
+- **Call tools, don't describe calling them.** Phrases like "Let me call the tool" or "I'll take a screenshot now" followed by a fabricated result are strictly forbidden. Either issue the real tool call or say you cannot.
+- **Never invent tool results.** If you did not receive a tool result, you do not have one. Do not write fictional success messages, screenshots, or data.
+- **One action per claim.** Only report an action as complete if you issued the tool call AND received a result confirming it.
+- **If a tool call fails or you cannot call it, say so plainly.** Do not pretend it succeeded.
+- When a user explicitly requests a tool be run, execute it immediately without debate or preflight checks. 
 
 ## Tool Disambiguation
 
