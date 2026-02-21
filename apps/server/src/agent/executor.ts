@@ -8,6 +8,11 @@ import type { ApprovalGate } from "../plugins/runner.js";
 
 const log = createLogger("executor");
 
+// Models that have demonstrated they don't work with toolChoice: "required"
+// (error, empty result, or streaming tool-call events that never complete).
+// Keyed by modelId so the denylist survives across calls but not server restarts.
+const noForcedToolChoiceModels = new Set<string>();
+
 /**
  * Execute a plan by running each step in dependency order.
  * Tool steps get a focused LLM call with only that module's tools.
@@ -276,6 +281,11 @@ async function executeToolStep(
     if (pendingToolInputs.size > 0 && toolResults.length === 0) {
       log.warn(`${String(pendingToolInputs.size)} tool input(s) started but never completed as tool-call events — executing manually`);
 
+      if (useRequiredToolChoice) {
+        noForcedToolChoiceModels.add(active.modelId);
+        log.info(`Disabling forced tool calling for model "${active.modelId}" (incomplete tool-call events)`);
+      }
+
       for (const [id, { toolName, argsText }] of pendingToolInputs) {
         const tool = moduleToolSet.tools[toolName];
         if (!tool || !tool.execute) {
@@ -330,18 +340,26 @@ async function executeToolStep(
   };
 
   // Try with toolChoice: "required" first; fall back if provider doesn't support it
-  // or if it produces an empty result (model accepted the constraint but returned nothing)
+  // or if it produces an empty result (model accepted the constraint but returned nothing).
+  // Skip forced tool choice entirely for models that previously failed.
+  const skipForced = noForcedToolChoiceModels.has(active.modelId);
+  if (skipForced) {
+    log.dev.debug(`Skipping toolChoice: required for "${active.modelId}" (previously failed)`);
+  }
+
   let result: { fullText: string; toolResults: unknown[] };
   try {
-    result = await runStream(true);
-    if (result.toolResults.length === 0 && !result.fullText) {
+    result = await runStream(!skipForced);
+    if (!skipForced && result.toolResults.length === 0 && !result.fullText) {
       log.warn("toolChoice: required produced empty result, retrying without it");
+      noForcedToolChoiceModels.add(active.modelId);
       result = await runStream(false);
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("tool_choice") || msg.includes("toolChoice")) {
       log.warn("Provider does not support toolChoice: required, retrying without it");
+      noForcedToolChoiceModels.add(active.modelId);
       result = await runStream(false);
     } else {
       throw err;
