@@ -1,0 +1,50 @@
+{
+  "id": "gelsons",
+  "name": "Gelson's",
+  "description": "Log into your Gelson's grocery account for automated shopping workflows.",
+  "version": "1.0.0",
+  "category": "shopping",
+  "credentials": [
+    {
+      "name": "email",
+      "label": "Email",
+      "description": "Gelson's account email address",
+      "required": true
+    },
+    {
+      "name": "password",
+      "label": "Password",
+      "description": "Gelson's account password",
+      "secret": true,
+      "required": true
+    }
+  ],
+  "modules": [
+    {
+      "id": "gelsons",
+      "name": "Gelson's",
+      "description": "Gelson's grocery shopping automation",
+      "functions": ["login", "check_session"]
+    }
+  ],
+  "functions": [
+    {
+      "name": "login",
+      "description": "Log into the Gelson's account. Must succeed before search, cart, or checkout operations.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "check_session",
+      "description": "Check if the browser session is currently logged into Gelson's.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  ]
+}

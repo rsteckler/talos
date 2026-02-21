@@ -302,7 +302,7 @@ class BrowserService {
 
   async navigate(url: string, waitUntil?: string): Promise<{ url: string; title: string }> {
     const page = await this.ensurePage();
-    const validWaits = ["load", "domcontentloaded"] as const;
+    const validWaits = ["load", "domcontentloaded", "commit"] as const;
     type WaitUntil = (typeof validWaits)[number];
     const waitOpt = validWaits.includes(waitUntil as WaitUntil)
       ? waitUntil

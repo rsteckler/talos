@@ -180,8 +180,12 @@ export async function initPlugins(): Promise<void> {
     // Extract credentials from stored config
     const credentialNames = new Set((loaded.manifest.credentials ?? []).map((c) => c.name));
     const credentials: Record<string, string> = {};
+    // Extract settings from stored config
+    const settingNames = new Set((loaded.manifest.settings ?? []).map((s) => s.name));
     for (const [key, value] of Object.entries(storedConfig)) {
       if (credentialNames.has(key)) {
+        credentials[key] = value;
+      } else if (settingNames.has(key)) {
         credentials[key] = value;
       }
     }
