@@ -224,9 +224,21 @@ async function executeToolStep(
     throw new Error(`Tool step ${step.id} is missing a module reference`);
   }
 
-  const moduleToolSet = buildModulePluginToolSet(step.module, approvalGate);
+  let moduleToolSet = buildModulePluginToolSet(step.module, approvalGate);
   if (!moduleToolSet) {
     throw new Error(`Module "${step.module}" not found or has no available tools`);
+  }
+
+  // Filter to the single named tool when the planner specified one
+  if (step.tool_name) {
+    const pluginId = step.module.split(":")[0];
+    const fullToolName = `${pluginId}_${step.tool_name}`;
+    const targetTool = moduleToolSet.tools[fullToolName];
+    if (targetTool) {
+      moduleToolSet = { ...moduleToolSet, tools: { [fullToolName]: targetTool } };
+    } else {
+      log.warn(`tool_name "${step.tool_name}" not found as "${fullToolName}", using all module tools`);
+    }
   }
 
   // When the step has dependency context, the LLM may determine the step is
@@ -270,7 +282,7 @@ async function executeToolStep(
     // (AI SDK v6 bug: empty-param tools via OpenRouter streaming don't emit tool-call)
     const pendingToolInputs = new Map<string, { toolName: string; argsText: string }>();
 
-    log.info(`Plan step ${stepNumber}, executor step 1 starting`, { module: step.module, tools: toolNames });
+    log.dev.debug(`Executor round starting`, { module: step.module, tools: toolNames });
 
     // Suppress unhandled rejection warnings on derived promises
     const noop = () => {};
@@ -280,7 +292,7 @@ async function executeToolStep(
       system: systemPrompt,
       messages,
       tools,
-      stopWhen: stepCountIs(3),
+      stopWhen: stepCountIs(1),
     });
 
     Promise.resolve(streamResult.usage).catch(noop);
@@ -319,15 +331,11 @@ async function executeToolStep(
         case "finish":
           stepCount++;
           lastFinishReason = (part as Record<string, unknown>)["finishReason"] as string ?? "unknown";
-          log.info(`Plan step ${stepNumber}, executor step ${String(stepCount)} complete`, {
+          log.dev.debug(`Executor round complete`, {
             finishReason: lastFinishReason,
             toolCalls: toolCallCount,
             toolResults: toolResults.length,
           });
-          // If there will be another executor step, log its start
-          if (lastFinishReason === "tool-calls") {
-            log.info(`Plan step ${stepNumber}, executor step ${String(stepCount + 1)} starting`);
-          }
           break;
         case "error":
           log.error("Executor stream error", { error: part.error });
@@ -393,6 +401,14 @@ async function executeToolStep(
           toolResults.push({ error: message });
         }
       }
+    }
+
+    // Warn when the LLM generated text instead of calling a tool
+    if (fullText.trim() && toolResults.length === 0) {
+      log.warn("Executor generated text instead of calling a tool", {
+        text: fullText.slice(0, 500),
+        step: step.id,
+      });
     }
 
     log.dev.debug(`Executor stream complete`, {

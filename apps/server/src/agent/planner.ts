@@ -12,6 +12,7 @@ const planSchema = z.object({
     id: z.string().describe("Step identifier like step_1, step_2, etc."),
     type: z.enum(["tool", "think"]).describe("'tool' requires a module, 'think' is pure computation"),
     module: z.string().optional().describe("Module reference like 'google:gmail' — required for tool steps"),
+    tool_name: z.string().optional().describe("The specific function to call from the module's function list — required for tool steps"),
     description: z.string().describe("What this step accomplishes"),
     depends_on: z.array(z.string()).optional().describe("Step IDs this step depends on for input data"),
   })),
@@ -56,7 +57,7 @@ export async function generatePlan(
 
   const steps = result.object.steps as PlanStep[];
 
-  const stepSummaries = steps.map((s) => `${s.id}: ${s.type}${s.module ? ` [${s.module}]` : ""} — ${s.description}`);
+  const stepSummaries = steps.map((s) => `${s.id}: ${s.type}${s.module ? ` [${s.module}]` : ""}${s.tool_name ? ` fn=${s.tool_name}` : ""} — ${s.description}`);
   log.info(`Plan generated: ${steps.length} step(s)`, { steps: steps.map((s) => s.description) });
   log.dev.debug("Plan details", { steps: stepSummaries, plan: steps });
 

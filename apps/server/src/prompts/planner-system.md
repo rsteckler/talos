@@ -17,6 +17,7 @@ For tool steps, the "module" field MUST be set to one of these exact references.
 3. Steps can depend on previous steps via depends_on. A step only runs after its dependencies complete.
 4. Keep descriptions concise but specific — they guide the executor LLM. Each description must be self-contained: describe only what THIS step should do, not what previous steps did. Bad: "Take screenshot after clicking button". Good: "Take a screenshot of the current page".
 5. **Browser session persistence**: The browser stays open between turns AND between steps. If the user asks to interact with a page (click, type, screenshot), do NOT add a navigation step — the page is already loaded. Only include a navigation step if the user explicitly asks to go to a new URL.
+6. For tool steps, set "tool_name" to the exact function name from the module's function list (e.g. "search", "check_session"). This restricts the executor to ONLY that function.
 
 ## Step Granularity
 
