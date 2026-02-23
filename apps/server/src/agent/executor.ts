@@ -25,6 +25,7 @@ export async function executePlan(
   onProgress?: (stepId: string, description: string, status: "running" | "complete" | "error") => void,
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void,
+  signal?: AbortSignal,
 ): Promise<PlanResult> {
   const active = getActiveProvider();
   if (!active) {
@@ -40,6 +41,15 @@ export async function executePlan(
   const remaining = new Set(plan.map((s) => s.id));
 
   while (remaining.size > 0) {
+    // Check for cancellation before starting next batch of steps
+    if (signal?.aborted) {
+      log.user.high("Plan cancelled by user");
+      for (const id of remaining) {
+        stepResults.push({ id, status: "error", error: "Cancelled" });
+      }
+      break;
+    }
+
     // Find steps whose dependencies are all satisfied
     const ready = plan.filter((step) => {
       if (!remaining.has(step.id)) return false;
@@ -57,12 +67,38 @@ export async function executePlan(
 
     // Execute ready steps sequentially (could be parallelized for independent steps later)
     for (const step of ready) {
+      // Check for cancellation before each step
+      if (signal?.aborted) {
+        log.user.high("Plan cancelled by user");
+        for (const id of remaining) {
+          stepResults.push({ id, status: "error", error: "Cancelled" });
+        }
+        remaining.clear();
+        break;
+      }
+
       onProgress?.(step.id, step.description, "running");
       log.user.high(`Step ${step.id}: ${step.description}`);
 
       try {
         const stepResult = await executeStep(step, request, results, plan, active, approvalGate, onToolCall, onToolResult);
         results.set(step.id, stepResult);
+
+        // Check for cancellation after step completes — mark complete but stop remaining
+        if (signal?.aborted) {
+          stepResults.push({ id: step.id, status: "complete", result: stepResult });
+          onProgress?.(step.id, step.description, "complete");
+          log.user.high("Plan cancelled after step completed", { stepId: step.id });
+          executed.add(step.id);
+          remaining.delete(step.id);
+          // Cancel remaining steps
+          for (const id of remaining) {
+            stepResults.push({ id, status: "error", error: "Cancelled" });
+          }
+          remaining.clear();
+          break;
+        }
+
         stepResults.push({ id: step.id, status: "complete", result: stepResult });
         onProgress?.(step.id, step.description, "complete");
         log.dev.debug(`Step ${step.id} complete`, { resultPreview: String(stepResult).slice(0, 200) });

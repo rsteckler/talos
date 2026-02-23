@@ -140,6 +140,7 @@ export function ChatArea() {
 
   const handleStop = useCallback(() => {
     if (activeConversationId) {
+      useChatStore.getState().markPlanStopping()
       send({ type: "cancel", conversationId: activeConversationId })
     }
   }, [activeConversationId, send])

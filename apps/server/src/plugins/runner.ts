@@ -272,7 +272,7 @@ export function buildRoutedPluginToolSet(
       inputSchema: z.object({
         request: z.string().describe(loadPrompt("plan-actions-request.md")),
       }),
-      execute: async (args: Record<string, unknown>) => {
+      execute: async (args: Record<string, unknown>, { abortSignal }: { toolCallId: string; abortSignal?: AbortSignal }) => {
         const request = args["request"] as string;
 
         log.user.high("Planning actions", { request: request.slice(0, 100) });
@@ -310,6 +310,7 @@ export function buildRoutedPluginToolSet(
             (toolCallId, toolName, toolResult, stepId) => {
               planCallbacks?.onToolResult?.(toolCallId, toolName, toolResult, stepId);
             },
+            abortSignal,
           );
 
           if (result.pluginPrompts && result.pluginPrompts.length > 0) {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Circle, Loader2, Check, AlertCircle, ChevronRight } from "lucide-react"
+import { Circle, Loader2, Check, AlertCircle, ChevronRight, Square, Ban } from "lucide-react"
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -13,11 +13,13 @@ interface PlanDisplayProps {
   toolCalls: ToolCallInfo[];
 }
 
-const statusIcons = {
+const statusIcons: Record<string, React.ReactNode> = {
   pending: <Circle className="size-3.5 text-muted-foreground/50" />,
   running: <Loader2 className="size-3.5 animate-spin text-cyan-400" />,
   complete: <Check className="size-3.5 text-green-400" />,
   error: <AlertCircle className="size-3.5 text-red-400" />,
+  stopping: <Square className="size-3.5 text-amber-400 animate-pulse" />,
+  cancelled: <Ban className="size-3.5 text-muted-foreground/50" />,
 }
 
 export function PlanDisplay({ plan, toolCalls }: PlanDisplayProps) {
@@ -59,12 +61,30 @@ interface PlanStepRowProps {
   toolCalls: ToolCallInfo[];
 }
 
+function stepTextClass(status: string): string {
+  switch (status) {
+    case "pending":
+    case "cancelled":
+      return "text-muted-foreground/50"
+    case "stopping":
+      return "text-amber-400/90"
+    default:
+      return "text-foreground/90"
+  }
+}
+
 function PlanStepRow({ step, isLast, toolCalls }: PlanStepRowProps) {
   const [open, setOpen] = useState(() => step.status === "running")
   const hasToolCalls = toolCalls.length > 0
 
-  // Auto-expand running steps, collapse completed ones
-  const isRunning = step.status === "running"
+  // Auto-expand running and stopping steps
+  const isActive = step.status === "running" || step.status === "stopping"
+
+  const label = step.status === "stopping"
+    ? `${step.description} — stopping…`
+    : step.status === "cancelled"
+      ? `${step.description} — cancelled`
+      : step.description
 
   return (
     <div className="flex">
@@ -79,15 +99,15 @@ function PlanStepRow({ step, isLast, toolCalls }: PlanStepRowProps) {
       </div>
 
       {/* Step content */}
-      <div className={`flex-1 pb-2.5 ${isLast ? "" : ""}`}>
+      <div className="flex-1 pb-2.5">
         {hasToolCalls ? (
-          <Collapsible open={open || isRunning} onOpenChange={setOpen}>
+          <Collapsible open={open || isActive} onOpenChange={setOpen}>
             <CollapsibleTrigger className="flex items-center gap-1 text-xs hover:text-foreground transition-colors">
               <ChevronRight
-                className={`size-3 transition-transform ${open || isRunning ? "rotate-90" : ""}`}
+                className={`size-3 transition-transform ${open || isActive ? "rotate-90" : ""}`}
               />
-              <span className={step.status === "pending" ? "text-muted-foreground/70" : "text-foreground/90"}>
-                {step.description}
+              <span className={stepTextClass(step.status)}>
+                {label}
               </span>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-1 ml-4">
@@ -97,8 +117,8 @@ function PlanStepRow({ step, isLast, toolCalls }: PlanStepRowProps) {
             </CollapsibleContent>
           </Collapsible>
         ) : (
-          <p className={`text-xs ${step.status === "pending" ? "text-muted-foreground/70" : "text-foreground/90"}`}>
-            {step.description}
+          <p className={`text-xs ${stepTextClass(step.status)}`}>
+            {label}
           </p>
         )}
       </div>

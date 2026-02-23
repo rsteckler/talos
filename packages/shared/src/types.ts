@@ -377,7 +377,7 @@ export interface ToolCallInfo {
 export interface PlanStepInfo {
   id: string;           // "step_1", etc.
   description: string;
-  status: "pending" | "running" | "complete" | "error";
+  status: "pending" | "running" | "complete" | "error" | "stopping" | "cancelled";
 }
 
 export interface PlanState {
