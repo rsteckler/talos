@@ -241,6 +241,7 @@ export interface PlanActionCallbacks {
   onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error") => void;
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void;
+  onPlanRevised?: (removedStepIds: string[], addedSteps: Array<{ id: string; description: string }>) => void;
 }
 
 /**
@@ -309,6 +310,13 @@ export function buildRoutedPluginToolSet(
               planCallbacks?.onToolResult?.(toolCallId, toolName, toolResult, stepId);
             },
             abortSignal,
+            {
+              moduleCatalog: catalogText,
+              pluginPrompts: plannerPrompts.length > 0 ? plannerPrompts : undefined,
+              onPlanRevised: (removedStepIds, addedSteps) => {
+                planCallbacks?.onPlanRevised?.(removedStepIds, addedSteps);
+              },
+            },
           );
 
           if (result.pluginPrompts && result.pluginPrompts.length > 0) {

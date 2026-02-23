@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select"
 import { useSettings, type Theme } from "@/contexts/SettingsContext"
 import { ProviderList } from "@/components/settings/ProviderList"
+import { ModelRoleSettings } from "@/components/settings/ModelRoleSettings"
 import { PluginList } from "@/components/settings/PluginList"
 import { ChannelList } from "@/components/settings/ChannelList"
 import { soulApi, pluginsPromptApi, humanPromptApi } from "@/api/soul"
@@ -167,6 +168,18 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent>
               <ProviderList />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Model Roles</CardTitle>
+              <CardDescription>
+                Assign different models for chat, planning, and execution. Unassigned roles use the default model.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ModelRoleSettings />
             </CardContent>
           </Card>
 

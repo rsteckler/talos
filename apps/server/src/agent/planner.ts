@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { getActiveProvider } from "../providers/llm.js";
+import { getProviderForRole } from "../providers/llm.js";
 import { createLogger } from "../logger/index.js";
 import { loadPrompt } from "../prompts/index.js";
 import type { PlanStep } from "@talos/shared/types";
@@ -19,6 +19,7 @@ const planSchema = z.object({
 });
 
 const PLANNER_SYSTEM = loadPrompt("planner-system.md");
+const REPLANNER_SYSTEM = loadPrompt("replanner-system.md");
 
 /**
  * Generate a structured plan for executing a multi-step request.
@@ -30,7 +31,7 @@ export async function generatePlan(
   moduleCatalog: string,
   pluginPrompts?: string[],
 ): Promise<PlanStep[]> {
-  const active = getActiveProvider();
+  const active = getProviderForRole("planner");
   if (!active) {
     throw new Error("No active model configured");
   }
@@ -60,6 +61,78 @@ export async function generatePlan(
   const stepSummaries = steps.map((s) => `${s.id}: ${s.type}${s.module ? ` [${s.module}]` : ""}${s.tool_name ? ` fn=${s.tool_name}` : ""} — ${s.description}`);
   log.info(`Plan generated: ${steps.length} step(s)`, { steps: steps.map((s) => s.description) });
   log.dev.debug("Plan details", { steps: stepSummaries, plan: steps });
+
+  return steps;
+}
+
+export interface StepOutcome {
+  id: string;
+  description: string;
+  status: "complete" | "skipped" | "error";
+  result?: unknown;
+  error?: string;
+}
+
+/**
+ * Re-plan remaining steps after a step was skipped or errored.
+ * Uses the planner role model to generate a revised set of steps.
+ */
+export async function replanRemainingSteps(
+  request: string,
+  moduleCatalog: string,
+  completedSteps: StepOutcome[],
+  remainingSteps: PlanStep[],
+  triggerStep: StepOutcome,
+  pluginPrompts?: string[],
+): Promise<PlanStep[]> {
+  const active = getProviderForRole("planner");
+  if (!active) {
+    throw new Error("No active model configured");
+  }
+
+  let prompt = `## Original Request\n${request}\n\n`;
+  prompt += `## Available Modules\n${moduleCatalog}\n\n`;
+
+  if (pluginPrompts && pluginPrompts.length > 0) {
+    prompt += `## Plugin workflow instructions\n\n${pluginPrompts.join("\n\n---\n\n")}\n\n`;
+  }
+
+  prompt += `## Completed Steps\n`;
+  for (const s of completedSteps) {
+    const resultStr = s.result != null ? JSON.stringify(s.result).slice(0, 500) : "(no output)";
+    prompt += `- ${s.id} [${s.status}]: ${s.description}\n  Result: ${resultStr}\n`;
+  }
+
+  prompt += `\n## Trigger Event\n`;
+  prompt += `Step ${triggerStep.id} [${triggerStep.status}]: ${triggerStep.description}\n`;
+  if (triggerStep.error) {
+    prompt += `Error: ${triggerStep.error}\n`;
+  }
+  if (triggerStep.result != null) {
+    prompt += `Result: ${JSON.stringify(triggerStep.result).slice(0, 500)}\n`;
+  }
+
+  prompt += `\n## Remaining Planned Steps (not yet executed)\n`;
+  for (const s of remainingSteps) {
+    prompt += `- ${s.id}: [${s.type}]${s.module ? ` module=${s.module}` : ""}${s.tool_name ? ` fn=${s.tool_name}` : ""} — ${s.description}\n`;
+  }
+
+  prompt += `\nRevise the remaining steps based on the execution progress and trigger event.`;
+
+  log.user.high("Re-planning remaining steps...");
+  log.dev.debug("Re-plan context", { completedCount: completedSteps.length, remainingCount: remainingSteps.length, trigger: triggerStep.id });
+
+  const result = await generateObject({
+    model: active.model,
+    schema: planSchema,
+    system: REPLANNER_SYSTEM,
+    prompt,
+  });
+
+  const steps = result.object.steps as PlanStep[];
+
+  log.info(`Re-plan generated: ${steps.length} step(s)`, { steps: steps.map((s) => s.description) });
+  log.dev.debug("Re-plan details", { steps });
 
   return steps;
 }

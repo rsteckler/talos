@@ -207,6 +207,14 @@ function handleChat(
         status,
       });
     },
+    onPlanRevised: (removedStepIds, addedSteps) => {
+      sendMessage(ws, {
+        type: "plan_revised",
+        conversationId,
+        removedStepIds,
+        addedSteps,
+      });
+    },
     onEnd: (messageId, usage) => {
       abortControllers.delete(conversationId);
       sendMessage(ws, { type: "end", conversationId, messageId, usage });

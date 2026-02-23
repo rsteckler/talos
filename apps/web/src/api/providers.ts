@@ -6,6 +6,7 @@ import type {
   Model,
   ActiveModel,
   CatalogModel,
+  ModelRoleAssignment,
 } from "@talos/shared/types";
 
 export const providersApi = {
@@ -51,5 +52,18 @@ export const providersApi = {
     request<ActiveModel>("/models/active", {
       method: "PUT",
       body: JSON.stringify({ providerId, catalogModelId, displayName }),
+    }),
+
+  listRoles: () => request<ModelRoleAssignment[]>("/models/roles"),
+
+  setRole: (role: string, modelId: string) =>
+    request<ModelRoleAssignment>(`/models/roles/${role}`, {
+      method: "PUT",
+      body: JSON.stringify({ modelId }),
+    }),
+
+  removeRole: (role: string) =>
+    request<{ success: boolean }>(`/models/roles/${role}`, {
+      method: "DELETE",
     }),
 };

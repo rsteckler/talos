@@ -1,11 +1,21 @@
 import { streamText, generateText, stepCountIs } from "ai";
 import { z } from "zod";
-import { getActiveProvider } from "../providers/llm.js";
+import { getProviderForRole } from "../providers/llm.js";
 import { buildModulePluginToolSet, getModulePrompt } from "../plugins/runner.js";
 import { createLogger } from "../logger/index.js";
 import { loadPrompt } from "../prompts/index.js";
+import { replanRemainingSteps } from "./planner.js";
+import type { StepOutcome } from "./planner.js";
 import type { PlanStep, PlanResult } from "@talos/shared/types";
 import type { ApprovalGate } from "../plugins/runner.js";
+
+export interface ReplanContext {
+  moduleCatalog: string;
+  pluginPrompts?: string[];
+  onPlanRevised?: (removedStepIds: string[], addedSteps: Array<{ id: string; description: string }>) => void;
+}
+
+const MAX_REPLANS = 3;
 
 const log = createLogger("executor");
 
@@ -23,8 +33,9 @@ export async function executePlan(
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void,
   signal?: AbortSignal,
+  replanContext?: ReplanContext,
 ): Promise<PlanResult> {
-  const active = getActiveProvider();
+  const active = getProviderForRole("executor");
   if (!active) {
     throw new Error("No active model configured");
   }
@@ -33,12 +44,79 @@ export async function executePlan(
   const stepResults: PlanResult["steps"] = [];
   const usedPluginPrompts = new Map<string, string>();
 
+  // Mutable plan state — may be modified by re-planning
+  let currentPlan = [...plan];
+
   // Map step IDs to 1-based position for readable log messages
-  const planStepNum = new Map(plan.map((s, i) => [s.id, i + 1]));
+  let planStepNum = new Map(currentPlan.map((s, i) => [s.id, i + 1]));
 
   // Build execution order respecting dependencies
   const executed = new Set<string>();
-  const remaining = new Set(plan.map((s) => s.id));
+  let remaining = new Set(currentPlan.map((s) => s.id));
+  let replanCount = 0;
+
+  /** Attempt to re-plan remaining steps after a skip or error. */
+  const tryReplan = async (triggerStep: PlanStep, triggerResult: unknown, triggerError?: string) => {
+    if (!replanContext || remaining.size === 0 || replanCount >= MAX_REPLANS) return;
+
+    const wasSkipped = triggerResult != null && typeof triggerResult === "object" && (triggerResult as Record<string, unknown>)["skipped"] === true;
+    const triggerOutcome: StepOutcome = {
+      id: triggerStep.id,
+      description: triggerStep.description,
+      status: triggerError ? "error" : wasSkipped ? "skipped" : "complete",
+      result: triggerResult,
+      error: triggerError,
+    };
+
+    // Only replan on skip or error
+    if (triggerOutcome.status === "complete") return;
+
+    const completedOutcomes: StepOutcome[] = stepResults.map((sr) => ({
+      id: sr.id,
+      description: currentPlan.find((s) => s.id === sr.id)?.description ?? sr.id,
+      status: sr.error ? "error" : "complete",
+      result: sr.result,
+      error: sr.error,
+    }));
+
+    const remainingSteps = currentPlan.filter((s) => remaining.has(s.id));
+
+    try {
+      replanCount++;
+      const revisedSteps = await replanRemainingSteps(
+        request,
+        replanContext.moduleCatalog,
+        completedOutcomes,
+        remainingSteps,
+        triggerOutcome,
+        replanContext.pluginPrompts,
+      );
+
+      // Compute diff for notification
+      const removedStepIds = remainingSteps.map((s) => s.id);
+      const addedSteps = revisedSteps.map((s) => ({ id: s.id, description: s.description }));
+
+      // Replace remaining plan steps
+      currentPlan = [
+        ...currentPlan.filter((s) => !remaining.has(s.id)),
+        ...revisedSteps,
+      ];
+
+      // Update tracking state
+      remaining = new Set(revisedSteps.map((s) => s.id));
+      planStepNum = new Map(currentPlan.map((s, i) => [s.id, i + 1]));
+
+      log.info(`Plan revised: removed ${removedStepIds.length} step(s), added ${revisedSteps.length} step(s)`, {
+        removed: removedStepIds,
+        added: addedSteps.map((s) => s.id),
+      });
+
+      replanContext.onPlanRevised?.(removedStepIds, addedSteps);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn("Re-planning failed, continuing with original plan", { error: message });
+    }
+  };
 
   while (remaining.size > 0) {
     // Check for cancellation before starting next batch of steps
@@ -51,7 +129,7 @@ export async function executePlan(
     }
 
     // Find steps whose dependencies are all satisfied
-    const ready = plan.filter((step) => {
+    const ready = currentPlan.filter((step) => {
       if (!remaining.has(step.id)) return false;
       const deps = step.depends_on ?? [];
       return deps.every((d) => executed.has(d));
@@ -81,8 +159,11 @@ export async function executePlan(
       log.user.high(`Executing step ${planStepNum.get(step.id)}: ${step.description}`);
       log.info(`Executing plan step ${planStepNum.get(step.id)}: ${step.description}`);
 
+      let stepError: string | undefined;
+      let stepResult: unknown;
+
       try {
-        const stepResult = await executeStep(step, request, results, plan, active, planStepNum.get(step.id) ?? 0, approvalGate, onToolCall, onToolResult);
+        stepResult = await executeStep(step, request, results, currentPlan, active, planStepNum.get(step.id) ?? 0, approvalGate, onToolCall, onToolResult);
         results.set(step.id, stepResult);
 
         // Check for cancellation after step completes — mark complete but stop remaining
@@ -119,6 +200,7 @@ export async function executePlan(
         }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
+        stepError = message;
         stepResults.push({ id: step.id, status: "error", error: message });
         onProgress?.(step.id, step.description, "error");
         log.error(`Plan step ${planStepNum.get(step.id)} failed: ${step.description}`, { error: message });
@@ -126,6 +208,14 @@ export async function executePlan(
 
       executed.add(step.id);
       remaining.delete(step.id);
+
+      // Attempt re-planning after skip or error
+      if (stepError || (stepResult != null && typeof stepResult === "object" && (stepResult as Record<string, unknown>)["skipped"] === true)) {
+        await tryReplan(step, stepResult, stepError);
+        // After replan, break out of the inner for-loop so the while loop
+        // re-evaluates which steps are ready from the potentially revised plan
+        break;
+      }
     }
   }
 
@@ -178,7 +268,7 @@ async function executeStep(
   originalRequest: string,
   results: Map<string, unknown>,
   plan: PlanStep[],
-  active: NonNullable<ReturnType<typeof getActiveProvider>>,
+  active: NonNullable<ReturnType<typeof getProviderForRole>>,
   stepNumber: number,
   approvalGate?: ApprovalGate,
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
@@ -198,7 +288,7 @@ async function executeThinkStep(
   step: PlanStep,
   originalRequest: string,
   depContext: string,
-  active: NonNullable<ReturnType<typeof getActiveProvider>>,
+  active: NonNullable<ReturnType<typeof getProviderForRole>>,
 ): Promise<string> {
   const result = await generateText({
     model: active.model,
@@ -214,7 +304,7 @@ async function executeToolStep(
   step: PlanStep,
   originalRequest: string,
   depContext: string,
-  active: NonNullable<ReturnType<typeof getActiveProvider>>,
+  active: NonNullable<ReturnType<typeof getProviderForRole>>,
   stepNumber: number,
   approvalGate?: ApprovalGate,
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,

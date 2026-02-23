@@ -21,6 +21,14 @@ export const models = sqliteTable("models", {
   createdAt: text("created_at").notNull(),
 });
 
+export const modelRoles = sqliteTable("model_roles", {
+  role: text("role").primaryKey(), // "chat" | "planner" | "executor"
+  modelId: text("model_id")
+    .notNull()
+    .references(() => models.id, { onDelete: "cascade" }),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),

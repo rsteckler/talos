@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { db, schema } from "../db/index.js";
+import type { ModelRole } from "@talos/shared/types";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SYSTEM_PATH = path.join(__dirname, "..", "agent", "SYSTEM.md");
@@ -73,6 +74,49 @@ export function getActiveProvider() {
     providerType: providerRow.type,
     apiKey: providerRow.apiKey,
   };
+}
+
+export function getProviderForRole(role?: ModelRole) {
+  if (role) {
+    const assignment = db
+      .select()
+      .from(schema.modelRoles)
+      .where(eq(schema.modelRoles.role, role))
+      .get();
+
+    if (assignment) {
+      const modelRow = db
+        .select()
+        .from(schema.models)
+        .where(eq(schema.models.id, assignment.modelId))
+        .get();
+
+      if (modelRow) {
+        const providerRow = db
+          .select()
+          .from(schema.providers)
+          .where(eq(schema.providers.id, modelRow.providerId))
+          .get();
+
+        if (providerRow) {
+          const llmProvider = createLLMProvider(providerRow);
+          const model = providerRow.type === "openrouter"
+            ? (llmProvider as ReturnType<typeof createOpenAI>).chat(modelRow.modelId)
+            : llmProvider(modelRow.modelId);
+
+          return {
+            model,
+            modelId: modelRow.modelId,
+            providerType: providerRow.type,
+            apiKey: providerRow.apiKey,
+          };
+        }
+      }
+    }
+  }
+
+  // Fallback to default model
+  return getActiveProvider();
 }
 
 export function loadSystemPrompt(): string {

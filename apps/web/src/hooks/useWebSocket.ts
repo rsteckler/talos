@@ -44,6 +44,7 @@ export function useWebSocket() {
         ws.send(JSON.stringify({ type: "subscribe_logs" }))
         // Refresh app state now that the server is reachable
         useProviderStore.getState().fetchActiveModel()
+        useProviderStore.getState().fetchRoles()
         useChatStore.getState().fetchConversations()
         useInboxStore.getState().fetchInbox()
       }
@@ -193,6 +194,9 @@ function handleMessage(message: ServerMessage) {
     case "plan_step":
       store.updatePlanStepStatus(message.stepId, message.status)
       break
+    case "plan_revised":
+      store.revisePlan(message.removedStepIds, message.addedSteps)
+      break
     case "tool_call":
       // Ensure there's an assistant message to attach tool calls to
       if (!streamingPlaceholderId) {
@@ -244,7 +248,9 @@ function handleMessage(message: ServerMessage) {
       store.setToolResult(message.toolCallId, message.result)
       break
     case "log":
-      useLogStore.getState().addStreamedEntry(message.entry)
+      if (useLogStore.getState().streaming) {
+        useLogStore.getState().addStreamedEntry(message.entry)
+      }
       useChatStore.getState().addChatLog(message.entry)
       if (message.entry.axis === "user" && message.entry.level === "high") {
         useConnectionStore.getState().setLatestStatusLog(message.entry.message)

@@ -143,6 +143,15 @@ export interface ActiveModel {
   provider: Provider | null;
 }
 
+export type ModelRole = "chat" | "planner" | "executor";
+
+export interface ModelRoleAssignment {
+  role: ModelRole;
+  modelId: string;
+  modelDisplayName: string;
+  providerName: string;
+}
+
 // --- API Response ---
 
 export interface ApiResponse<T> {
@@ -379,7 +388,7 @@ export interface ToolCallInfo {
 export interface PlanStepInfo {
   id: string;           // "step_1", etc.
   description: string;
-  status: "pending" | "running" | "complete" | "skipped" | "error" | "stopping" | "cancelled";
+  status: "pending" | "running" | "complete" | "skipped" | "error" | "stopping" | "cancelled" | "removed";
 }
 
 export interface PlanState {
@@ -501,4 +510,5 @@ export type ServerMessage =
   | { type: "plan_step"; conversationId: string; stepId: string; description: string; status: "running" | "complete" | "skipped" | "error" }
   | { type: "inbox"; item: InboxItem }
   | { type: "log"; entry: LogEntry }
+  | { type: "plan_revised"; conversationId: string; removedStepIds: string[]; addedSteps: Array<{ id: string; description: string }> }
   | { type: "conversation_title_update"; conversationId: string; title: string };

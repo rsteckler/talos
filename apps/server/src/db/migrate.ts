@@ -257,6 +257,17 @@ export function runMigrations(): void {
     try { raw.exec("ALTER TABLE messages ADD COLUMN plan TEXT;"); } catch { /* column already exists */ }
   });
 
+  // --- v5: Add model_roles table ---
+  applyMigration(5, () => {
+    raw.exec(`
+      CREATE TABLE IF NOT EXISTS model_roles (
+        role TEXT PRIMARY KEY,
+        model_id TEXT NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+        updated_at TEXT NOT NULL
+      );
+    `);
+  });
+
   // Note: createLogger used here but initLogger() hasn't been called yet,
   // so this falls back to console.log. That's fine for migration output.
   console.log("[db] info: Database migrations complete");

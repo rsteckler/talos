@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Circle, Loader2, Check, AlertCircle, ChevronRight, Square, Ban, SkipForward } from "lucide-react"
+import { Circle, Loader2, Check, AlertCircle, ChevronRight, Square, Ban, SkipForward, Minus } from "lucide-react"
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -21,6 +21,7 @@ const statusIcons: Record<string, React.ReactNode> = {
   error: <AlertCircle className="size-3.5 text-red-400" />,
   stopping: <Square className="size-3.5 text-amber-400 animate-pulse" />,
   cancelled: <Ban className="size-3.5 text-muted-foreground/50" />,
+  removed: <Minus className="size-3.5 text-muted-foreground/40" />,
 }
 
 export function PlanDisplay({ plan, toolCalls }: PlanDisplayProps) {
@@ -68,6 +69,8 @@ function stepTextClass(status: string): string {
     case "cancelled":
     case "skipped":
       return "text-muted-foreground/50"
+    case "removed":
+      return "text-muted-foreground/40 line-through"
     case "stopping":
       return "text-amber-400/90"
     default:
@@ -88,7 +91,9 @@ function PlanStepRow({ step, isLast, toolCalls }: PlanStepRowProps) {
       ? `${step.description} — cancelled`
       : step.status === "skipped"
         ? `${step.description} — skipped`
-        : step.description
+        : step.status === "removed"
+          ? `${step.description} — removed`
+          : step.description
 
   return (
     <div className="flex">

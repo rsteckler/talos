@@ -1,7 +1,7 @@
 import { streamText, stepCountIs } from "ai";
 import { eq, asc, sql, and } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
-import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
+import { getProviderForRole, loadSystemPrompt } from "../providers/llm.js";
 import { buildRoutedPluginToolSet } from "../plugins/index.js";
 import { createLogger } from "../logger/index.js";
 import { generateConversationTitle } from "./titleGenerator.js";
@@ -207,6 +207,7 @@ interface StreamCallbacks {
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void;
   onPlanStart?: (request: string, steps: Array<{ id: string; description: string }>) => void;
   onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error") => void;
+  onPlanRevised?: (removedStepIds: string[], addedSteps: Array<{ id: string; description: string }>) => void;
   approvalGate?: ApprovalGate;
   signal?: AbortSignal;
 }
@@ -216,9 +217,9 @@ export async function streamChat(
   userContent: string,
   callbacks: StreamCallbacks,
 ): Promise<void> {
-  const { onChunk, onEnd, onError, onToolCall, onToolResult, onPlanStart, onPlanStep, approvalGate, signal } = callbacks;
+  const { onChunk, onEnd, onError, onToolCall, onToolResult, onPlanStart, onPlanStep, onPlanRevised, approvalGate, signal } = callbacks;
 
-  const active = getActiveProvider();
+  const active = getProviderForRole("chat");
   if (!active) {
     onError("No active model configured. Please add a provider and select a model in Settings.");
     return;
@@ -297,6 +298,20 @@ export async function streamChat(
       };
       onPlanStart?.(request, steps);
     };
+    const collectingOnPlanRevised = (removedStepIds: string[], addedSteps: Array<{ id: string; description: string }>) => {
+      if (collectedPlan) {
+        collectedPlan = {
+          ...collectedPlan,
+          steps: [
+            ...collectedPlan.steps.map((s) =>
+              removedStepIds.includes(s.id) ? { ...s, status: "removed" as const } : s,
+            ),
+            ...addedSteps.map((s) => ({ id: s.id, description: s.description, status: "pending" as const })),
+          ],
+        };
+      }
+      onPlanRevised?.(removedStepIds, addedSteps);
+    };
 
     // Build routed tool set: direct tools + plan_actions meta-tool
     const { tools, pluginPrompts } = buildRoutedPluginToolSet(approvalGate, {
@@ -304,6 +319,7 @@ export async function streamChat(
       onPlanStep,
       onToolCall: collectingOnToolCall,
       onToolResult: collectingOnToolResult,
+      onPlanRevised: collectingOnPlanRevised,
     });
     const hasTools = Object.keys(tools).length > 0;
 

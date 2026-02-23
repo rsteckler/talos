@@ -311,4 +311,78 @@ router.put("/models/active", (req, res) => {
   });
 });
 
+// --- Model Roles ---
+
+const MODEL_ROLES = ["chat", "planner", "executor"] as const;
+
+// GET /api/models/roles
+router.get("/models/roles", (_req, res) => {
+  const assignments = db
+    .select({
+      role: schema.modelRoles.role,
+      modelId: schema.modelRoles.modelId,
+      modelDisplayName: schema.models.displayName,
+      providerName: schema.providers.name,
+    })
+    .from(schema.modelRoles)
+    .innerJoin(schema.models, eq(schema.modelRoles.modelId, schema.models.id))
+    .innerJoin(schema.providers, eq(schema.models.providerId, schema.providers.id))
+    .all();
+
+  res.json({ data: assignments });
+});
+
+// PUT /api/models/roles/:role
+router.put("/models/roles/:role", (req, res) => {
+  const { role } = req.params;
+  if (!role || !MODEL_ROLES.includes(role as typeof MODEL_ROLES[number])) {
+    res.status(400).json({ error: `Invalid role. Must be one of: ${MODEL_ROLES.join(", ")}` });
+    return;
+  }
+
+  const parsed = z.object({ modelId: z.string().min(1) }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request" });
+    return;
+  }
+
+  const model = db.select().from(schema.models).where(eq(schema.models.id, parsed.data.modelId)).get();
+  if (!model) {
+    res.status(404).json({ error: "Model not found" });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  db.insert(schema.modelRoles)
+    .values({ role, modelId: parsed.data.modelId, updatedAt: now })
+    .onConflictDoUpdate({
+      target: schema.modelRoles.role,
+      set: { modelId: parsed.data.modelId, updatedAt: now },
+    })
+    .run();
+
+  const provider = db.select().from(schema.providers).where(eq(schema.providers.id, model.providerId)).get();
+
+  res.json({
+    data: {
+      role,
+      modelId: model.id,
+      modelDisplayName: model.displayName,
+      providerName: provider?.name ?? "Unknown",
+    },
+  });
+});
+
+// DELETE /api/models/roles/:role
+router.delete("/models/roles/:role", (req, res) => {
+  const { role } = req.params;
+  if (!role || !MODEL_ROLES.includes(role as typeof MODEL_ROLES[number])) {
+    res.status(400).json({ error: `Invalid role. Must be one of: ${MODEL_ROLES.join(", ")}` });
+    return;
+  }
+
+  db.delete(schema.modelRoles).where(eq(schema.modelRoles.role, role)).run();
+  res.json({ data: { success: true } });
+});
+
 export { router as providerRouter };

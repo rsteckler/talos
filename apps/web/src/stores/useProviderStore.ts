@@ -1,11 +1,12 @@
 import { create } from "zustand"
-import type { Provider, Model, ActiveModel, ProviderUpdateRequest } from "@talos/shared/types"
+import type { Provider, Model, ActiveModel, ModelRoleAssignment, ProviderUpdateRequest } from "@talos/shared/types"
 import { providersApi } from "@/api"
 
 interface ProviderState {
   providers: Provider[];
   modelsByProvider: Record<string, Model[]>;
   activeModel: ActiveModel;
+  roleAssignments: ModelRoleAssignment[];
   isLoading: boolean;
   error: string | null;
 
@@ -18,6 +19,9 @@ interface ProviderState {
   fetchActiveModel: () => Promise<void>;
   setActiveModel: (modelId: string) => Promise<void>;
   setActiveModelFromCatalog: (providerId: string, catalogModelId: string, displayName: string) => Promise<void>;
+  fetchRoles: () => Promise<void>;
+  setRole: (role: string, modelId: string) => Promise<void>;
+  removeRole: (role: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -25,6 +29,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   providers: [],
   modelsByProvider: {},
   activeModel: { model: null, provider: null },
+  roleAssignments: [],
   isLoading: false,
   error: null,
 
@@ -148,6 +153,40 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       await get().fetchModels(providerId);
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to set active model" });
+    }
+  },
+
+  fetchRoles: async () => {
+    try {
+      const roles = await providersApi.listRoles();
+      set({ roleAssignments: roles });
+    } catch {
+      // Silently fail — role assignments are optional
+    }
+  },
+
+  setRole: async (role, modelId) => {
+    try {
+      const assignment = await providersApi.setRole(role, modelId);
+      set((s) => ({
+        roleAssignments: [
+          ...s.roleAssignments.filter((r) => r.role !== role),
+          assignment,
+        ],
+      }));
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to set model role" });
+    }
+  },
+
+  removeRole: async (role) => {
+    try {
+      await providersApi.removeRole(role);
+      set((s) => ({
+        roleAssignments: s.roleAssignments.filter((r) => r.role !== role),
+      }));
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to remove model role" });
     }
   },
 
