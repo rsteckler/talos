@@ -227,12 +227,32 @@ export async function executePlan(
       executed.add(step.id);
       remaining.delete(step.id);
 
-      // Attempt re-planning only on error (skips are normal — the remaining plan is still valid)
-      if (stepError) {
-        await tryReplan(step, stepError);
-        // After replan, break out of the inner for-loop so the while loop
-        // re-evaluates which steps are ready from the potentially revised plan
-        break;
+      // Log plan evaluation decision between steps
+      if (remaining.size > 0) {
+        const nextSteps = currentPlan.filter((s) => remaining.has(s.id));
+        const nextDescriptions = nextSteps.map((s) => `${s.id}: ${s.description}`);
+
+        if (stepError) {
+          log.info(`Plan evaluation: step ${step.id} errored — attempting re-plan`, {
+            error: stepError,
+            remainingSteps: nextDescriptions,
+          });
+          await tryReplan(step, stepError);
+          // After replan, break out of the inner for-loop so the while loop
+          // re-evaluates which steps are ready from the potentially revised plan
+          break;
+        }
+
+        const wasSkipped = stepResult != null && typeof stepResult === "object" && (stepResult as Record<string, unknown>)["skipped"] === true;
+        if (wasSkipped) {
+          log.info(`Plan evaluation: step ${step.id} skipped — remaining plan still valid, continuing`, {
+            remainingSteps: nextDescriptions,
+          });
+        } else {
+          log.info(`Plan evaluation: step ${step.id} complete — continuing with plan`, {
+            remainingSteps: nextDescriptions,
+          });
+        }
       }
     }
   }
