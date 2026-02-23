@@ -252,7 +252,7 @@ export function ChatArea() {
                 }`}
               >
                 <Loader2 className="size-3 animate-spin" />
-                <span>{isStopping ? "Stopping\u2026" : "Talos is thinking..."}</span>
+                <span>{isStopping ? "Stopping\u2026" : latestStatusLog ?? "Talos is thinking..."}</span>
               </div>
               <div ref={messagesEndRef} />
             </div>

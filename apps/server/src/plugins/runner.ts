@@ -238,7 +238,7 @@ export function buildModulePluginToolSet(
 
 export interface PlanActionCallbacks {
   onPlanStart?: (request: string, steps: Array<{ id: string; description: string }>) => void;
-  onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "error") => void;
+  onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error") => void;
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void;
 }
@@ -275,7 +275,7 @@ export function buildRoutedPluginToolSet(
       execute: async (args: Record<string, unknown>, { abortSignal }: { toolCallId: string; abortSignal?: AbortSignal }) => {
         const request = args["request"] as string;
 
-        log.user.high("Planning actions", { request: request.slice(0, 100) });
+        log.dev.debug("Planning actions", { request: request.slice(0, 100) });
         log.dev.debug("plan_actions called", { request });
 
         try {
@@ -291,8 +291,6 @@ export function buildRoutedPluginToolSet(
           }
 
           const plan = await generatePlan(request, catalogText, plannerPrompts.length > 0 ? plannerPrompts : undefined);
-          log.user.high(`Plan created: ${plan.length} step(s)`, { steps: plan.map((s) => s.description) });
-          log.dev.debug("Plan details", { plan });
 
           // Notify client of plan structure before execution
           planCallbacks?.onPlanStart?.(request, plan.map((s) => ({ id: s.id, description: s.description })));

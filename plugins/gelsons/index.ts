@@ -44,13 +44,13 @@ type StorefrontState = 'logged-in' | 'logged-out' | 'timeout';
 async function waitForStorefront(): Promise<StorefrontState> {
   if (!browser) return 'timeout';
 
-  pluginLog?.info("Navigating to shop.gelsons.com storefront");
+  pluginLog?.verbose("Navigating to shop.gelsons.com storefront");
   await browser.navigate("https://shop.gelsons.com/store/gelsons/storefront");
 
   // Poll until we see Account Menu (logged in), Sign In (logged out), or Confirm (popup).
   // If we see Confirm, click it and keep polling for the login state buttons.
   const deadline = Date.now() + 20000;
-  pluginLog?.info("Waiting for storefront to render (20s)...");
+  pluginLog?.verbose("Waiting for storefront to render (20s)...");
   while (Date.now() < deadline) {
     const { result } = await browser.evaluateJs(`
       (() => {
@@ -63,7 +63,7 @@ async function waitForStorefront(): Promise<StorefrontState> {
       })()
     `);
     if (result === 'logged-in') {
-      pluginLog?.info("Storefront ready — logged in");
+      pluginLog?.verbose("Storefront ready — logged in");
       return 'logged-in';
     }
     if (result === 'logged-out') {

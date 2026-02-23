@@ -206,7 +206,7 @@ interface StreamCallbacks {
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void;
   onPlanStart?: (request: string, steps: Array<{ id: string; description: string }>) => void;
-  onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "error") => void;
+  onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error") => void;
   approvalGate?: ApprovalGate;
   signal?: AbortSignal;
 }
@@ -264,6 +264,7 @@ export async function streamChat(
     let toolCallCount = 0;
     let lastFinishReason = "";
     let streamError: unknown = null;
+    let speakingEmitted = false;
     const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     const collectedToolCalls: Array<{
       toolCallId: string;
@@ -278,6 +279,10 @@ export async function streamChat(
     // Wrap callbacks so inner tool calls (from plan executor) are also persisted
     const collectingOnToolCall = (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => {
       collectedToolCalls.push({ toolCallId, toolName, args, status: "calling", stepId });
+      // Executor tool calls — update header status text
+      if (stepId) {
+        log.user.high(describeToolCall(toolName, args), { tool: toolName });
+      }
       onToolCall?.(toolCallId, toolName, args, stepId);
     };
     const collectingOnToolResult = (toolCallId: string, toolName: string, result: unknown, stepId?: string) => {
@@ -336,11 +341,16 @@ export async function streamChat(
       for await (const part of streamResult.fullStream) {
         switch (part.type) {
           case "text-delta":
+            if (!speakingEmitted) {
+              log.user.high("Speaking");
+              speakingEmitted = true;
+            }
             fullContent += part.text;
             onChunk(part.text);
             break;
           case "tool-call":
             toolCallCount++;
+            speakingEmitted = false; // reset so next text block re-emits
             log.user.high(describeToolCall(part.toolName, part.input as Record<string, unknown>), { tool: part.toolName, args: part.input });
             log.dev.debug("Tool call args", { toolCallId: part.toolCallId, toolName: part.toolName, args: part.input });
             collectedToolCalls.push({

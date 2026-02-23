@@ -9,6 +9,7 @@ import type { ApprovalGate } from "../plugins/runner.js";
 
 const log = createLogger("executor");
 
+
 /**
  * Execute a plan by running each step in dependency order.
  * Tool steps get a focused LLM call with only that module's tools.
@@ -18,7 +19,7 @@ export async function executePlan(
   plan: PlanStep[],
   request: string,
   approvalGate?: ApprovalGate,
-  onProgress?: (stepId: string, description: string, status: "running" | "complete" | "error") => void,
+  onProgress?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error") => void,
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void,
   signal?: AbortSignal,
@@ -32,6 +33,9 @@ export async function executePlan(
   const stepResults: PlanResult["steps"] = [];
   const usedPluginPrompts = new Map<string, string>();
 
+  // Map step IDs to 1-based position for readable log messages
+  const planStepNum = new Map(plan.map((s, i) => [s.id, i + 1]));
+
   // Build execution order respecting dependencies
   const executed = new Set<string>();
   const remaining = new Set(plan.map((s) => s.id));
@@ -39,7 +43,7 @@ export async function executePlan(
   while (remaining.size > 0) {
     // Check for cancellation before starting next batch of steps
     if (signal?.aborted) {
-      log.user.high("Plan cancelled by user");
+      log.info("Plan cancelled by user");
       for (const id of remaining) {
         stepResults.push({ id, status: "error", error: "Cancelled" });
       }
@@ -65,7 +69,7 @@ export async function executePlan(
     for (const step of ready) {
       // Check for cancellation before each step
       if (signal?.aborted) {
-        log.user.high("Plan cancelled by user");
+        log.info("Plan cancelled by user");
         for (const id of remaining) {
           stepResults.push({ id, status: "error", error: "Cancelled" });
         }
@@ -74,17 +78,18 @@ export async function executePlan(
       }
 
       onProgress?.(step.id, step.description, "running");
-      log.user.high(`Step ${step.id}: ${step.description}`);
+      log.user.high(`Executing step ${planStepNum.get(step.id)}: ${step.description}`);
+      log.info(`Executing plan step ${planStepNum.get(step.id)}: ${step.description}`);
 
       try {
-        const stepResult = await executeStep(step, request, results, plan, active, approvalGate, onToolCall, onToolResult);
+        const stepResult = await executeStep(step, request, results, plan, active, planStepNum.get(step.id) ?? 0, approvalGate, onToolCall, onToolResult);
         results.set(step.id, stepResult);
 
         // Check for cancellation after step completes — mark complete but stop remaining
         if (signal?.aborted) {
           stepResults.push({ id: step.id, status: "complete", result: stepResult });
           onProgress?.(step.id, step.description, "complete");
-          log.user.high("Plan cancelled after step completed", { stepId: step.id });
+          log.info("Plan cancelled after step completed", { stepId: step.id });
           executed.add(step.id);
           remaining.delete(step.id);
           // Cancel remaining steps
@@ -95,9 +100,14 @@ export async function executePlan(
           break;
         }
 
+        const wasSkipped = stepResult != null && typeof stepResult === "object" && (stepResult as Record<string, unknown>)["skipped"] === true;
         stepResults.push({ id: step.id, status: "complete", result: stepResult });
-        onProgress?.(step.id, step.description, "complete");
-        log.dev.debug(`Step ${step.id} complete`, { resultPreview: JSON.stringify(stepResult).slice(0, 200) });
+        onProgress?.(step.id, step.description, wasSkipped ? "skipped" : "complete");
+        if (wasSkipped) {
+          log.info(`Plan step ${planStepNum.get(step.id)} skipped: ${step.description}`);
+        } else {
+          log.info(`Completed plan step ${planStepNum.get(step.id)}: ${step.description}`, { resultPreview: JSON.stringify(stepResult).slice(0, 200) });
+        }
 
         // Collect prompt.md from the plugin used in this step
         if (step.type === "tool" && step.module) {
@@ -111,7 +121,7 @@ export async function executePlan(
         const message = err instanceof Error ? err.message : String(err);
         stepResults.push({ id: step.id, status: "error", error: message });
         onProgress?.(step.id, step.description, "error");
-        log.error(`Step ${step.id} failed`, { error: message });
+        log.error(`Plan step ${planStepNum.get(step.id)} failed: ${step.description}`, { error: message });
       }
 
       executed.add(step.id);
@@ -119,8 +129,10 @@ export async function executePlan(
     }
   }
 
-  // Build a summary of what happened
+  // Log plan completion
   const completedCount = stepResults.filter((s) => s.status === "complete").length;
+  log.info(`Plan complete: ${completedCount}/${stepResults.length} step(s) completed`);
+
   const summary = completedCount === stepResults.length
     ? `All ${completedCount} step(s) completed successfully.`
     : `${completedCount}/${stepResults.length} step(s) completed.`;
@@ -167,6 +179,7 @@ async function executeStep(
   results: Map<string, unknown>,
   plan: PlanStep[],
   active: NonNullable<ReturnType<typeof getActiveProvider>>,
+  stepNumber: number,
   approvalGate?: ApprovalGate,
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void,
@@ -177,7 +190,7 @@ async function executeStep(
     return executeThinkStep(step, originalRequest, depContext, active);
   }
 
-  return executeToolStep(step, originalRequest, depContext, active, approvalGate, onToolCall, onToolResult);
+  return executeToolStep(step, originalRequest, depContext, active, stepNumber, approvalGate, onToolCall, onToolResult);
 }
 
 /** Execute a think step — LLM call with no tools, pure computation. */
@@ -202,6 +215,7 @@ async function executeToolStep(
   originalRequest: string,
   depContext: string,
   active: NonNullable<ReturnType<typeof getActiveProvider>>,
+  stepNumber: number,
   approvalGate?: ApprovalGate,
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void,
@@ -256,11 +270,7 @@ async function executeToolStep(
     // (AI SDK v6 bug: empty-param tools via OpenRouter streaming don't emit tool-call)
     const pendingToolInputs = new Map<string, { toolName: string; argsText: string }>();
 
-    log.dev.debug(`Executor stream starting`, {
-      module: step.module,
-      toolCount: toolNames.length,
-      tools: toolNames,
-    });
+    log.info(`Plan step ${stepNumber}, executor step 1 starting`, { module: step.module, tools: toolNames });
 
     // Suppress unhandled rejection warnings on derived promises
     const noop = () => {};
@@ -291,7 +301,7 @@ async function executeToolStep(
           pendingToolInputs.delete(part.toolCallId);
           if (part.toolName === "__skip__") {
             const reason = (part.input as Record<string, unknown>)["reason"] ?? "no reason";
-            log.user.medium(`Step ${step.id} skipped: ${String(reason)}`);
+            log.info(`Plan step ${stepNumber} skipped: ${String(reason)}`);
           } else {
             log.dev.debug(`Executor tool call: ${part.toolName}`, { args: part.input });
             onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>, step.id);
@@ -309,13 +319,15 @@ async function executeToolStep(
         case "finish":
           stepCount++;
           lastFinishReason = (part as Record<string, unknown>)["finishReason"] as string ?? "unknown";
-          log.dev.debug(`Executor step ${String(stepCount)} finished`, {
+          log.info(`Plan step ${stepNumber}, executor step ${String(stepCount)} complete`, {
             finishReason: lastFinishReason,
-            toolCallsSoFar: toolCallCount,
-            pendingToolInputs: pendingToolInputs.size,
-            textLength: fullText.length,
-            ...(fullText.length > 0 ? { text: fullText.slice(0, 300) } : {}),
+            toolCalls: toolCallCount,
+            toolResults: toolResults.length,
           });
+          // If there will be another executor step, log its start
+          if (lastFinishReason === "tool-calls") {
+            log.info(`Plan step ${stepNumber}, executor step ${String(stepCount + 1)} starting`);
+          }
           break;
         case "error":
           log.error("Executor stream error", { error: part.error });

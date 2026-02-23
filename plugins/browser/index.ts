@@ -156,7 +156,7 @@ class BrowserService {
     const launchOpts = { headless: this.headless };
 
     if (this.persistSession) {
-      this.log?.info(`Launching Chromium with persistent profile (headless=${String(this.headless)})`);
+      this.log?.verbose(`Launching Chromium with persistent profile (headless=${String(this.headless)})`);
       try {
         const ctx = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, launchOpts) as unknown as BrowserContextLike;
         this.context = ctx;
@@ -307,11 +307,11 @@ class BrowserService {
     const waitOpt = validWaits.includes(waitUntil as WaitUntil)
       ? waitUntil
       : "domcontentloaded";
-    this.log?.info(`Navigating to ${url} (waitUntil=${waitOpt})`);
+    this.log?.verbose(`Navigating to ${url} (waitUntil=${waitOpt})`);
     await page.goto(url, { waitUntil: waitOpt });
     const finalUrl = page.url();
     const title = await page.title();
-    this.log?.info(`Navigation complete: ${finalUrl}`);
+    this.log?.verbose(`Navigation complete: ${finalUrl}`);
     return { url: finalUrl, title };
   }
 

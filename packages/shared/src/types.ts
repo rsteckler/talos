@@ -378,7 +378,7 @@ export interface ToolCallInfo {
 export interface PlanStepInfo {
   id: string;           // "step_1", etc.
   description: string;
-  status: "pending" | "running" | "complete" | "error" | "stopping" | "cancelled";
+  status: "pending" | "running" | "complete" | "skipped" | "error" | "stopping" | "cancelled";
 }
 
 export interface PlanState {
@@ -497,7 +497,7 @@ export type ServerMessage =
   | { type: "tool_approval_request"; conversationId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
   | { type: "status"; status: AgentStatus }
   | { type: "plan_start"; conversationId: string; request: string; steps: Array<{ id: string; description: string }> }
-  | { type: "plan_step"; conversationId: string; stepId: string; description: string; status: "running" | "complete" | "error" }
+  | { type: "plan_step"; conversationId: string; stepId: string; description: string; status: "running" | "complete" | "skipped" | "error" }
   | { type: "inbox"; item: InboxItem }
   | { type: "log"; entry: LogEntry }
   | { type: "conversation_title_update"; conversationId: string; title: string };

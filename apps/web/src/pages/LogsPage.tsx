@@ -32,7 +32,7 @@ export function LogsPage() {
           <h1 className="text-lg font-semibold">Logs</h1>
         </div>
       </header>
-      <main className="container px-4 py-8">
+      <main className="px-4 py-8">
         <div className="space-y-6">
           <Card>
             <CardHeader>

@@ -27,12 +27,10 @@ export function LogViewer() {
     }
   }, [streaming, sendFn])
 
-  // Fetch historical logs on mount and when filters change (only when not streaming)
+  // Fetch historical logs on mount and when filters change
   useEffect(() => {
-    if (!streaming) {
-      fetchLogs()
-    }
-  }, [fetchLogs, streaming, filters])
+    fetchLogs()
+  }, [fetchLogs, filters])
 
   const handleTabChange = useCallback((value: string) => {
     if (value === "user") {
@@ -88,7 +86,7 @@ function LogTableContainer() {
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (streaming || !hasMore) return
+    if (!hasMore) return
 
     const sentinel = sentinelRef.current
     const scrollRoot = scrollRef.current
@@ -105,19 +103,19 @@ function LogTableContainer() {
 
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [streaming, hasMore, fetchMore])
+  }, [hasMore, fetchMore])
 
   return (
     <div className="space-y-2">
       <div ref={scrollRef} className="h-[500px] overflow-y-auto rounded-md border">
         <LogTable entries={entries} loading={loading} />
-        {!streaming && hasMore && (
+        {hasMore && (
           <div ref={sentinelRef} className="flex justify-center py-4">
             {loadingMore && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
           </div>
         )}
       </div>
-      {!streaming && total > 0 && (
+      {total > 0 && (
         <div className="text-sm text-muted-foreground">
           {entries.length} of {total} log entries
         </div>

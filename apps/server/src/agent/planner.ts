@@ -45,6 +45,8 @@ export async function generatePlan(
 
   prompt += `\n\nUser request: ${request}`;
 
+  log.user.high("Generating plan...");
+
   const result = await generateObject({
     model: active.model,
     schema: planSchema,
@@ -54,7 +56,9 @@ export async function generatePlan(
 
   const steps = result.object.steps as PlanStep[];
 
-  log.dev.debug("Plan generated", { stepCount: steps.length, steps: steps.map((s) => `${s.id}: ${s.type}${s.module ? ` [${s.module}]` : ""} — ${s.description}`) });
+  const stepSummaries = steps.map((s) => `${s.id}: ${s.type}${s.module ? ` [${s.module}]` : ""} — ${s.description}`);
+  log.info(`Plan generated: ${steps.length} step(s)`, { steps: steps.map((s) => s.description) });
+  log.dev.debug("Plan details", { steps: stepSummaries, plan: steps });
 
   return steps;
 }
