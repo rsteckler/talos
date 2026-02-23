@@ -11,6 +11,7 @@ interface ChatState {
   chatLogs: LogEntry[];
   inputValue: string;
   isStreaming: boolean;
+  isStopping: boolean;
   inboxContext: InboxItem | null;
 
   // Inbox context
@@ -22,6 +23,7 @@ interface ChatState {
 
   // Streaming
   setStreaming: (streaming: boolean) => void;
+  setStopping: (stopping: boolean) => void;
 
   // Messages
   addMessage: (message: Message) => void;
@@ -69,6 +71,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   chatLogs: [],
   inputValue: "",
   isStreaming: false,
+  isStopping: false,
   inboxContext: null,
 
   // Inbox context
@@ -79,7 +82,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   clearInput: () => set({ inputValue: "" }),
 
   // Streaming
-  setStreaming: (streaming) => set({ isStreaming: streaming }),
+  setStreaming: (streaming) => set({ isStreaming: streaming, ...(streaming ? {} : { isStopping: false }) }),
+  setStopping: (stopping) => set({ isStopping: stopping }),
 
   // Messages
   addMessage: (message) =>

@@ -33,6 +33,7 @@ export function ChatArea() {
   const chatLogs = useChatStore((s) => s.chatLogs)
   const clearChatLogs = useChatStore((s) => s.clearChatLogs)
   const isStreaming = useChatStore((s) => s.isStreaming)
+  const isStopping = useChatStore((s) => s.isStopping)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const createConversation = useChatStore((s) => s.createConversation)
   const inboxContext = useChatStore((s) => s.inboxContext)
@@ -141,6 +142,7 @@ export function ChatArea() {
   const handleStop = useCallback(() => {
     if (activeConversationId) {
       useChatStore.getState().markPlanStopping()
+      useChatStore.getState().setStopping(true)
       send({ type: "cancel", conversationId: activeConversationId })
     }
   }, [activeConversationId, send])
@@ -182,7 +184,7 @@ export function ChatArea() {
           <div className="flex flex-col items-center leading-none">
             <span className="text-base font-semibold text-foreground">Talos</span>
             <span className="text-[10px] font-mono text-muted-foreground/70 italic truncate max-w-[140px]">
-              {agentStatus === "idle" ? "Sleeping" : latestStatusLog ?? "Thinking\u2026"}
+              {isStopping ? "Stopping\u2026" : agentStatus === "idle" ? "Sleeping" : latestStatusLog ?? "Thinking\u2026"}
             </span>
           </div>
         </div>
@@ -250,7 +252,7 @@ export function ChatArea() {
                 }`}
               >
                 <Loader2 className="size-3 animate-spin" />
-                <span>Talos is thinking...</span>
+                <span>{isStopping ? "Stopping\u2026" : "Talos is thinking..."}</span>
               </div>
               <div ref={messagesEndRef} />
             </div>
