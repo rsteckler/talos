@@ -15,10 +15,11 @@ Automates grocery shopping on shop.gelsons.com via a persistent browser session.
 
 Always follow this order:
 
-1. **Check session** — Call `check_session` first. If already logged in, skip login.
-2. **Login** — Call `login` if needed. Only required once per browser session.
-3. **Search** — Call `search` with a query. Results stay on the page for cart operations.
-4. **Add to cart** — Call `add_to_cart` with the exact `product_name` from search results and a `quantity` (defaults to 1). Use the quantity parameter for multiples — do NOT create separate steps for the same product. The product must be visible on the current page.
+1. **Login** — Always call `login` first. It checks session state automatically and returns success immediately if already logged in. Only performs actual login when needed.
+2. **Search** — Call `search` with a query. Results stay on the page for cart operations.
+3. **Add to cart** — Call `add_to_cart` with the exact `product_name` from search results and a `quantity` (defaults to 1). Use the quantity parameter for multiples — do NOT create separate steps for the same product. The product must be visible on the current page.
+
+**Note:** Do NOT call `check_session` before `login`. The `login` function already handles session detection internally.
 
 ## Important Rules
 
