@@ -1,5 +1,7 @@
+import { useMemo } from "react"
 import type { Message } from "@talos/shared/types"
 import { ToolCallDisplay } from "./ToolCallDisplay"
+import { PlanDisplay } from "./PlanDisplay"
 import { Markdown } from "./Markdown"
 
 interface MessageBubbleProps {
@@ -16,15 +18,36 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       ? "rounded-2xl rounded-tl-md border border-destructive/30 bg-destructive/5 text-foreground"
       : "rounded-2xl rounded-tl-md border border-border/50 bg-card text-foreground"
 
+  // Separate plan-associated tool calls from standalone ones
+  const { planToolCalls, standaloneToolCalls } = useMemo(() => {
+    const all = message.toolCalls ?? []
+    if (!message.plan) {
+      // No plan — filter out plan_actions but show everything else
+      return {
+        planToolCalls: [],
+        standaloneToolCalls: all.filter((tc) => tc.toolName !== "plan_actions"),
+      }
+    }
+    // Has plan — split by stepId
+    const planTcs = all.filter((tc) => tc.stepId)
+    const standalone = all.filter((tc) => !tc.stepId && tc.toolName !== "plan_actions")
+    return { planToolCalls: planTcs, standaloneToolCalls: standalone }
+  }, [message.toolCalls, message.plan])
+
   return (
     <div className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}>
       <span className="mb-1 text-[11px] font-medium text-muted-foreground">
         {isUser ? "You" : "Talos"}
       </span>
       <div className={`max-w-[80%] px-4 py-2.5 ${bubbleClass}`}>
-        {message.toolCalls && message.toolCalls.length > 0 && (
+        {message.plan && (
           <div className="mb-2 border-b border-border pb-2">
-            {message.toolCalls.map((tc) => (
+            <PlanDisplay plan={message.plan} toolCalls={planToolCalls} />
+          </div>
+        )}
+        {standaloneToolCalls.length > 0 && (
+          <div className="mb-2 border-b border-border pb-2">
+            {standaloneToolCalls.map((tc) => (
               <ToolCallDisplay key={tc.toolCallId} toolCall={tc} />
             ))}
           </div>

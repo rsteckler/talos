@@ -37,6 +37,7 @@ export const messages = sqliteTable("messages", {
   content: text("content").notNull(),
   usage: text("usage"),
   toolCalls: text("tool_calls"),
+  plan: text("plan"),
   createdAt: text("created_at").notNull(),
 });
 

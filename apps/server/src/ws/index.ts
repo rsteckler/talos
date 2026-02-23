@@ -167,7 +167,7 @@ function handleChat(
       }
       sendMessage(ws, { type: "chunk", conversationId, content: chunk });
     },
-    onToolCall: (toolCallId, toolName, args) => {
+    onToolCall: (toolCallId, toolName, args, stepId) => {
       sendMessage(ws, { type: "status", status: "tool_calling" });
       sendMessage(ws, {
         type: "tool_call",
@@ -175,17 +175,27 @@ function handleChat(
         toolCallId,
         toolName,
         args,
+        ...(stepId ? { stepId } : {}),
       });
       // Reset sentFirstChunk so next text after tool results gets "responding" status
       sentFirstChunk = false;
     },
-    onToolResult: (toolCallId, toolName, result) => {
+    onToolResult: (toolCallId, toolName, result, stepId) => {
       sendMessage(ws, {
         type: "tool_result",
         conversationId,
         toolCallId,
         toolName,
         result,
+        ...(stepId ? { stepId } : {}),
+      });
+    },
+    onPlanStart: (request, steps) => {
+      sendMessage(ws, {
+        type: "plan_start",
+        conversationId,
+        request,
+        steps,
       });
     },
     onPlanStep: (stepId, description, status) => {

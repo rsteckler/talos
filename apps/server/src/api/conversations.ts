@@ -174,6 +174,7 @@ router.get("/conversations/:id", (req, res) => {
         created_at: m.createdAt,
         usage: m.usage ? JSON.parse(m.usage) : undefined,
         toolCalls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
+        plan: m.plan ? JSON.parse(m.plan) : undefined,
       })),
     },
   });

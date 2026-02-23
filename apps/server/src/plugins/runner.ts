@@ -237,9 +237,10 @@ export function buildModulePluginToolSet(
 }
 
 export interface PlanActionCallbacks {
+  onPlanStart?: (request: string, steps: Array<{ id: string; description: string }>) => void;
   onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "error") => void;
-  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>) => void;
-  onToolResult?: (toolCallId: string, toolName: string, result: unknown) => void;
+  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void;
+  onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void;
 }
 
 /**
@@ -293,6 +294,9 @@ export function buildRoutedPluginToolSet(
           log.user.high(`Plan created: ${plan.length} step(s)`, { steps: plan.map((s) => s.description) });
           log.dev.debug("Plan details", { plan });
 
+          // Notify client of plan structure before execution
+          planCallbacks?.onPlanStart?.(request, plan.map((s) => ({ id: s.id, description: s.description })));
+
           const result = await executePlan(
             plan,
             request,
@@ -300,11 +304,11 @@ export function buildRoutedPluginToolSet(
             (stepId, description, status) => {
               planCallbacks?.onPlanStep?.(stepId, description, status);
             },
-            (toolCallId, toolName, toolArgs) => {
-              planCallbacks?.onToolCall?.(toolCallId, toolName, toolArgs);
+            (toolCallId, toolName, toolArgs, stepId) => {
+              planCallbacks?.onToolCall?.(toolCallId, toolName, toolArgs, stepId);
             },
-            (toolCallId, toolName, toolResult) => {
-              planCallbacks?.onToolResult?.(toolCallId, toolName, toolResult);
+            (toolCallId, toolName, toolResult, stepId) => {
+              planCallbacks?.onToolResult?.(toolCallId, toolName, toolResult, stepId);
             },
           );
 

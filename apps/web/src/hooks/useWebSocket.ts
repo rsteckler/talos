@@ -167,6 +167,32 @@ function handleMessage(message: ServerMessage) {
         useConnectionStore.getState().setLatestStatusLog(null)
       }
       break
+    case "plan_start": {
+      // Ensure there's an assistant message to attach the plan to
+      if (!streamingPlaceholderId) {
+        streamingPlaceholderId = `streaming-${crypto.randomUUID()}`
+        store.addMessage({
+          id: streamingPlaceholderId,
+          conversationId: message.conversationId,
+          role: "assistant",
+          content: "",
+          created_at: new Date().toISOString(),
+        })
+        store.setStreaming(true)
+      }
+      store.setPlan({
+        request: message.request,
+        steps: message.steps.map((s) => ({
+          id: s.id,
+          description: s.description,
+          status: "pending" as const,
+        })),
+      })
+      break
+    }
+    case "plan_step":
+      store.updatePlanStepStatus(message.stepId, message.status)
+      break
     case "tool_call":
       // Ensure there's an assistant message to attach tool calls to
       if (!streamingPlaceholderId) {
@@ -185,6 +211,7 @@ function handleMessage(message: ServerMessage) {
         toolName: message.toolName,
         args: message.args,
         status: "calling",
+        ...(message.stepId ? { stepId: message.stepId } : {}),
       })
       break
     case "tool_approval_request":

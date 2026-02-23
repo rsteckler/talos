@@ -82,6 +82,7 @@ export interface Message {
   content: string;
   created_at: string;
   toolCalls?: ToolCallInfo[];
+  plan?: PlanState;
   usage?: TokenUsage;
   isError?: boolean;
 }
@@ -368,6 +369,20 @@ export interface ToolCallInfo {
   args: Record<string, unknown>;
   result?: unknown;
   status: "pending_approval" | "calling" | "complete" | "error" | "denied";
+  stepId?: string;
+}
+
+// --- Plan Display ---
+
+export interface PlanStepInfo {
+  id: string;           // "step_1", etc.
+  description: string;
+  status: "pending" | "running" | "complete" | "error";
+}
+
+export interface PlanState {
+  request: string;      // original user request
+  steps: PlanStepInfo[];
 }
 
 // --- Channels ---
@@ -476,10 +491,11 @@ export type ServerMessage =
   | { type: "chunk"; conversationId: string; content: string }
   | { type: "end"; conversationId: string; messageId: string; usage?: TokenUsage }
   | { type: "error"; conversationId?: string; error: string }
-  | { type: "tool_call"; conversationId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
-  | { type: "tool_result"; conversationId: string; toolCallId: string; toolName: string; result: unknown }
+  | { type: "tool_call"; conversationId: string; toolCallId: string; toolName: string; args: Record<string, unknown>; stepId?: string }
+  | { type: "tool_result"; conversationId: string; toolCallId: string; toolName: string; result: unknown; stepId?: string }
   | { type: "tool_approval_request"; conversationId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
   | { type: "status"; status: AgentStatus }
+  | { type: "plan_start"; conversationId: string; request: string; steps: Array<{ id: string; description: string }> }
   | { type: "plan_step"; conversationId: string; stepId: string; description: string; status: "running" | "complete" | "error" }
   | { type: "inbox"; item: InboxItem }
   | { type: "log"; entry: LogEntry }

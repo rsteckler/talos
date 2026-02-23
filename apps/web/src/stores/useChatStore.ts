@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Message, Conversation, ToolCallInfo, TokenUsage, LogEntry, InboxItem } from "@talos/shared/types"
+import type { Message, Conversation, ToolCallInfo, TokenUsage, LogEntry, InboxItem, PlanState } from "@talos/shared/types"
 import { conversationsApi } from "@/api/conversations"
 
 const MAX_CHAT_LOGS = 500
@@ -38,6 +38,10 @@ interface ChatState {
   addToolCall: (toolCall: ToolCallInfo) => void;
   setToolResult: (toolCallId: string, result: unknown) => void;
   updateToolCallStatus: (toolCallId: string, status: ToolCallInfo["status"]) => void;
+
+  // Plan
+  setPlan: (plan: PlanState) => void;
+  updatePlanStepStatus: (stepId: string, status: PlanState["steps"][number]["status"]) => void;
 
   // Chat logs
   addChatLog: (entry: LogEntry) => void;
@@ -162,6 +166,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ? { ...tc, status }
               : tc,
           ),
+        }
+      })
+      return { messages: msgs }
+    }),
+
+  // Plan — attach to the last assistant message
+  setPlan: (plan) =>
+    set((state) => {
+      const msgs = [...state.messages]
+      const last = msgs[msgs.length - 1]
+      if (last && last.role === "assistant") {
+        msgs[msgs.length - 1] = { ...last, plan }
+      }
+      return { messages: msgs }
+    }),
+  updatePlanStepStatus: (stepId, status) =>
+    set((state) => {
+      const msgs = state.messages.map((m) => {
+        if (m.role !== "assistant" || !m.plan) return m
+        const hasStep = m.plan.steps.some((s) => s.id === stepId)
+        if (!hasStep) return m
+        return {
+          ...m,
+          plan: {
+            ...m.plan,
+            steps: m.plan.steps.map((s) =>
+              s.id === stepId ? { ...s, status } : s,
+            ),
+          },
         }
       })
       return { messages: msgs }

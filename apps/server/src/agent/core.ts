@@ -6,7 +6,7 @@ import { buildRoutedPluginToolSet } from "../plugins/index.js";
 import { createLogger } from "../logger/index.js";
 import { generateConversationTitle } from "./titleGenerator.js";
 import type { ModelMessage } from "ai";
-import type { TokenUsage } from "@talos/shared/types";
+import type { TokenUsage, PlanState } from "@talos/shared/types";
 import type { ApprovalGate } from "../plugins/index.js";
 
 const log = createLogger("agent");
@@ -203,8 +203,9 @@ interface StreamCallbacks {
   onChunk: (content: string) => void;
   onEnd: (messageId: string, usage?: TokenUsage) => void;
   onError: (error: string) => void;
-  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>) => void;
-  onToolResult?: (toolCallId: string, toolName: string, result: unknown) => void;
+  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void;
+  onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void;
+  onPlanStart?: (request: string, steps: Array<{ id: string; description: string }>) => void;
   onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "error") => void;
   approvalGate?: ApprovalGate;
   signal?: AbortSignal;
@@ -215,7 +216,7 @@ export async function streamChat(
   userContent: string,
   callbacks: StreamCallbacks,
 ): Promise<void> {
-  const { onChunk, onEnd, onError, onToolCall, onToolResult, onPlanStep, approvalGate, signal } = callbacks;
+  const { onChunk, onEnd, onError, onToolCall, onToolResult, onPlanStart, onPlanStep, approvalGate, signal } = callbacks;
 
   const active = getActiveProvider();
   if (!active) {
@@ -270,21 +271,31 @@ export async function streamChat(
       args: Record<string, unknown>;
       result?: unknown;
       status: string;
+      stepId?: string;
     }> = [];
+    let collectedPlan: PlanState | undefined;
 
     // Wrap callbacks so inner tool calls (from plan executor) are also persisted
-    const collectingOnToolCall = (toolCallId: string, toolName: string, args: Record<string, unknown>) => {
-      collectedToolCalls.push({ toolCallId, toolName, args, status: "calling" });
-      onToolCall?.(toolCallId, toolName, args);
+    const collectingOnToolCall = (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => {
+      collectedToolCalls.push({ toolCallId, toolName, args, status: "calling", stepId });
+      onToolCall?.(toolCallId, toolName, args, stepId);
     };
-    const collectingOnToolResult = (toolCallId: string, toolName: string, result: unknown) => {
+    const collectingOnToolResult = (toolCallId: string, toolName: string, result: unknown, stepId?: string) => {
       const tc = collectedToolCalls.find((c) => c.toolCallId === toolCallId);
       if (tc) { tc.result = result; tc.status = "complete"; }
-      onToolResult?.(toolCallId, toolName, result);
+      onToolResult?.(toolCallId, toolName, result, stepId);
+    };
+    const collectingOnPlanStart = (request: string, steps: Array<{ id: string; description: string }>) => {
+      collectedPlan = {
+        request,
+        steps: steps.map((s) => ({ id: s.id, description: s.description, status: "pending" as const })),
+      };
+      onPlanStart?.(request, steps);
     };
 
     // Build routed tool set: direct tools + plan_actions meta-tool
     const { tools, pluginPrompts } = buildRoutedPluginToolSet(approvalGate, {
+      onPlanStart: collectingOnPlanStart,
       onPlanStep,
       onToolCall: collectingOnToolCall,
       onToolResult: collectingOnToolResult,
@@ -444,7 +455,7 @@ export async function streamChat(
       return;
     }
 
-    // Persist assistant message (with usage and tool calls if available)
+    // Persist assistant message (with usage, tool calls, and plan if available)
     const assistantMsgId = crypto.randomUUID();
     const hasUsage = totalUsage.totalTokens > 0;
     db.insert(schema.messages)
@@ -455,6 +466,7 @@ export async function streamChat(
         content: fullContent,
         usage: hasUsage ? JSON.stringify(totalUsage) : null,
         toolCalls: collectedToolCalls.length > 0 ? JSON.stringify(collectedToolCalls) : null,
+        plan: collectedPlan ? JSON.stringify(collectedPlan) : null,
         createdAt: new Date().toISOString(),
       })
       .run();

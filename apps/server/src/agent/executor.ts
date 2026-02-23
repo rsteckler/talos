@@ -23,8 +23,8 @@ export async function executePlan(
   request: string,
   approvalGate?: ApprovalGate,
   onProgress?: (stepId: string, description: string, status: "running" | "complete" | "error") => void,
-  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>) => void,
-  onToolResult?: (toolCallId: string, toolName: string, result: unknown) => void,
+  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
+  onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void,
 ): Promise<PlanResult> {
   const active = getActiveProvider();
   if (!active) {
@@ -136,8 +136,8 @@ async function executeStep(
   plan: PlanStep[],
   active: NonNullable<ReturnType<typeof getActiveProvider>>,
   approvalGate?: ApprovalGate,
-  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>) => void,
-  onToolResult?: (toolCallId: string, toolName: string, result: unknown) => void,
+  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
+  onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void,
 ): Promise<unknown> {
   const depContext = buildDependencyContext(step, results, plan);
 
@@ -171,8 +171,8 @@ async function executeToolStep(
   depContext: string,
   active: NonNullable<ReturnType<typeof getActiveProvider>>,
   approvalGate?: ApprovalGate,
-  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>) => void,
-  onToolResult?: (toolCallId: string, toolName: string, result: unknown) => void,
+  onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
+  onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void,
 ): Promise<unknown> {
   if (!step.module) {
     throw new Error(`Tool step ${step.id} is missing a module reference`);
@@ -243,11 +243,11 @@ async function executeToolStep(
           toolCallCount++;
           pendingToolInputs.delete(part.toolCallId);
           log.dev.debug(`Executor tool call: ${part.toolName}`, { args: part.input });
-          onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>);
+          onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>, step.id);
           break;
         case "tool-result":
           log.dev.debug(`Executor tool result: ${part.toolName}`, { resultPreview: JSON.stringify(part.output).slice(0, 100) });
-          onToolResult?.(part.toolCallId, part.toolName, part.output);
+          onToolResult?.(part.toolCallId, part.toolName, part.output, step.id);
           toolResults.push(part.output);
           break;
         case "finish":
@@ -317,12 +317,12 @@ async function executeToolStep(
         }
 
         log.dev.debug(`Manual executor tool call: ${toolName}`, { args: parsedArgs, toolCallId: id });
-        onToolCall?.(id, toolName, parsedArgs);
+        onToolCall?.(id, toolName, parsedArgs, step.id);
 
         try {
           const result = await tool.execute(parsedArgs, { toolCallId: id, messages: [], abortSignal: undefined as unknown as AbortSignal });
           log.dev.debug(`Manual executor tool result: ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 100) });
-          onToolResult?.(id, toolName, result);
+          onToolResult?.(id, toolName, result, step.id);
           toolResults.push(result);
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);

@@ -252,6 +252,11 @@ export function runMigrations(): void {
     try { raw.exec("ALTER TABLE messages ADD COLUMN tool_calls TEXT;"); } catch { /* column already exists */ }
   });
 
+  // --- v4: Add plan column to messages ---
+  applyMigration(4, () => {
+    try { raw.exec("ALTER TABLE messages ADD COLUMN plan TEXT;"); } catch { /* column already exists */ }
+  });
+
   // Note: createLogger used here but initLogger() hasn't been called yet,
   // so this falls back to console.log. That's fine for migration output.
   console.log("[db] info: Database migrations complete");
