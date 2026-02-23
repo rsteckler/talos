@@ -9,6 +9,8 @@ You have access to the user's Google Workspace via the `google_*` functions. Use
 - `google_gmail_reply` — Reply to an existing email thread.
 - `google_gmail_archive` — Archive an email (removes from inbox, stays in All Mail). Use the message ID from search results.
 
+The human generally wants to filter to the Inbox (`label:Inbox`) when asking for general content like "show my emails" or "show my unread emails".  
+
 When searching, use Gmail search operators: `from:`, `to:`, `subject:`, `is:unread`, `has:attachment`, `after:`, `before:`, `label:`, `newer_than:`, etc. For recent mail, prefer `newer_than:` over `after:` — use `newer_than:2d` for today's emails and `newer_than:8d` for the last week (add a day of buffer for timezone safety).
 
 ### Calendar
