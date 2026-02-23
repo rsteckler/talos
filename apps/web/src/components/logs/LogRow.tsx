@@ -20,13 +20,17 @@ const LEVEL_STYLES: Record<string, string> = {
 
 function formatTimestamp(iso: string): string {
   const d = new Date(iso)
+  const date = d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })
   const time = d.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   })
   const ms = String(d.getMilliseconds()).padStart(3, "0")
-  return `${time}.${ms}`
+  return `${date} ${time}.${ms}`
 }
 
 export function LogRow({ entry }: LogRowProps) {

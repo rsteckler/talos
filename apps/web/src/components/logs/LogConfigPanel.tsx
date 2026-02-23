@@ -44,12 +44,59 @@ export function LogConfigPanel() {
   // Show _default first, then all known areas
   const allAreas = ["_default", ...areas.filter((a) => a !== "_default")]
 
+  const handleSetAllUser = useCallback(
+    (value: string) => {
+      for (const area of allAreas) {
+        const current = getConfig(area)
+        updateConfig(area, value as UserLogLevel, current.devLevel)
+      }
+    },
+    [allAreas, getConfig, updateConfig]
+  )
+
+  const handleSetAllDev = useCallback(
+    (value: string) => {
+      for (const area of allAreas) {
+        const current = getConfig(area)
+        updateConfig(area, current.userLevel, value as DevLogLevel)
+      }
+    },
+    [allAreas, getConfig, updateConfig]
+  )
+
   if (allAreas.length === 0) {
     return <p className="text-sm text-muted-foreground">No logging areas configured.</p>
   }
 
   return (
     <div className="space-y-3">
+      <div className="grid grid-cols-[1fr_140px_140px] items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">Set all</span>
+        <Select onValueChange={handleSetAllUser}>
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue placeholder="User level" />
+          </SelectTrigger>
+          <SelectContent>
+            {USER_LEVELS.map((level) => (
+              <SelectItem key={level} value={level}>
+                {level}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select onValueChange={handleSetAllDev}>
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue placeholder="Dev level" />
+          </SelectTrigger>
+          <SelectContent>
+            {DEV_LEVELS.map((level) => (
+              <SelectItem key={level} value={level}>
+                {level}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <div className="grid grid-cols-[1fr_140px_140px] gap-2 text-xs font-medium text-muted-foreground">
         <div>Area</div>
         <div>User Level</div>

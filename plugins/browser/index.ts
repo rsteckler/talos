@@ -206,17 +206,17 @@ class BrowserService {
     page.on("console", (msg: unknown) => {
       const m = msg as { type?: () => string; text?: () => string };
       if (typeof m.type === "function" && typeof m.text === "function") {
-        this.log?.debug(`[${tabId}] console.${m.type()}: ${m.text()}`);
+        this.log?.verbose(`[${tabId}] console.${m.type()}: ${m.text()}`);
       }
     });
     page.on("pageerror", (err: unknown) => {
-      this.log?.warn(`[${tabId}] page error: ${err instanceof Error ? err.message : String(err)}`);
+      this.log?.verbose(`[${tabId}] page error: ${err instanceof Error ? err.message : String(err)}`);
     });
     page.on("requestfailed", (req: unknown) => {
       const r = req as { url?: () => string; failure?: () => { errorText: string } | null };
       if (typeof r.url === "function" && typeof r.failure === "function") {
         const failure = r.failure();
-        this.log?.debug(`[${tabId}] request failed: ${r.url()} — ${failure?.errorText ?? "unknown"}`);
+        this.log?.verbose(`[${tabId}] request failed: ${r.url()} — ${failure?.errorText ?? "unknown"}`);
       }
     });
     page.on("response", (res: unknown) => {
@@ -224,7 +224,7 @@ class BrowserService {
       if (typeof r.url === "function" && typeof r.status === "function") {
         const status = r.status();
         if (status >= 400) {
-          this.log?.debug(`[${tabId}] HTTP ${String(status)}: ${r.url()}`);
+          this.log?.verbose(`[${tabId}] HTTP ${String(status)}: ${r.url()}`);
         }
       }
     });

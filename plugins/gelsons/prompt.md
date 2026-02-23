@@ -9,7 +9,7 @@ Automates grocery shopping on shop.gelsons.com via a persistent browser session.
 | `check_session` | Check if the browser is logged into Gelson's |
 | `login` | Log into the Gelson's account (uses stored credentials) |
 | `search` | Search for products by keyword — returns names, prices, sizes, stock |
-| `add_to_cart` | Add a product to the cart by name (must be on the current page) |
+| `add_to_cart` | Add a product to the cart by name and quantity (must be on the current page) |
 
 ## Workflow
 
@@ -18,7 +18,7 @@ Always follow this order:
 1. **Check session** — Call `check_session` first. If already logged in, skip login.
 2. **Login** — Call `login` if needed. Only required once per browser session.
 3. **Search** — Call `search` with a query. Results stay on the page for cart operations.
-4. **Add to cart** — Call `add_to_cart` with the exact `product_name` from search results. The product must be visible on the current page.
+4. **Add to cart** — Call `add_to_cart` with the exact `product_name` from search results and a `quantity` (defaults to 1). Use the quantity parameter for multiples — do NOT create separate steps for the same product. The product must be visible on the current page.
 
 ## Important Rules
 

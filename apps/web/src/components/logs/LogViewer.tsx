@@ -1,10 +1,10 @@
-import { useEffect, useCallback } from "react"
+import { useEffect, useCallback, useRef } from "react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { LogToolbar } from "./LogToolbar"
 import { LogTable } from "./LogTable"
 import { useLogStore } from "@/stores"
 import { useConnectionStore } from "@/stores"
+import { Loader2 } from "lucide-react"
 
 export function LogViewer() {
   const fetchLogs = useLogStore((s) => s.fetchLogs)
@@ -78,38 +78,48 @@ export function LogViewer() {
 function LogTableContainer() {
   const entries = useLogStore((s) => s.entries)
   const loading = useLogStore((s) => s.loading)
+  const loadingMore = useLogStore((s) => s.loadingMore)
+  const hasMore = useLogStore((s) => s.hasMore)
   const total = useLogStore((s) => s.total)
-  const page = useLogStore((s) => s.page)
-  const fetchLogs = useLogStore((s) => s.fetchLogs)
+  const fetchMore = useLogStore((s) => s.fetchMore)
   const streaming = useLogStore((s) => s.streaming)
 
-  const totalPages = Math.ceil(total / 50)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (streaming || !hasMore) return
+
+    const sentinel = sentinelRef.current
+    const scrollRoot = scrollRef.current
+    if (!sentinel || !scrollRoot) return
+
+    const observer = new IntersectionObserver(
+      (observed) => {
+        if (observed[0]?.isIntersecting) {
+          fetchMore()
+        }
+      },
+      { root: scrollRoot, threshold: 0 },
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [streaming, hasMore, fetchMore])
 
   return (
     <div className="space-y-2">
-      <ScrollArea className="h-[500px] rounded-md border">
+      <div ref={scrollRef} className="h-[500px] overflow-y-auto rounded-md border">
         <LogTable entries={entries} loading={loading} />
-      </ScrollArea>
-      {!streaming && totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{total} total log entries</span>
-          <div className="flex gap-2">
-            <button
-              className="underline disabled:no-underline disabled:opacity-50"
-              disabled={page <= 1}
-              onClick={() => fetchLogs(page - 1)}
-            >
-              Previous
-            </button>
-            <span>Page {page} of {totalPages}</span>
-            <button
-              className="underline disabled:no-underline disabled:opacity-50"
-              disabled={page >= totalPages}
-              onClick={() => fetchLogs(page + 1)}
-            >
-              Next
-            </button>
+        {!streaming && hasMore && (
+          <div ref={sentinelRef} className="flex justify-center py-4">
+            {loadingMore && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
           </div>
+        )}
+      </div>
+      {!streaming && total > 0 && (
+        <div className="text-sm text-muted-foreground">
+          {entries.length} of {total} log entries
         </div>
       )}
     </div>

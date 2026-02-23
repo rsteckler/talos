@@ -4,7 +4,7 @@
   "private": true,
   "description": "Talos - Your AI chief of staff",
   "scripts": {
-    "dev": "pnpm run --parallel dev",
+    "dev": "pnpm --filter @talos/server --filter @talos/web run --parallel dev",
     "dev:server": "pnpm --filter @talos/server dev",
     "dev:web": "pnpm --filter @talos/web dev",
     "dev:docs": "pnpm --filter @talos/docs dev",

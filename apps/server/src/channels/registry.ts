@@ -21,6 +21,7 @@ function createChannelLogger(channelId: string, logName?: string): PluginLogger 
     warn: (message: string) => inner.warn(message),
     error: (message: string) => inner.error(message),
     debug: (message: string) => inner.dev.debug(message),
+    verbose: (message: string) => inner.dev.verbose(message),
   };
 }
 

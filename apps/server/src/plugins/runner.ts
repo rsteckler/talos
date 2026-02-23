@@ -157,7 +157,7 @@ export function buildPluginToolSet(filterPluginIds?: string[], approvalGate?: Ap
           log.dev.debug(`Executing ${toolName}`, { args });
           try {
             const result = await withTimeout(handler(args, storedConfig), TOOL_TIMEOUT_MS, toolName);
-            log.dev.debug(`Completed ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 100) });
+            log.dev.debug(`Completed ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 200) });
             return result;
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
@@ -221,7 +221,7 @@ export function buildModulePluginToolSet(
         log.dev.debug(`Executing ${fullName}`, { args });
         try {
           const result = await withTimeout(lookup.handler(args, lookup.credentials), TOOL_TIMEOUT_MS, fullName);
-          log.dev.debug(`Completed ${fullName}`, { resultPreview: JSON.stringify(result).slice(0, 100) });
+          log.dev.debug(`Completed ${fullName}`, { resultPreview: JSON.stringify(result).slice(0, 200) });
           return result;
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);

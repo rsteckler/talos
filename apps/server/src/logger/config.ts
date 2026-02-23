@@ -6,7 +6,7 @@ import type { UserLogLevel, DevLogLevel, LogConfig, LogSettings } from "@talos/s
 export const PREDEFINED_AREAS = ["server", "ws", "agent", "db", "plugins", "api", "channels", "scheduler", "triggers", "oauth", "summary-gen", "title-gen"] as const;
 
 const DEFAULT_USER_LEVEL: UserLogLevel = "medium";
-const DEFAULT_DEV_LEVEL: DevLogLevel = "debug";
+const DEFAULT_DEV_LEVEL: DevLogLevel = "verbose";
 
 /** In-memory config cache */
 const configCache = new Map<string, { userLevel: UserLogLevel; devLevel: DevLogLevel }>();
@@ -57,14 +57,23 @@ export function loadConfigCache(): void {
     });
   }
 
-  // Ensure _default exists
-  if (!configCache.has("_default")) {
+  // Ensure _default exists and has current defaults
+  const defaultConfig = configCache.get("_default");
+  if (!defaultConfig) {
     const now = new Date().toISOString();
     db.insert(schema.logConfigs)
       .values({ area: "_default", userLevel: DEFAULT_USER_LEVEL, devLevel: DEFAULT_DEV_LEVEL, updatedAt: now })
       .onConflictDoNothing()
       .run();
     configCache.set("_default", { userLevel: DEFAULT_USER_LEVEL, devLevel: DEFAULT_DEV_LEVEL });
+  } else if (defaultConfig.devLevel !== DEFAULT_DEV_LEVEL) {
+    // Upgrade _default devLevel to match current default (e.g. debug → verbose)
+    const now = new Date().toISOString();
+    db.update(schema.logConfigs)
+      .set({ devLevel: DEFAULT_DEV_LEVEL, updatedAt: now })
+      .where(eq(schema.logConfigs.area, "_default"))
+      .run();
+    configCache.set("_default", { ...defaultConfig, devLevel: DEFAULT_DEV_LEVEL });
   }
 }
 

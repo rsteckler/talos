@@ -239,6 +239,7 @@ export interface PluginLogger {
   warn(message: string): void;
   error(message: string): void;
   debug(message: string): void;
+  verbose(message: string): void;
 }
 
 export interface PluginTriggerHandler {

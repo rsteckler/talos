@@ -151,6 +151,23 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
     const errorMessage = err instanceof Error ? err.message : String(err);
     const completedAt = new Date().toISOString();
 
+    // Log detailed error info for API/JSON parse failures (AI SDK attaches these)
+    if (err && typeof err === "object") {
+      const errObj = err as Record<string, unknown>;
+      if (errObj["responseBody"] !== undefined) {
+        log.error(`Task "${task.name}" response body`, {
+          taskId: task.id,
+          runId,
+          statusCode: errObj["statusCode"],
+          responseBody: typeof errObj["responseBody"] === "string"
+            ? (errObj["responseBody"] as string).slice(0, 2000)
+            : errObj["responseBody"],
+          url: errObj["url"],
+          cause: errObj["cause"] instanceof Error ? errObj["cause"].message : String(errObj["cause"] ?? ""),
+        });
+      }
+    }
+
     // Update task_run as failed
     db.update(schema.taskRuns)
       .set({

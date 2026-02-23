@@ -33,7 +33,12 @@ router.get("/logs", (req, res) => {
     conditions.push(eq(schema.logs.axis, axis));
   }
   if (level) {
-    conditions.push(eq(schema.logs.level, level));
+    const levels = level.split(",").map((l) => l.trim()).filter(Boolean);
+    if (levels.length === 1) {
+      conditions.push(eq(schema.logs.level, levels[0]!));
+    } else if (levels.length > 1) {
+      conditions.push(sql`${schema.logs.level} IN (${sql.join(levels.map((l) => sql`${l}`), sql`, `)})`);
+    }
   }
   if (area) {
     // Support comma-separated areas

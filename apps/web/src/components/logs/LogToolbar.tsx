@@ -39,9 +39,16 @@ export function LogToolbar({ streaming, onToggleStreaming }: LogToolbarProps) {
     [setFilter]
   )
 
-  const handleLevelChange = useCallback(
+  const handleUserLevelChange = useCallback(
     (value: string) => {
-      setFilter({ level: value === "all" ? undefined : value })
+      setFilter({ userLevel: value === "all" ? undefined : value })
+    },
+    [setFilter]
+  )
+
+  const handleDevLevelChange = useCallback(
+    (value: string) => {
+      setFilter({ devLevel: value === "all" ? undefined : value })
     },
     [setFilter]
   )
@@ -76,20 +83,32 @@ export function LogToolbar({ streaming, onToggleStreaming }: LogToolbarProps) {
       </Select>
 
       <Select
-        value={filters.level ?? "all"}
-        onValueChange={handleLevelChange}
+        value={filters.userLevel ?? "all"}
+        onValueChange={handleUserLevelChange}
       >
         <SelectTrigger className="w-full sm:w-28">
-          <SelectValue placeholder="Level" />
+          <SelectValue placeholder="User" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All levels</SelectItem>
-          <SelectItem value="error">error</SelectItem>
-          <SelectItem value="warn">warn</SelectItem>
-          <SelectItem value="info">info</SelectItem>
+          <SelectItem value="all">User: all</SelectItem>
           <SelectItem value="high">high</SelectItem>
           <SelectItem value="medium">medium</SelectItem>
           <SelectItem value="low">low</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={filters.devLevel ?? "all"}
+        onValueChange={handleDevLevelChange}
+      >
+        <SelectTrigger className="w-full sm:w-28">
+          <SelectValue placeholder="Dev" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Dev: all</SelectItem>
+          <SelectItem value="error">error</SelectItem>
+          <SelectItem value="warn">warn</SelectItem>
+          <SelectItem value="info">info</SelectItem>
           <SelectItem value="debug">debug</SelectItem>
           <SelectItem value="verbose">verbose</SelectItem>
         </SelectContent>

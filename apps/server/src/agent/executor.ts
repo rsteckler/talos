@@ -1,4 +1,5 @@
 import { streamText, generateText, stepCountIs } from "ai";
+import { z } from "zod";
 import { getActiveProvider } from "../providers/llm.js";
 import { buildModulePluginToolSet, getModulePrompt } from "../plugins/runner.js";
 import { createLogger } from "../logger/index.js";
@@ -7,11 +8,6 @@ import type { PlanStep, PlanResult } from "@talos/shared/types";
 import type { ApprovalGate } from "../plugins/runner.js";
 
 const log = createLogger("executor");
-
-// Models that have demonstrated they don't work with toolChoice: "required"
-// (error, empty result, or streaming tool-call events that never complete).
-// Keyed by modelId so the denylist survives across calls but not server restarts.
-const noForcedToolChoiceModels = new Set<string>();
 
 /**
  * Execute a plan by running each step in dependency order.
@@ -101,7 +97,7 @@ export async function executePlan(
 
         stepResults.push({ id: step.id, status: "complete", result: stepResult });
         onProgress?.(step.id, step.description, "complete");
-        log.dev.debug(`Step ${step.id} complete`, { resultPreview: String(stepResult).slice(0, 200) });
+        log.dev.debug(`Step ${step.id} complete`, { resultPreview: JSON.stringify(stepResult).slice(0, 200) });
 
         // Collect prompt.md from the plugin used in this step
         if (step.type === "tool" && step.module) {
@@ -219,7 +215,24 @@ async function executeToolStep(
     throw new Error(`Module "${step.module}" not found or has no available tools`);
   }
 
-  const toolNames = Object.keys(moduleToolSet.tools);
+  // When the step has dependency context, the LLM may determine the step is
+  // unnecessary (e.g. "login" when check_session says already logged in).
+  // Inject a __skip__ tool so the LLM can explicitly signal this.
+  const hasDeps = (step.depends_on ?? []).length > 0;
+  const tools = hasDeps
+    ? {
+        ...moduleToolSet.tools,
+        __skip__: {
+          description: "Skip this step when prior step results prove the action is unnecessary or already done. Only call this when you are CERTAIN the step does not need to run.",
+          inputSchema: z.object({
+            reason: z.string().describe("Why this step is being skipped"),
+          }),
+          execute: async (args: { reason: string }) => ({ skipped: true, reason: args.reason }),
+        },
+      }
+    : moduleToolSet.tools;
+
+  const toolNames = Object.keys(tools);
   log.dev.debug(`Executor tools for ${step.module}`, { toolCount: toolNames.length, tools: toolNames });
 
   const basePrompt = loadPrompt("executor-tool-system.md");
@@ -231,7 +244,7 @@ async function executeToolStep(
     { role: "user" as const, content: `Original request: ${originalRequest}\n\nTask: ${step.description}${depContext}` },
   ];
 
-  const runStream = async (useRequiredToolChoice: boolean) => {
+  const runStream = async () => {
     let fullText = "";
     const toolResults: unknown[] = [];
     let streamError: unknown = null;
@@ -245,7 +258,6 @@ async function executeToolStep(
 
     log.dev.debug(`Executor stream starting`, {
       module: step.module,
-      toolChoice: useRequiredToolChoice ? "required" : "auto",
       toolCount: toolNames.length,
       tools: toolNames,
     });
@@ -257,8 +269,7 @@ async function executeToolStep(
       model: active.model,
       system: systemPrompt,
       messages,
-      tools: moduleToolSet.tools,
-      ...(useRequiredToolChoice ? { toolChoice: "required" as const } : {}),
+      tools,
       stopWhen: stepCountIs(3),
     });
 
@@ -278,13 +289,22 @@ async function executeToolStep(
         case "tool-call":
           toolCallCount++;
           pendingToolInputs.delete(part.toolCallId);
-          log.dev.debug(`Executor tool call: ${part.toolName}`, { args: part.input });
-          onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>, step.id);
+          if (part.toolName === "__skip__") {
+            const reason = (part.input as Record<string, unknown>)["reason"] ?? "no reason";
+            log.user.medium(`Step ${step.id} skipped: ${String(reason)}`);
+          } else {
+            log.dev.debug(`Executor tool call: ${part.toolName}`, { args: part.input });
+            onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>, step.id);
+          }
           break;
         case "tool-result":
-          log.dev.debug(`Executor tool result: ${part.toolName}`, { resultPreview: JSON.stringify(part.output).slice(0, 100) });
-          onToolResult?.(part.toolCallId, part.toolName, part.output, step.id);
-          toolResults.push(part.output);
+          if (part.toolName === "__skip__") {
+            toolResults.push(part.output);
+          } else {
+            log.dev.debug(`Executor tool result: ${part.toolName}`, { resultPreview: JSON.stringify(part.output).slice(0, 200) });
+            onToolResult?.(part.toolCallId, part.toolName, part.output, step.id);
+            toolResults.push(part.output);
+          }
           break;
         case "finish":
           stepCount++;
@@ -308,12 +328,12 @@ async function executeToolStep(
           // Track tool-input-start / tool-input-delta for fallback execution
           if (eventType === "tool-input-start" && typeof p["id"] === "string" && typeof p["toolName"] === "string") {
             pendingToolInputs.set(p["id"] as string, { toolName: p["toolName"] as string, argsText: "" });
-            log.dev.debug(`Stream event: tool-input-start (no tool-call yet)`, { toolName: p["toolName"], id: p["id"] });
+            log.dev.verbose(`Stream event: tool-input-start (no tool-call yet)`, { toolName: p["toolName"], id: p["id"] });
           } else if (eventType === "tool-input-delta" && typeof p["id"] === "string" && typeof p["delta"] === "string") {
             const pending = pendingToolInputs.get(p["id"] as string);
             if (pending) pending.argsText += p["delta"] as string;
           } else {
-            log.dev.debug(`Stream event: ${eventType}`, { keys: Object.keys(p).filter(k => k !== "type") });
+            log.dev.verbose(`Stream event: ${eventType}`, { keys: Object.keys(p).filter(k => k !== "type") });
           }
 
           break;
@@ -330,11 +350,6 @@ async function executeToolStep(
       log.warn(`${String(pendingToolInputs.size)} tool input(s) started but never completed as tool-call events — executing manually`, {
         tools: pendingSummary,
       });
-
-      if (useRequiredToolChoice) {
-        noForcedToolChoiceModels.add(active.modelId);
-        log.info(`Disabling forced tool calling for model "${active.modelId}" (incomplete tool-call events)`);
-      }
 
       for (const [id, { toolName, argsText }] of pendingToolInputs) {
         const tool = moduleToolSet.tools[toolName];
@@ -357,7 +372,7 @@ async function executeToolStep(
 
         try {
           const result = await tool.execute(parsedArgs, { toolCallId: id, messages: [], abortSignal: undefined as unknown as AbortSignal });
-          log.dev.debug(`Manual executor tool result: ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 100) });
+          log.dev.debug(`Manual executor tool result: ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 200) });
           onToolResult?.(id, toolName, result, step.id);
           toolResults.push(result);
         } catch (err: unknown) {
@@ -369,7 +384,6 @@ async function executeToolStep(
     }
 
     log.dev.debug(`Executor stream complete`, {
-      toolChoice: useRequiredToolChoice ? "required" : "auto",
       totalSteps: stepCount,
       totalToolCalls: toolCallCount,
       totalToolResults: toolResults.length,
@@ -390,32 +404,7 @@ async function executeToolStep(
     return { fullText, toolResults };
   };
 
-  // Try with toolChoice: "required" first; fall back if provider doesn't support it
-  // or if it produces an empty result (model accepted the constraint but returned nothing).
-  // Skip forced tool choice entirely for models that previously failed.
-  const skipForced = noForcedToolChoiceModels.has(active.modelId);
-  if (skipForced) {
-    log.dev.debug(`Skipping toolChoice: required for "${active.modelId}" (previously failed)`);
-  }
-
-  let result: { fullText: string; toolResults: unknown[] };
-  try {
-    result = await runStream(!skipForced);
-    if (!skipForced && result.toolResults.length === 0 && !result.fullText) {
-      log.warn("toolChoice: required produced empty result, retrying without it");
-      noForcedToolChoiceModels.add(active.modelId);
-      result = await runStream(false);
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("tool_choice") || msg.includes("toolChoice")) {
-      log.warn("Provider does not support toolChoice: required, retrying without it");
-      noForcedToolChoiceModels.add(active.modelId);
-      result = await runStream(false);
-    } else {
-      throw err;
-    }
-  }
+  const result = await runStream();
 
   // Return the most useful result: tool outputs if available, otherwise text
   if (result.toolResults.length > 0) {

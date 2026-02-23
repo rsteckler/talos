@@ -35,7 +35,7 @@ export function LogTable({ entries, loading }: LogTableProps) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-44">Timestamp</TableHead>
+          <TableHead className="w-52">Timestamp</TableHead>
           <TableHead className="w-24">Area</TableHead>
           <TableHead className="w-24">Level</TableHead>
           <TableHead>Message</TableHead>
