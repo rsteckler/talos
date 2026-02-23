@@ -55,21 +55,25 @@ export async function executePlan(
   let remaining = new Set(currentPlan.map((s) => s.id));
   let replanCount = 0;
 
-  /** Attempt to re-plan remaining steps after a skip or error. */
-  const tryReplan = async (triggerStep: PlanStep, triggerResult: unknown, triggerError?: string) => {
+  // Track which step IDs came from re-planning (to prevent cascade)
+  const replanStepIds = new Set<string>();
+
+  /** Attempt to re-plan remaining steps after an error. */
+  const tryReplan = async (triggerStep: PlanStep, triggerError: string) => {
     if (!replanContext || remaining.size === 0 || replanCount >= MAX_REPLANS) return;
 
-    const wasSkipped = triggerResult != null && typeof triggerResult === "object" && (triggerResult as Record<string, unknown>)["skipped"] === true;
+    // Don't let errors from re-planned steps trigger another re-plan (prevents cascade)
+    if (replanStepIds.has(triggerStep.id)) {
+      log.warn("Skipping re-plan: trigger step was itself from a prior re-plan", { stepId: triggerStep.id });
+      return;
+    }
+
     const triggerOutcome: StepOutcome = {
       id: triggerStep.id,
       description: triggerStep.description,
-      status: triggerError ? "error" : wasSkipped ? "skipped" : "complete",
-      result: triggerResult,
+      status: "error",
       error: triggerError,
     };
-
-    // Only replan on skip or error
-    if (triggerOutcome.status === "complete") return;
 
     const completedOutcomes: StepOutcome[] = stepResults.map((sr) => ({
       id: sr.id,
@@ -92,9 +96,23 @@ export async function executePlan(
         replanContext.pluginPrompts,
       );
 
+      // Validate: every tool step must have a module reference
+      const invalid = revisedSteps.filter((s) => s.type === "tool" && !s.module);
+      if (invalid.length > 0) {
+        log.warn("Re-plan generated tool steps without module references, discarding re-plan", {
+          invalidSteps: invalid.map((s) => s.id),
+        });
+        return;
+      }
+
       // Compute diff for notification
       const removedStepIds = remainingSteps.map((s) => s.id);
       const addedSteps = revisedSteps.map((s) => ({ id: s.id, description: s.description }));
+
+      // Track new step IDs as re-plan-originated
+      for (const s of revisedSteps) {
+        replanStepIds.add(s.id);
+      }
 
       // Replace remaining plan steps
       currentPlan = [
@@ -209,9 +227,9 @@ export async function executePlan(
       executed.add(step.id);
       remaining.delete(step.id);
 
-      // Attempt re-planning after skip or error
-      if (stepError || (stepResult != null && typeof stepResult === "object" && (stepResult as Record<string, unknown>)["skipped"] === true)) {
-        await tryReplan(step, stepResult, stepError);
+      // Attempt re-planning only on error (skips are normal — the remaining plan is still valid)
+      if (stepError) {
+        await tryReplan(step, stepError);
         // After replan, break out of the inner for-loop so the while loop
         // re-evaluates which steps are ready from the potentially revised plan
         break;

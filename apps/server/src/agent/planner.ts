@@ -113,8 +113,13 @@ export async function replanRemainingSteps(
   }
 
   prompt += `\n## Remaining Planned Steps (not yet executed)\n`;
+  prompt += `Each step below shows its type, module reference, and tool_name. Preserve these values in your revised steps.\n`;
   for (const s of remainingSteps) {
-    prompt += `- ${s.id}: [${s.type}]${s.module ? ` module=${s.module}` : ""}${s.tool_name ? ` fn=${s.tool_name}` : ""} — ${s.description}\n`;
+    prompt += `- ${s.id}: type=${s.type}`;
+    if (s.module) prompt += `, module="${s.module}"`;
+    if (s.tool_name) prompt += `, tool_name="${s.tool_name}"`;
+    if (s.depends_on && s.depends_on.length > 0) prompt += `, depends_on=[${s.depends_on.join(", ")}]`;
+    prompt += ` — ${s.description}\n`;
   }
 
   prompt += `\nRevise the remaining steps based on the execution progress and trigger event.`;
@@ -131,8 +136,9 @@ export async function replanRemainingSteps(
 
   const steps = result.object.steps as PlanStep[];
 
+  const stepSummaries = steps.map((s) => `${s.id}: ${s.type}${s.module ? ` [${s.module}]` : ""}${s.tool_name ? ` fn=${s.tool_name}` : ""} — ${s.description}`);
   log.info(`Re-plan generated: ${steps.length} step(s)`, { steps: steps.map((s) => s.description) });
-  log.dev.debug("Re-plan details", { steps });
+  log.dev.debug("Re-plan details", { steps: stepSummaries, plan: steps });
 
   return steps;
 }
