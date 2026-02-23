@@ -278,7 +278,18 @@ export function buildRoutedPluginToolSet(
         log.dev.debug("plan_actions called", { request });
 
         try {
-          const plan = await generatePlan(request, catalogText);
+          // Collect unique plugin prompts for the planner's context
+          const plannerPrompts: string[] = [];
+          const seenPlugins = new Set<string>();
+          for (const entry of catalog) {
+            const pluginId = entry.moduleRef.split(":")[0];
+            if (pluginId && !seenPlugins.has(pluginId) && entry.promptMd) {
+              seenPlugins.add(pluginId);
+              plannerPrompts.push(entry.promptMd);
+            }
+          }
+
+          const plan = await generatePlan(request, catalogText, plannerPrompts.length > 0 ? plannerPrompts : undefined);
           log.user.high(`Plan created: ${plan.length} step(s)`, { steps: plan.map((s) => s.description) });
           log.dev.debug("Plan details", { plan });
 

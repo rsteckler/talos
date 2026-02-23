@@ -234,6 +234,10 @@ async function executeToolStep(
       switch (part.type) {
         case "text-delta":
           fullText += part.text;
+          // Log once when LLM starts producing text (not every delta)
+          if (fullText.length === part.text.length) {
+            log.dev.debug("Executor LLM generating text...");
+          }
           break;
         case "tool-call":
           toolCallCount++;
@@ -252,7 +256,9 @@ async function executeToolStep(
           log.dev.debug(`Executor step ${String(stepCount)} finished`, {
             finishReason: lastFinishReason,
             toolCallsSoFar: toolCallCount,
+            pendingToolInputs: pendingToolInputs.size,
             textLength: fullText.length,
+            ...(fullText.length > 0 ? { text: fullText.slice(0, 300) } : {}),
           });
           break;
         case "error":
@@ -266,9 +272,12 @@ async function executeToolStep(
           // Track tool-input-start / tool-input-delta for fallback execution
           if (eventType === "tool-input-start" && typeof p["id"] === "string" && typeof p["toolName"] === "string") {
             pendingToolInputs.set(p["id"] as string, { toolName: p["toolName"] as string, argsText: "" });
+            log.dev.debug(`Stream event: tool-input-start (no tool-call yet)`, { toolName: p["toolName"], id: p["id"] });
           } else if (eventType === "tool-input-delta" && typeof p["id"] === "string" && typeof p["delta"] === "string") {
             const pending = pendingToolInputs.get(p["id"] as string);
             if (pending) pending.argsText += p["delta"] as string;
+          } else {
+            log.dev.debug(`Stream event: ${eventType}`, { keys: Object.keys(p).filter(k => k !== "type") });
           }
 
           break;
@@ -279,7 +288,12 @@ async function executeToolStep(
     // Workaround: if the model made tool calls (tool-input-start) but the AI SDK
     // never emitted tool-call events, execute the tools manually
     if (pendingToolInputs.size > 0 && toolResults.length === 0) {
-      log.warn(`${String(pendingToolInputs.size)} tool input(s) started but never completed as tool-call events — executing manually`);
+      const pendingSummary = [...pendingToolInputs.entries()].map(([id, { toolName, argsText }]) =>
+        `${toolName}(${argsText.slice(0, 100) || "{}"}) [${id.slice(0, 12)}]`
+      );
+      log.warn(`${String(pendingToolInputs.size)} tool input(s) started but never completed as tool-call events — executing manually`, {
+        tools: pendingSummary,
+      });
 
       if (useRequiredToolChoice) {
         noForcedToolChoiceModels.add(active.modelId);
@@ -323,9 +337,10 @@ async function executeToolStep(
       totalSteps: stepCount,
       totalToolCalls: toolCallCount,
       totalToolResults: toolResults.length,
+      pendingToolInputs: pendingToolInputs.size,
       textLength: fullText.length,
       lastFinishReason,
-      textPreview: fullText.slice(0, 150) || "(empty)",
+      textPreview: fullText.slice(0, 300) || "(empty)",
     });
 
     // Re-throw stream errors so the caller can handle them

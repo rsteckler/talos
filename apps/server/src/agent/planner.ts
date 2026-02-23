@@ -22,10 +22,12 @@ const PLANNER_SYSTEM = loadPrompt("planner-system.md");
 /**
  * Generate a structured plan for executing a multi-step request.
  * Uses the active provider's model with structured output.
+ * @param pluginPrompts - prompt.md content from plugins (workflow instructions for the planner)
  */
 export async function generatePlan(
   request: string,
   moduleCatalog: string,
+  pluginPrompts?: string[],
 ): Promise<PlanStep[]> {
   const active = getActiveProvider();
   if (!active) {
@@ -35,11 +37,19 @@ export async function generatePlan(
   const moduleLines = moduleCatalog.split("\n").filter((l) => l.trim().length > 0);
   log.dev.debug("Generating plan", { request, moduleCount: moduleLines.length, modules: moduleLines.map((l) => l.trim()) });
 
+  let prompt = `Available modules:\n${moduleCatalog}`;
+
+  if (pluginPrompts && pluginPrompts.length > 0) {
+    prompt += `\n\n## Plugin workflow instructions\n\n${pluginPrompts.join("\n\n---\n\n")}`;
+  }
+
+  prompt += `\n\nUser request: ${request}`;
+
   const result = await generateObject({
     model: active.model,
     schema: planSchema,
     system: PLANNER_SYSTEM,
-    prompt: `Available modules:\n${moduleCatalog}\n\nUser request: ${request}`,
+    prompt,
   });
 
   const steps = result.object.steps as PlanStep[];

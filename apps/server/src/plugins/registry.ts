@@ -247,6 +247,8 @@ export interface ModuleCatalogEntry {
   service: string;       // "Google Workspace"
   description: string;
   category: string;
+  functions: string[];   // ["login", "search", "check_session", "add_to_cart"]
+  promptMd?: string;     // Plugin's prompt.md content (workflow instructions)
 }
 
 /**
@@ -273,11 +275,11 @@ export function getModuleCatalog(): ModuleCatalogEntry[] {
 
     if (loaded.manifest.modules && loaded.manifest.modules.length > 0) {
       for (const mod of loaded.manifest.modules) {
-        // Only include modules that have at least one function in the registry
-        const hasRegisteredFunction = mod.functions.some(
+        // Only include functions that exist in the registry (credentialed + enabled)
+        const registeredFunctions = mod.functions.filter(
           (fn) => registry.some((e) => e.pluginId === pluginId && e.functionName === fn),
         );
-        if (!hasRegisteredFunction) continue;
+        if (registeredFunctions.length === 0) continue;
 
         catalog.push({
           moduleRef: `${pluginId}:${mod.id}`,
@@ -285,16 +287,24 @@ export function getModuleCatalog(): ModuleCatalogEntry[] {
           service,
           description: mod.description,
           category,
+          functions: registeredFunctions,
+          promptMd: loaded.promptMd ?? undefined,
         });
       }
     } else {
-      // Implicit single module
+      // Implicit single module — collect all function names for this plugin
+      const pluginFunctions = registry
+        .filter((e) => e.pluginId === pluginId)
+        .map((e) => e.functionName);
+
       catalog.push({
         moduleRef: `${pluginId}:${pluginId}`,
         name: service,
         service,
         description: loaded.manifest.description,
         category,
+        functions: pluginFunctions,
+        promptMd: loaded.promptMd ?? undefined,
       });
     }
   }
@@ -344,7 +354,8 @@ export function formatModuleCatalog(entries: ModuleCatalogEntry[]): string {
   for (const entry of entries) {
     // Show service name in parens if it differs from the module name
     const serviceTag = entry.name !== entry.service ? ` (${entry.service})` : "";
-    lines.push(`- \`${entry.moduleRef}\` — ${entry.name}${serviceTag}: ${entry.description}`);
+    const funcList = entry.functions.length > 0 ? ` [${entry.functions.join(", ")}]` : "";
+    lines.push(`- \`${entry.moduleRef}\` — ${entry.name}${serviceTag}: ${entry.description}${funcList}`);
   }
 
   return lines.join("\n");
