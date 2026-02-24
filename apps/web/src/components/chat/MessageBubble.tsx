@@ -21,7 +21,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   // Separate plan-associated tool calls from standalone ones
   const { planToolCalls, standaloneToolCalls } = useMemo(() => {
     const all = message.toolCalls ?? []
-    if (!message.plan) {
+    if (!message.plan?.length) {
       // No plan — filter out plan_actions but show everything else
       return {
         planToolCalls: [],
@@ -40,9 +40,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {isUser ? "You" : "Talos"}
       </span>
       <div className={`max-w-[80%] px-4 py-2.5 ${bubbleClass}`}>
-        {message.plan && (
+        {message.plan && message.plan.length > 0 && (
           <div className="mb-2 border-b border-border pb-2">
-            <PlanDisplay plan={message.plan} toolCalls={planToolCalls} />
+            {message.plan.map((p, i) => (
+              <div key={p.request} className={i > 0 ? "border-t border-border/30 pt-2 mt-2" : ""}>
+                <PlanDisplay plan={p} toolCalls={planToolCalls} />
+              </div>
+            ))}
           </div>
         )}
         {standaloneToolCalls.length > 0 && (

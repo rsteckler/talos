@@ -31,14 +31,14 @@
   ],
   "functions": [
     {
-      "name": "search_notes",
-      "description": "Full-text search across the vault. Returns matching file paths with context snippets.",
+      "name": "search_for_snippet",
+      "description": "Search the vault and return note IDs with short preview snippets. Does NOT return full note content — use read_note with the noteId to get the complete note.",
       "parameters": {
         "type": "object",
         "properties": {
           "query": {
             "type": "string",
-            "description": "Search text (case-insensitive substring match)"
+            "description": "Search text (case-insensitive).  All terms must appear in the note so use fewer, broader terms to avoid missing results."
           },
           "folder": {
             "type": "string",

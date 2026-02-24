@@ -1,4 +1,5 @@
 import { streamText, generateText, stepCountIs } from "ai";
+import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { getProviderForRole } from "../providers/llm.js";
 import { buildModulePluginToolSet, getModulePrompt } from "../plugins/runner.js";
@@ -9,6 +10,13 @@ import type { StepOutcome } from "./planner.js";
 import type { PlanStep, PlanResult } from "@talos/shared/types";
 import type { ApprovalGate } from "../plugins/runner.js";
 
+interface ToolCallRecord {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  result: unknown;
+}
+
 export interface ReplanContext {
   moduleCatalog: string;
   pluginPrompts?: string[];
@@ -16,8 +24,30 @@ export interface ReplanContext {
 }
 
 const MAX_REPLANS = 3;
+const MAX_EXECUTOR_ROUNDS = 3;
 
 const log = createLogger("executor");
+
+/** Check if a tool result is an error object ({ error: string }). Returns the error message or null. */
+function isErrorResult(result: unknown): string | null {
+  if (result != null && typeof result === "object" && "error" in result) {
+    const err = (result as Record<string, unknown>)["error"];
+    if (typeof err === "string") return err;
+  }
+  return null;
+}
+
+/** Check if a tool result is an empty result set (e.g. { results: [], total: 0 }). */
+function isEmptyResult(result: unknown): boolean {
+  if (Array.isArray(result) && result.length === 0) return true;
+  if (result != null && typeof result === "object") {
+    const obj = result as Record<string, unknown>;
+    for (const key of ["results", "items", "data", "matches"]) {
+      if (Array.isArray(obj[key]) && (obj[key] as unknown[]).length === 0) return true;
+    }
+  }
+  return false;
+}
 
 
 /**
@@ -101,6 +131,15 @@ export async function executePlan(
       if (invalid.length > 0) {
         log.warn("Re-plan generated tool steps without module references, discarding re-plan", {
           invalidSteps: invalid.map((s) => s.id),
+        });
+        return;
+      }
+
+      // Validate: every tool step must have a tool_name
+      const missingToolName = revisedSteps.filter((s) => s.type === "tool" && !s.tool_name);
+      if (missingToolName.length > 0) {
+        log.warn("Re-plan generated tool steps without tool_name, discarding re-plan", {
+          steps: missingToolName.map((s) => s.id),
         });
         return;
       }
@@ -199,13 +238,22 @@ export async function executePlan(
           break;
         }
 
-        const wasSkipped = stepResult != null && typeof stepResult === "object" && (stepResult as Record<string, unknown>)["skipped"] === true;
-        stepResults.push({ id: step.id, status: "complete", result: stepResult });
-        onProgress?.(step.id, step.description, wasSkipped ? "skipped" : "complete");
-        if (wasSkipped) {
-          log.info(`Plan step ${planStepNum.get(step.id)} skipped: ${step.description}`);
+        // Check if the tool returned an error result ({ error: string })
+        const errorMsg = isErrorResult(stepResult);
+        if (errorMsg) {
+          stepError = errorMsg;
+          stepResults.push({ id: step.id, status: "error", error: errorMsg, result: stepResult });
+          onProgress?.(step.id, step.description, "error");
+          log.warn(`Plan step ${planStepNum.get(step.id)} returned error result: ${errorMsg}`);
         } else {
-          log.info(`Completed plan step ${planStepNum.get(step.id)}: ${step.description}`, { resultPreview: JSON.stringify(stepResult).slice(0, 200) });
+          const wasSkipped = stepResult != null && typeof stepResult === "object" && (stepResult as Record<string, unknown>)["skipped"] === true;
+          stepResults.push({ id: step.id, status: "complete", result: stepResult });
+          onProgress?.(step.id, step.description, wasSkipped ? "skipped" : "complete");
+          if (wasSkipped) {
+            log.info(`Plan step ${planStepNum.get(step.id)} skipped: ${step.description}`);
+          } else {
+            log.info(`Completed plan step ${planStepNum.get(step.id)}: ${step.description}`, { resultPreview: JSON.stringify(stepResult).slice(0, 200) });
+          }
         }
 
         // Collect prompt.md from the plugin used in this step
@@ -321,23 +369,52 @@ async function executeStep(
   return executeToolStep(step, originalRequest, depContext, active, stepNumber, approvalGate, onToolCall, onToolResult);
 }
 
-/** Execute a think step — LLM call with no tools, pure computation. */
+/** Execute a think step — LLM call with __error__ tool so it can signal failure. */
 async function executeThinkStep(
   step: PlanStep,
   originalRequest: string,
   depContext: string,
   active: NonNullable<ReturnType<typeof getProviderForRole>>,
-): Promise<string> {
+): Promise<unknown> {
+  const tools = {
+    __error__: {
+      description: "Call this when you cannot accomplish the task — e.g. the required data is missing from prior step results. Signals a fatal error to the planner so it can re-plan.",
+      inputSchema: z.object({
+        reason: z.string().describe("What went wrong and why you cannot complete this step"),
+      }),
+      execute: async (args: { reason: string }) => ({ error: args.reason }),
+    },
+  };
+
   const result = await generateText({
     model: active.model,
     system: loadPrompt("executor-think-system.md"),
+    tools,
     prompt: `Original request: ${originalRequest}\n\nTask: ${step.description}${depContext}`,
   });
 
-  return result.text;
+  // Check if the LLM called __error__
+  for (const s of result.steps) {
+    for (const tc of s.toolCalls) {
+      if (tc.toolName === "__error__") {
+        const reason = (tc.input as Record<string, unknown>)["reason"] ?? "unknown error";
+        log.error(`Think step raised error: ${String(reason)}`);
+        return { error: String(reason) };
+      }
+    }
+  }
+
+  // Empty or whitespace-only text = the LLM failed to produce output
+  const text = result.text.trim();
+  if (!text) {
+    log.warn(`Think step "${step.id}" produced empty output, treating as error`);
+    return { error: `Think step produced no output for: ${step.description}` };
+  }
+
+  return text;
 }
 
-/** Execute a tool step — focused LLM call with module-specific tools. */
+/** Execute a tool step — focused LLM call with module-specific tools and manual retry loop. */
 async function executeToolStep(
   step: PlanStep,
   originalRequest: string,
@@ -369,6 +446,17 @@ async function executeToolStep(
     }
   }
 
+  // Inject __error__ tool so the LLM can signal fatal failure back to the planner
+  const errorTool = {
+    __error__: {
+      description: "Call this when you cannot accomplish the step after retrying. Signals a fatal error to the planner so it can re-plan.",
+      inputSchema: z.object({
+        reason: z.string().describe("What went wrong and why you cannot complete this step"),
+      }),
+      execute: async (args: { reason: string }) => ({ error: args.reason }),
+    },
+  };
+
   // When the step has dependency context, the LLM may determine the step is
   // unnecessary (e.g. "login" when check_session says already logged in).
   // Inject a __skip__ tool so the LLM can explicitly signal this.
@@ -376,6 +464,7 @@ async function executeToolStep(
   const tools = hasDeps
     ? {
         ...moduleToolSet.tools,
+        ...errorTool,
         __skip__: {
           description: "Skip this step when prior step results prove the action is unnecessary or already done. Only call this when you are CERTAIN the step does not need to run.",
           inputSchema: z.object({
@@ -384,7 +473,7 @@ async function executeToolStep(
           execute: async (args: { reason: string }) => ({ skipped: true, reason: args.reason }),
         },
       }
-    : moduleToolSet.tools;
+    : { ...moduleToolSet.tools, ...errorTool };
 
   const toolNames = Object.keys(tools);
   log.dev.debug(`Executor tools for ${step.module}`, { toolCount: toolNames.length, tools: toolNames });
@@ -394,15 +483,16 @@ async function executeToolStep(
     ? `${basePrompt}\n\n${moduleToolSet.pluginPrompts.join("\n\n")}`
     : basePrompt;
 
-  const messages = [
-    { role: "user" as const, content: `Original request: ${originalRequest}\n\nTask: ${step.description}${depContext}` },
+  const messages: ModelMessage[] = [
+    { role: "user", content: `Original request: ${originalRequest}\n\nTask: ${step.description}${depContext}` },
   ];
 
-  const runStream = async () => {
+  const runStream = async (streamMessages: ModelMessage[], attempt: number) => {
     let fullText = "";
     const toolResults: unknown[] = [];
+    const toolCallRecords: ToolCallRecord[] = [];
+    const phantomToolCalls: Array<{ toolCallId: string; toolName: string; args: Record<string, unknown> }> = [];
     let streamError: unknown = null;
-    let stepCount = 0;
     let lastFinishReason = "";
     let toolCallCount = 0;
 
@@ -410,7 +500,7 @@ async function executeToolStep(
     // (AI SDK v6 bug: empty-param tools via OpenRouter streaming don't emit tool-call)
     const pendingToolInputs = new Map<string, { toolName: string; argsText: string }>();
 
-    log.dev.debug(`Executor round starting`, { module: step.module, tools: toolNames });
+    log.dev.debug(`Executor attempt ${attempt}/${MAX_EXECUTOR_ROUNDS} starting for step ${stepNumber}`, { module: step.module, tools: toolNames });
 
     // Suppress unhandled rejection warnings on derived promises
     const noop = () => {};
@@ -418,7 +508,7 @@ async function executeToolStep(
     const streamResult = streamText({
       model: active.model,
       system: systemPrompt,
-      messages,
+      messages: streamMessages,
       tools,
       stopWhen: stepCountIs(1),
     });
@@ -442,13 +532,27 @@ async function executeToolStep(
           if (part.toolName === "__skip__") {
             const reason = (part.input as Record<string, unknown>)["reason"] ?? "no reason";
             log.info(`Plan step ${stepNumber} skipped: ${String(reason)}`);
+          } else if (part.toolName === "__error__") {
+            const reason = (part.input as Record<string, unknown>)["reason"] ?? "no reason";
+            log.error(`Plan step ${stepNumber} raised error: ${String(reason)}`);
+            log.user.high(`Step ${stepNumber} failed: ${String(reason)}`);
+          } else if (!(part.toolName in tools)) {
+            log.error(`Executor called unavailable tool "${part.toolName}"`, { available: toolNames, step: step.id });
+            phantomToolCalls.push({ toolCallId: part.toolCallId, toolName: part.toolName, args: part.input as Record<string, unknown> });
           } else {
             log.dev.debug(`Executor tool call: ${part.toolName}`, { args: part.input });
             onToolCall?.(part.toolCallId, part.toolName, part.input as Record<string, unknown>, step.id);
           }
           break;
-        case "tool-result":
-          if (part.toolName === "__skip__") {
+        case "tool-result": {
+          const record: ToolCallRecord = {
+            toolCallId: part.toolCallId,
+            toolName: part.toolName,
+            args: {} as Record<string, unknown>, // args already forwarded via tool-call event
+            result: part.output,
+          };
+          toolCallRecords.push(record);
+          if (part.toolName === "__skip__" || part.toolName === "__error__") {
             toolResults.push(part.output);
           } else {
             log.dev.debug(`Executor tool result: ${part.toolName}`, { resultPreview: JSON.stringify(part.output).slice(0, 200) });
@@ -456,10 +560,10 @@ async function executeToolStep(
             toolResults.push(part.output);
           }
           break;
+        }
         case "finish":
-          stepCount++;
           lastFinishReason = (part as Record<string, unknown>)["finishReason"] as string ?? "unknown";
-          log.dev.debug(`Executor round complete`, {
+          log.dev.debug(`Executor attempt ${attempt} stream finished`, {
             finishReason: lastFinishReason,
             toolCalls: toolCallCount,
             toolResults: toolResults.length,
@@ -523,10 +627,13 @@ async function executeToolStep(
           log.dev.debug(`Manual executor tool result: ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 200) });
           onToolResult?.(id, toolName, result, step.id);
           toolResults.push(result);
+          toolCallRecords.push({ toolCallId: id, toolName, args: parsedArgs, result });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
           log.error(`Manual tool execution failed: ${toolName}`, { error: message });
-          toolResults.push({ error: message });
+          const errorResult = { error: message };
+          toolResults.push(errorResult);
+          toolCallRecords.push({ toolCallId: id, toolName, args: parsedArgs, result: errorResult });
         }
       }
     }
@@ -540,7 +647,7 @@ async function executeToolStep(
     }
 
     log.dev.debug(`Executor stream complete`, {
-      totalSteps: stepCount,
+      attempt,
       totalToolCalls: toolCallCount,
       totalToolResults: toolResults.length,
       pendingToolInputs: pendingToolInputs.size,
@@ -557,14 +664,95 @@ async function executeToolStep(
       throw new Error(`${name}: ${body}`);
     }
 
-    return { fullText, toolResults };
+    return { fullText, toolResults, toolCallRecords, phantomToolCalls };
   };
 
-  const result = await runStream();
+  // Manual retry loop: each attempt is a separate streamText call with stepCountIs(1).
+  // Between attempts, failed tool calls + error results are appended to messages.
+  let lastResult;
+  for (let attempt = 1; attempt <= MAX_EXECUTOR_ROUNDS; attempt++) {
+    log.info(`Executor attempt ${attempt}/${MAX_EXECUTOR_ROUNDS} for step ${stepNumber}: ${step.description}`);
+    lastResult = await runStream(messages, attempt);
 
-  // Return the most useful result: tool outputs if available, otherwise text
-  if (result.toolResults.length > 0) {
-    return result.toolResults.length === 1 ? result.toolResults[0] : result.toolResults;
+    // LLM explicitly gave up via __error__ — don't retry
+    const usedErrorTool = lastResult.toolCallRecords.some((tc) => tc.toolName === "__error__");
+    if (usedErrorTool) break;
+
+    // LLM called tools not in the available set — retry with corrective feedback
+    if (lastResult.phantomToolCalls.length > 0 && lastResult.toolResults.length === 0) {
+      if (attempt === MAX_EXECUTOR_ROUNDS) break;
+      const phantomNames = lastResult.phantomToolCalls.map((tc) => tc.toolName).join(", ");
+      log.warn(`Executor attempt ${attempt} called unavailable tool(s): ${phantomNames}, retrying`);
+      messages.push({
+        role: "assistant",
+        content: lastResult.phantomToolCalls.map((tc) => ({
+          type: "tool-call" as const,
+          toolCallId: tc.toolCallId,
+          toolName: tc.toolName,
+          input: tc.args,
+        })),
+      });
+      messages.push({
+        role: "tool",
+        content: lastResult.phantomToolCalls.map((tc) => ({
+          type: "tool-result" as const,
+          toolCallId: tc.toolCallId,
+          toolName: tc.toolName,
+          output: { type: "text" as const, value: JSON.stringify({ error: `Tool "${tc.toolName}" is NOT available. You can ONLY use: ${toolNames.join(", ")}` }) },
+        })),
+      });
+      continue;
+    }
+
+    // LLM generated text only — it gave up
+    if (lastResult.toolResults.length === 0) break;
+
+    const lastToolResult = lastResult.toolResults[lastResult.toolResults.length - 1];
+    const errorMsg = isErrorResult(lastToolResult);
+    const empty = !errorMsg && isEmptyResult(lastToolResult);
+
+    // Success or final attempt — stop retrying
+    if (!errorMsg && !empty) break;
+    if (attempt === MAX_EXECUTOR_ROUNDS) break;
+
+    if (errorMsg) {
+      log.info(`Executor attempt ${attempt} returned error, retrying`, { error: errorMsg });
+    } else {
+      log.info(`Executor attempt ${attempt} returned empty results, retrying with broader search`);
+    }
+
+    // Append failed tool calls + results as messages for next attempt
+    messages.push({
+      role: "assistant",
+      content: lastResult.toolCallRecords.map((tc) => ({
+        type: "tool-call" as const,
+        toolCallId: tc.toolCallId,
+        toolName: tc.toolName,
+        input: tc.args,
+      })),
+    });
+    messages.push({
+      role: "tool",
+      content: lastResult.toolCallRecords.map((tc) => ({
+        type: "tool-result" as const,
+        toolCallId: tc.toolCallId,
+        toolName: tc.toolName,
+        output: { type: "text" as const, value: JSON.stringify(tc.result) },
+      })),
+    });
   }
-  return result.fullText;
+
+  // Return the last tool result if any tool executed successfully
+  if (lastResult && lastResult.toolResults.length > 0) {
+    return lastResult.toolResults[lastResult.toolResults.length - 1];
+  }
+
+  // No tool was executed — this is a failure for a tool step.
+  // Return as error so executePlan triggers re-planning.
+  const explanation = lastResult?.fullText?.trim() || "Executor failed to execute any tools for this step";
+  log.warn(`Tool step ${stepNumber} produced no tool results, raising error to planner`, {
+    step: step.id,
+    explanation: explanation.slice(0, 300),
+  });
+  return { error: explanation };
 }

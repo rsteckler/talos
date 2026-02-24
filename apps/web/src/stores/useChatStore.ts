@@ -177,13 +177,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { messages: msgs }
     }),
 
-  // Plan — attach to the last assistant message
+  // Plan — append to array on the last assistant message
   setPlan: (plan) =>
     set((state) => {
       const msgs = [...state.messages]
       const last = msgs[msgs.length - 1]
       if (last && last.role === "assistant") {
-        msgs[msgs.length - 1] = { ...last, plan }
+        msgs[msgs.length - 1] = { ...last, plan: [...(last.plan ?? []), plan] }
       }
       return { messages: msgs }
     }),
@@ -191,16 +191,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const msgs = state.messages.map((m) => {
         if (m.role !== "assistant" || !m.plan) return m
-        const hasStep = m.plan.steps.some((s) => s.id === stepId)
-        if (!hasStep) return m
+        const planIdx = m.plan.findIndex((p) => p.steps.some((s) => s.id === stepId))
+        if (planIdx === -1) return m
         return {
           ...m,
-          plan: {
-            ...m.plan,
-            steps: m.plan.steps.map((s) =>
-              s.id === stepId ? { ...s, status } : s,
-            ),
-          },
+          plan: m.plan.map((p, i) =>
+            i === planIdx
+              ? { ...p, steps: p.steps.map((s) => s.id === stepId ? { ...s, status } : s) }
+              : p,
+          ),
         }
       })
       return { messages: msgs }
@@ -209,22 +208,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
   revisePlan: (removedStepIds, addedSteps) =>
     set((state) => {
       const msgs = state.messages.map((m) => {
-        if (m.role !== "assistant" || !m.plan) return m
+        if (m.role !== "assistant" || !m.plan?.length) return m
+        // Revisions always target the last (currently executing) plan
+        const lastIdx = m.plan.length - 1
         return {
           ...m,
-          plan: {
-            ...m.plan,
-            steps: [
-              ...m.plan.steps.map((s) =>
-                removedStepIds.includes(s.id) ? { ...s, status: "removed" as const } : s,
-              ),
-              ...addedSteps.map((s) => ({
-                id: s.id,
-                description: s.description,
-                status: "pending" as const,
-              })),
-            ],
-          },
+          plan: m.plan.map((p, i) =>
+            i === lastIdx
+              ? {
+                  ...p,
+                  steps: [
+                    ...p.steps.map((s) =>
+                      removedStepIds.includes(s.id) ? { ...s, status: "removed" as const } : s,
+                    ),
+                    ...addedSteps.map((s) => ({
+                      id: s.id,
+                      description: s.description,
+                      status: "pending" as const,
+                    })),
+                  ],
+                }
+              : p,
+          ),
         }
       })
       return { messages: msgs }
@@ -233,19 +238,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
   markPlanStopping: () =>
     set((state) => {
       const msgs = state.messages.map((m) => {
-        if (m.role !== "assistant" || !m.plan) return m
-        const hasRunning = m.plan.steps.some((s) => s.status === "running" || s.status === "pending")
+        if (m.role !== "assistant" || !m.plan?.length) return m
+        const hasRunning = m.plan.some((p) =>
+          p.steps.some((s) => s.status === "running" || s.status === "pending"),
+        )
         if (!hasRunning) return m
         return {
           ...m,
-          plan: {
-            ...m.plan,
-            steps: m.plan.steps.map((s) => {
+          plan: m.plan.map((p) => ({
+            ...p,
+            steps: p.steps.map((s) => {
               if (s.status === "running") return { ...s, status: "stopping" as const }
               if (s.status === "pending") return { ...s, status: "cancelled" as const }
               return s
             }),
-          },
+          })),
         }
       })
       return { messages: msgs }

@@ -21,11 +21,44 @@ For tool steps, the "module" field MUST be set to one of these exact references.
 
 ## Step Granularity
 
-**Each step must map to exactly ONE tool function call.** The executor runs a focused LLM that calls tools — it does NOT plan or decide which tools to call. It executes exactly what the step description says.
+**Each step maps to a single tool function.** The executor calls the specified tool and can retry with different arguments if it gets an error, but it cannot call different tools or sequence multiple functions.
 
 - If a workflow requires calling `check_session`, then `login`, then `search` — that is 3 separate steps, not 1.
 - Each step description should name the specific function to call (e.g. "Call search to find bananas on Gelson's", not "Search for bananas and add them to the cart").
-- Never combine multiple function calls into a single step. The executor cannot sequence tool calls on its own.
+
+## Data Flow Between Steps
+
+**Before finalizing the plan, verify that every dependent step can get its required inputs from prior step outputs.** A plan that looks logical but has broken data flow will fail at execution.
+
+For each step, think about:
+- What data does this step **need** as input? (e.g. placeId, coordinates, product URL)
+- What data does the prior step **actually produce**? (e.g. places_search returns placeIds, but web_search returns URLs and snippets — NOT placeIds)
+- If the data chain is broken, add an intermediate step or choose a different tool.
+
+Include the expected data flow in step descriptions so the executor knows what to pass forward.
+
+**Valid chain** — each step's output feeds the next step's input:
+1. `places_search` "coffee shops in 92009" → returns place results **with placeIds**
+2. `place_details` using **placeId from step 1** → returns address, reviews, phone, hours
+3. `directions` from origin to **address from step 2**
+
+**Invalid chain** — data type mismatch between steps:
+1. `web_search` "Beverly Wilshire reviews" → returns URLs and text snippets
+2. `place_details` → FAILS: needs a placeId, which web_search does not produce
+
+**Invalid chain** — step assumes data that doesn't exist:
+1. `place_details` for "some hotel" → FAILS: needs a placeId, but no prior step searched for one
+
+## Tool Selection
+
+Prefer specialized modules over general web search when possible:
+
+- **Places, locations, directions, and their reviews**: Use a maps module (e.g. Google Maps) for finding restaurants, stores, coffee shops, hotels, getting directions, or anything location-based — including reviews and ratings for those places.
+- **Purchasable products and their reviews**: Use a shopping/retail module (e.g. Amazon, Gelson's) for finding items to buy, comparing prices, adding to cart, or reading product reviews and ratings.
+- **Personal information**: Use a notes/knowledge module (e.g. Obsidian) for searching the user's own notes, documents, or saved information.
+- **Web search**: Only use a general web search module when the query doesn't fit a more specific available module — e.g. current events, general knowledge questions, or when no specialized module covers the domain.
+
+If the catalog does not include a specialized module for the task, fall back to web search.
 
 ## Plugin Workflow Instructions
 

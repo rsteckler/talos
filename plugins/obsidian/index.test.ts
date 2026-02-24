@@ -294,55 +294,55 @@ describe("list_notes", () => {
 });
 
 // ---------------------------------------------------------------------------
-// search_notes
+// search_for_snippet
 // ---------------------------------------------------------------------------
 
-describe("search_notes", () => {
+describe("search_for_snippet", () => {
   it("finds notes matching query text", async () => {
-    const result = (await call("search_notes", { query: "Alpha project" })) as {
-      results: { path: string; snippet: string }[];
+    const result = (await call("search_for_snippet", { query: "Alpha project" })) as {
+      results: { noteId: string; snippet: string }[];
     };
     expect(result.results.length).toBeGreaterThanOrEqual(1);
-    expect(result.results[0]!.path).toContain("Alpha");
+    expect(result.results[0]!.noteId).toContain("Alpha");
   });
 
   it("respects folder filter", async () => {
-    const result = (await call("search_notes", { query: "note", folder: "Projects" })) as {
-      results: { path: string }[];
+    const result = (await call("search_for_snippet", { query: "note", folder: "Projects" })) as {
+      results: { noteId: string }[];
     };
     for (const r of result.results) {
-      expect(r.path).toMatch(/^Projects\//);
+      expect(r.noteId).toMatch(/^Projects\//);
     }
   });
 
   it("respects tag filter", async () => {
-    const result = (await call("search_notes", { query: "project", tag: "archived" })) as {
-      results: { path: string }[];
+    const result = (await call("search_for_snippet", { query: "project", tag: "archived" })) as {
+      results: { noteId: string }[];
     };
     // Only Beta has the "archived" tag
     expect(result.results.length).toBe(1);
-    expect(result.results[0]!.path).toContain("Beta");
+    expect(result.results[0]!.noteId).toContain("Beta");
   });
 
   it("respects frontmatter field/value filter", async () => {
-    const result = (await call("search_notes", {
+    const result = (await call("search_for_snippet", {
       query: "project",
       frontmatter_field: "status",
       frontmatter_value: "complete",
-    })) as { results: { path: string }[] };
+    })) as { results: { noteId: string }[] };
     expect(result.results.length).toBe(1);
-    expect(result.results[0]!.path).toContain("Beta");
+    expect(result.results[0]!.noteId).toContain("Beta");
   });
 
   it("returns context snippets around match", async () => {
-    const result = (await call("search_notes", { query: "Simple Note" })) as {
+    const result = (await call("search_for_snippet", { query: "Simple Note" })) as {
       results: { snippet: string }[];
     };
     expect(result.results[0]!.snippet).toContain("Simple Note");
   });
 
   it("limit param caps results", async () => {
-    const result = (await call("search_notes", { query: "project", limit: 1 })) as {
+    const result = (await call("search_for_snippet", { query: "project", limit: 1 })) as {
       results: unknown[];
       total: number;
     };

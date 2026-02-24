@@ -275,7 +275,7 @@ export async function streamChat(
       status: string;
       stepId?: string;
     }> = [];
-    let collectedPlan: PlanState | undefined;
+    const collectedPlans: PlanState[] = [];
 
     // Wrap callbacks so inner tool calls (from plan executor) are also persisted
     const collectingOnToolCall = (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => {
@@ -292,18 +292,19 @@ export async function streamChat(
       onToolResult?.(toolCallId, toolName, result, stepId);
     };
     const collectingOnPlanStart = (request: string, steps: Array<{ id: string; description: string }>) => {
-      collectedPlan = {
+      collectedPlans.push({
         request,
         steps: steps.map((s) => ({ id: s.id, description: s.description, status: "pending" as const })),
-      };
+      });
       onPlanStart?.(request, steps);
     };
     const collectingOnPlanRevised = (removedStepIds: string[], addedSteps: Array<{ id: string; description: string }>) => {
-      if (collectedPlan) {
-        collectedPlan = {
-          ...collectedPlan,
+      const lastPlan = collectedPlans[collectedPlans.length - 1];
+      if (lastPlan) {
+        collectedPlans[collectedPlans.length - 1] = {
+          ...lastPlan,
           steps: [
-            ...collectedPlan.steps.map((s) =>
+            ...lastPlan.steps.map((s) =>
               removedStepIds.includes(s.id) ? { ...s, status: "removed" as const } : s,
             ),
             ...addedSteps.map((s) => ({ id: s.id, description: s.description, status: "pending" as const })),
@@ -492,7 +493,7 @@ export async function streamChat(
         content: fullContent,
         usage: hasUsage ? JSON.stringify(totalUsage) : null,
         toolCalls: collectedToolCalls.length > 0 ? JSON.stringify(collectedToolCalls) : null,
-        plan: collectedPlan ? JSON.stringify(collectedPlan) : null,
+        plan: collectedPlans.length > 0 ? JSON.stringify(collectedPlans) : null,
         createdAt: new Date().toISOString(),
       })
       .run();

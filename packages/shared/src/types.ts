@@ -82,7 +82,7 @@ export interface Message {
   content: string;
   created_at: string;
   toolCalls?: ToolCallInfo[];
-  plan?: PlanState;
+  plan?: PlanState[];
   usage?: TokenUsage;
   isError?: boolean;
 }

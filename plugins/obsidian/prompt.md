@@ -2,10 +2,21 @@
 
 Read, write, search, and navigate an Obsidian vault on the local filesystem.
 
+## Search → Read Pattern
+
+**`obsidian_search_for_snippet` returns note IDs and short preview snippets — NOT full note content.** To get the actual content of a note, you MUST follow up with `obsidian_read_note` using the `noteId` from the search results.
+
+Correct workflow:
+1. `search_for_snippet` → find matching notes (returns noteId + short snippet)
+2. `read_note` with the noteId → get full note content
+3. Process the full content as needed
+
+Do NOT try to extract detailed information from search snippets — they are only 2-3 lines of context around the match. Always call `read_note` to get the full picture.
+
 ## Notes
 
-- `obsidian_search_notes` — Full-text search across the vault. Optional filters: `folder`, `tag`, `frontmatter_field`/`frontmatter_value`. Returns paths with context snippets. Use `limit` to cap results.
-- `obsidian_read_note` — Read a note by path. Returns parsed frontmatter (object), body content, tags, and wikilinks separately. Path is relative to vault root; `.md` extension is optional.
+- `obsidian_search_for_snippet` — Search the vault. Returns **note IDs with short preview snippets** (not full content). Use `read_note` to get the complete note. Search is AND by default — every term must appear. Use fewer, broader terms (e.g. "hotel" not "hotel Petersen Museum"). Optional filters: `folder`, `tag`, `frontmatter_field`/`frontmatter_value`. Use `limit` to cap results.
+- `obsidian_read_note` — Read a note by path/noteId. Returns parsed frontmatter (object), body content, tags, and wikilinks separately. Path is relative to vault root; `.md` extension is optional.
 - `obsidian_create_note` — Create a new note. `path` and `content` required. Optional `frontmatter` object is serialized as YAML. Auto-creates parent folders. Errors if file already exists.
 - `obsidian_update_note` — Update an existing note. `content` replaces the body. `frontmatter` fields are merged with existing frontmatter (existing fields not specified are preserved).
 - `obsidian_delete_note` — Delete a note by path.
@@ -53,7 +64,8 @@ Vaults may use flat structure or nested folders. Common patterns:
 
 ## Usage Tips
 
-- **Always search first**: Use `obsidian_search_notes` or `obsidian_list_notes` before assuming a note exists or guessing its path.
+- **Always search first**: Use `obsidian_search_for_snippet` or `obsidian_list_notes` before assuming a note exists or guessing its path.
+- **Search then read**: `search_for_snippet` only returns previews. Always follow with `read_note` to get full content before extracting specific information.
 - **Discover taxonomy**: Use `obsidian_get_tags` to understand the user's tag system before creating notes with tags.
 - **Match patterns**: When creating notes, match the user's existing frontmatter fields and folder structure.
 - **Understand relationships**: Use `obsidian_get_backlinks` to see how notes connect before suggesting changes.

@@ -308,7 +308,7 @@ function wrap(fn: (args: Args, cfg: ObsidianConfig) => Promise<unknown>): Handle
 // Handlers
 // ---------------------------------------------------------------------------
 
-const search_notes = wrap(async (args, cfg) => {
+const search_for_snippet = wrap(async (args, cfg) => {
   const {
     query,
     folder,
@@ -328,7 +328,7 @@ const search_notes = wrap(async (args, cfg) => {
   const queryLower = query.toLowerCase();
   const files = walkVault(cfg, folder);
   const results: {
-    path: string;
+    noteId: string;
     title: string;
     snippet: string;
   }[] = [];
@@ -392,7 +392,7 @@ const search_notes = wrap(async (args, cfg) => {
 
     const relPath = toRelativePath(cfg, filePath);
     results.push({
-      path: relPath,
+      noteId: relPath,
       title: extractTitle(relPath, content),
       snippet,
     });
@@ -678,7 +678,7 @@ const get_daily_note = wrap(async (args, cfg) => {
 // ---------------------------------------------------------------------------
 
 export const handlers: Record<string, Handler> = {
-  search_notes,
+  search_for_snippet,
   read_note,
   create_note,
   update_note,

@@ -1,7 +1,15 @@
 import { Router } from "express";
 import { eq, desc, asc, like, or, sql, and } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
-import type { ConversationSummary } from "@talos/shared/types";
+import type { ConversationSummary, PlanState } from "@talos/shared/types";
+
+/** Backward-compatible plan deserialization: wraps old single-plan rows in an array. */
+function normalizePlan(raw: string): PlanState[] | undefined {
+  const parsed: unknown = JSON.parse(raw);
+  if (Array.isArray(parsed)) return parsed as PlanState[];
+  if (parsed && typeof parsed === "object" && "request" in parsed) return [parsed as PlanState];
+  return undefined;
+}
 
 const router = Router();
 
@@ -174,7 +182,7 @@ router.get("/conversations/:id", (req, res) => {
         created_at: m.createdAt,
         usage: m.usage ? JSON.parse(m.usage) : undefined,
         toolCalls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
-        plan: m.plan ? JSON.parse(m.plan) : undefined,
+        plan: m.plan ? normalizePlan(m.plan) : undefined,
       })),
     },
   });
