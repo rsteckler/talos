@@ -8,6 +8,7 @@ import { loadPrompt } from "../prompts/index.js";
 import { replanRemainingSteps } from "./planner.js";
 import type { StepOutcome } from "./planner.js";
 import type { PlanStep, PlanResult } from "@talos/shared/types";
+import { parseToolRef } from "@talos/shared";
 import type { ApprovalGate } from "../plugins/runner.js";
 
 interface ToolCallRecord {
@@ -126,20 +127,11 @@ export async function executePlan(
         replanContext.pluginPrompts,
       );
 
-      // Validate: every tool step must have a module reference
-      const invalid = revisedSteps.filter((s) => s.type === "tool" && !s.module);
+      // Validate: every tool step must have a tool reference
+      const invalid = revisedSteps.filter((s) => s.type === "tool" && !s.tool);
       if (invalid.length > 0) {
-        log.warn("Re-plan generated tool steps without module references, discarding re-plan", {
+        log.warn("Re-plan generated tool steps without tool references, discarding re-plan", {
           invalidSteps: invalid.map((s) => s.id),
-        });
-        return;
-      }
-
-      // Validate: every tool step must have a tool_name
-      const missingToolName = revisedSteps.filter((s) => s.type === "tool" && !s.tool_name);
-      if (missingToolName.length > 0) {
-        log.warn("Re-plan generated tool steps without tool_name, discarding re-plan", {
-          steps: missingToolName.map((s) => s.id),
         });
         return;
       }
@@ -257,10 +249,10 @@ export async function executePlan(
         }
 
         // Collect prompt.md from the plugin used in this step
-        if (step.type === "tool" && step.module) {
-          const pluginId = step.module.split(":")[0];
-          if (pluginId && !usedPluginPrompts.has(pluginId)) {
-            const prompt = getModulePrompt(step.module);
+        if (step.type === "tool" && step.tool) {
+          const { pluginId, module } = parseToolRef(step.tool);
+          if (!usedPluginPrompts.has(pluginId)) {
+            const prompt = getModulePrompt(module);
             if (prompt) usedPluginPrompts.set(pluginId, prompt);
           }
         }
@@ -390,7 +382,7 @@ async function executeThinkStep(
     model: active.model,
     system: loadPrompt("executor-think-system.md"),
     tools,
-    prompt: `Original request: ${originalRequest}\n\nTask: ${step.description}${depContext}`,
+    prompt: `You are executing one step of a larger plan.\n\nYour task: ${step.description}\n\nLarger plan context: ${originalRequest}\nUse this context to choose better parameters for your tool call.${depContext}`,
   });
 
   // Check if the LLM called __error__
@@ -425,25 +417,24 @@ async function executeToolStep(
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void,
 ): Promise<unknown> {
-  if (!step.module) {
-    throw new Error(`Tool step ${step.id} is missing a module reference`);
+  if (!step.tool) {
+    throw new Error(`Tool step ${step.id} is missing a tool reference`);
   }
 
-  let moduleToolSet = buildModulePluginToolSet(step.module, approvalGate);
+  const { module: moduleRef, pluginId, toolName } = parseToolRef(step.tool);
+
+  let moduleToolSet = buildModulePluginToolSet(moduleRef, approvalGate);
   if (!moduleToolSet) {
-    throw new Error(`Module "${step.module}" not found or has no available tools`);
+    throw new Error(`Module "${moduleRef}" not found or has no available tools`);
   }
 
-  // Filter to the single named tool when the planner specified one
-  if (step.tool_name) {
-    const pluginId = step.module.split(":")[0];
-    const fullToolName = `${pluginId}_${step.tool_name}`;
-    const targetTool = moduleToolSet.tools[fullToolName];
-    if (targetTool) {
-      moduleToolSet = { ...moduleToolSet, tools: { [fullToolName]: targetTool } };
-    } else {
-      log.warn(`tool_name "${step.tool_name}" not found as "${fullToolName}", using all module tools`);
-    }
+  // Filter to the single named tool
+  const fullToolName = `${pluginId}_${toolName}`;
+  const targetTool = moduleToolSet.tools[fullToolName];
+  if (targetTool) {
+    moduleToolSet = { ...moduleToolSet, tools: { [fullToolName]: targetTool } };
+  } else {
+    log.warn(`Tool "${toolName}" not found as "${fullToolName}", using all module tools`);
   }
 
   // Inject __error__ tool so the LLM can signal fatal failure back to the planner
@@ -476,7 +467,7 @@ async function executeToolStep(
     : { ...moduleToolSet.tools, ...errorTool };
 
   const toolNames = Object.keys(tools);
-  log.dev.debug(`Executor tools for ${step.module}`, { toolCount: toolNames.length, tools: toolNames });
+  log.dev.debug(`Executor tools for ${step.tool}`, { toolCount: toolNames.length, tools: toolNames });
 
   const basePrompt = loadPrompt("executor-tool-system.md");
   const systemPrompt = moduleToolSet.pluginPrompts.length > 0
@@ -484,7 +475,7 @@ async function executeToolStep(
     : basePrompt;
 
   const messages: ModelMessage[] = [
-    { role: "user", content: `Original request: ${originalRequest}\n\nTask: ${step.description}${depContext}` },
+    { role: "user", content: `You are executing one step of a larger plan.\n\nYour task: ${step.description}\n\nLarger plan context: ${originalRequest}\nUse this context to choose better parameters for your tool call.${depContext}` },
   ];
 
   const runStream = async (streamMessages: ModelMessage[], attempt: number) => {
@@ -500,7 +491,7 @@ async function executeToolStep(
     // (AI SDK v6 bug: empty-param tools via OpenRouter streaming don't emit tool-call)
     const pendingToolInputs = new Map<string, { toolName: string; argsText: string }>();
 
-    log.dev.debug(`Executor attempt ${attempt}/${MAX_EXECUTOR_ROUNDS} starting for step ${stepNumber}`, { module: step.module, tools: toolNames });
+    log.dev.debug(`Executor attempt ${attempt}/${MAX_EXECUTOR_ROUNDS} starting for step ${stepNumber}`, { tool: step.tool, tools: toolNames });
 
     // Suppress unhandled rejection warnings on derived promises
     const noop = () => {};

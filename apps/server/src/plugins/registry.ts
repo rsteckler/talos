@@ -3,7 +3,8 @@ import { db, schema } from "../db/index.js";
 import { getLoadedPlugins } from "./loader.js";
 import { createLogger } from "../logger/index.js";
 import type { PluginHandler } from "./types.js";
-import type { PluginManifest } from "@talos/shared/types";
+import type { PluginManifest, PlanStep } from "@talos/shared/types";
+import { parseToolRef } from "@talos/shared";
 
 const log = createLogger("plugins");
 
@@ -354,11 +355,62 @@ export function formatModuleCatalog(entries: ModuleCatalogEntry[]): string {
   for (const entry of entries) {
     // Show service name in parens if it differs from the module name
     const serviceTag = entry.name !== entry.service ? ` (${entry.service})` : "";
-    const funcList = entry.functions.length > 0 ? ` [${entry.functions.join(", ")}]` : "";
-    lines.push(`- \`${entry.moduleRef}\` — ${entry.name}${serviceTag}: ${entry.description}${funcList}`);
+    // List functions as complete tool references so the LLM copies them verbatim
+    const toolRefs = entry.functions.map((fn) => `${entry.moduleRef}/${fn}`);
+    const funcList = toolRefs.length > 0 ? ` [${toolRefs.join(", ")}]` : "";
+    lines.push(`- ${entry.name}${serviceTag}: ${entry.description}${funcList}`);
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Format detailed tool specifications for plan steps.
+ * Used by the plan validator (pass 2) to see full parameter info
+ * for only the tools actually selected in the plan.
+ */
+export function formatToolSpecs(steps: PlanStep[]): string {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  const loadedPlugins = getLoadedPlugins();
+
+  for (const step of steps) {
+    if (step.type !== "tool" || !step.tool) continue;
+
+    const { pluginId, toolName } = parseToolRef(step.tool);
+
+    const fullName = `${pluginId}_${toolName}`;
+    if (seen.has(fullName)) continue;
+    seen.add(fullName);
+
+    // Look up the manifest function spec for full descriptions
+    const loaded = loadedPlugins.get(pluginId);
+    if (!loaded) continue;
+
+    const fnSpec = loaded.manifest.functions.find((f) => f.name === toolName);
+    if (!fnSpec) continue;
+
+    lines.push(`### ${step.tool}`);
+    lines.push(fnSpec.description);
+
+    // Build full parameter details from JSON Schema
+    const properties = (fnSpec.parameters["properties"] ?? {}) as Record<string, Record<string, unknown>>;
+    const required = (fnSpec.parameters["required"] ?? []) as string[];
+
+    if (Object.keys(properties).length > 0) {
+      lines.push("Parameters:");
+      for (const [key, prop] of Object.entries(properties)) {
+        const isRequired = required.includes(key);
+        const desc = typeof prop["description"] === "string" ? prop["description"] : "";
+        const label = isRequired ? `${key} (required)` : `${key}?`;
+        lines.push(`  - ${label}${desc ? " — " + desc : ""}`);
+      }
+    }
+
+    lines.push("");
+  }
+
+  return lines.join("\n").trim();
 }
 
 /** Get distinct categories with function counts. */

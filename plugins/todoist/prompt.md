@@ -6,7 +6,7 @@ Manage tasks, projects, sections, labels, and comments in the user's Todoist acc
 
 - `todoist_get_tasks` — List active tasks. Optional filters: `project_id`, `section_id`, `label`. Supports pagination via `cursor`/`limit`.
 - `todoist_get_task` — Get a single task by `task_id`.
-- `todoist_add_task` — Create a task. `content` is required. Use `due_string` for natural language dates (e.g. "tomorrow", "every monday", "Jan 15 at 3pm"). Use `priority` 1–4 where **4 is urgent** (maps to red/p1 in the Todoist UI). Assign `labels` by name, not ID.
+- `todoist_add_task` — Create a task. `content` is required. Omit `project_id` to add to Inbox (default) — do NOT guess project IDs, call `get_projects` first if you need a specific project. Use `due_string` for natural language dates (e.g. "tomorrow", "every monday", "Jan 15 at 3pm"). Use `priority` 1–4 where **4 is urgent** (maps to red/p1 in the Todoist UI). Assign `labels` by name, not ID.
 - `todoist_update_task` — Update a task. Only send fields you want to change.
 - `todoist_close_task` — Complete a task. For recurring tasks, advances to the next occurrence.
 - `todoist_reopen_task` — Reopen a previously completed task.
@@ -62,7 +62,7 @@ Todoist filters let you query tasks with a powerful syntax:
 
 ## Usage Tips
 
-- **Get project IDs first**: Call `todoist_get_projects` to find project IDs before filtering tasks by project.
+- **Get project IDs first**: Call `todoist_get_projects` to find project IDs before filtering tasks by project or adding tasks to a specific project. Never guess project IDs — they are opaque base32 strings.
 - **Priority mapping**: API priority 4 = Todoist UI "Priority 1" (red/urgent). API priority 1 = normal (no priority flag).
 - **Natural language dates**: `due_string` supports "tomorrow", "next Monday", "every weekday", "Jan 15 at 2pm", "in 3 days", etc.
 - **Labels by name**: When creating or updating tasks, pass label names (e.g. `["urgent", "work"]`), not IDs.

@@ -300,8 +300,7 @@ export interface PluginModuleSpec {
 export interface PlanStep {
   id: string;              // "step_1", "step_2", etc.
   type: "tool" | "think";
-  module?: string;         // "{toolId}:{moduleId}" for tool steps
-  tool_name?: string;      // specific function to call (e.g. "search", "check_session")
+  tool?: string;           // "module_ref/function_name" for tool steps, e.g. "obsidian:obsidian/search_for_snippet"
   description: string;     // what this step accomplishes
   depends_on?: string[];   // step IDs this depends on
 }

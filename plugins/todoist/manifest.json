@@ -89,7 +89,7 @@
           },
           "project_id": {
             "type": "string",
-            "description": "Project to add task to (defaults to Inbox)"
+            "description": "Project ID from get_projects. Omit to add to Inbox (default). Do NOT guess IDs."
           },
           "section_id": {
             "type": "string",
