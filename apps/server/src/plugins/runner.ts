@@ -291,7 +291,7 @@ export function buildRoutedPluginToolSet(
             }
           }
 
-          const plan = await generatePlan(request, catalogText, plannerPrompts.length > 0 ? plannerPrompts : undefined);
+          const plan = await generatePlan(request, catalogText, catalog, plannerPrompts.length > 0 ? plannerPrompts : undefined);
 
           // Notify client of plan structure before execution
           planCallbacks?.onPlanStart?.(request, plan.map((s) => ({ id: s.id, description: s.description })));

@@ -66,6 +66,10 @@ All intelligence lives in the remote LLM. Talos is a "dumb relay + local executo
 | LLM Integration | Vercel AI SDK |
 | Scheduling | node-cron |
 
+### Prompts
+
+All material LLM prompts (more than a couple of lines) must be placed in `.md` files under `apps/server/src/prompts/` and loaded via `loadPrompt()`. Do not hard-code multi-line prompt strings in TypeScript.
+
 ### Key Configuration
 
 - TypeScript uses ES2022 target with NodeNext module resolution (web uses `bundler` for Vite)

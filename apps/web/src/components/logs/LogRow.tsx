@@ -33,6 +33,34 @@ function formatTimestamp(iso: string): string {
   return `${date} ${time}.${ms}`
 }
 
+/** Pretty-print data, expanding any string values that contain JSON. */
+function prettyPrintData(data: unknown): string {
+  const expanded = expandJsonStrings(data)
+  return JSON.stringify(expanded, null, 2)
+}
+
+function expandJsonStrings(value: unknown): unknown {
+  if (typeof value === "string" && value.length > 1) {
+    const trimmed = value.trim()
+    if ((trimmed[0] === "{" || trimmed[0] === "[") && (trimmed.endsWith("}") || trimmed.endsWith("]"))) {
+      try {
+        return expandJsonStrings(JSON.parse(trimmed))
+      } catch {
+        // not valid JSON, return as-is
+      }
+    }
+  }
+  if (Array.isArray(value)) return value.map(expandJsonStrings)
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = expandJsonStrings(v)
+    }
+    return out
+  }
+  return value
+}
+
 export function LogRow({ entry }: LogRowProps) {
   const [expanded, setExpanded] = useState(false)
   const hasData = entry.data !== undefined && entry.data !== null
@@ -76,8 +104,8 @@ export function LogRow({ entry }: LogRowProps) {
       {expanded && hasData && (
         <TableRow>
           <TableCell colSpan={4} className="bg-muted/30 p-0">
-            <pre className="overflow-x-auto p-3 text-xs font-mono text-muted-foreground">
-              {JSON.stringify(entry.data, null, 2)}
+            <pre className="whitespace-pre-wrap break-words p-3 text-xs font-mono text-muted-foreground">
+              {prettyPrintData(entry.data)}
             </pre>
           </TableCell>
         </TableRow>

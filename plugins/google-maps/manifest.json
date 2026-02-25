@@ -21,11 +21,11 @@
         "properties": {
           "query": {
             "type": "string",
-            "description": "Text search query (e.g. 'coffee shops in Portland', 'best pizza near Times Square')."
+            "description": "Text search query. Include the location in the query itself when you have an address, city, or ZIP code (e.g. 'coffee shops in 92009', 'best pizza near Times Square'). The API will geocode it for you."
           },
           "location": {
             "type": "string",
-            "description": "Optional center point as 'latitude,longitude' to bias results (e.g. '45.5152,-122.6784')."
+            "description": "Optional center point as 'latitude,longitude' to bias results. MUST be coordinates (e.g. '45.5152,-122.6784'), NOT an address or ZIP code. Prefer putting locations in the query instead."
           },
           "radius": {
             "type": "number",
