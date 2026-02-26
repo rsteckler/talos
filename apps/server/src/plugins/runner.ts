@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
-import { getLoadedPlugins } from "./loader.js";
+import { getLoadedPlugins, filterPromptForAudience } from "./loader.js";
 import { DIRECT_PLUGIN_IDS, lookupFunction, getModuleFunctions } from "./registry.js";
 import { toolRegistry } from "./tool-registry.js";
 import { createLogger } from "../logger/index.js";
@@ -198,10 +198,10 @@ export function buildModulePluginToolSet(
     const fnSpec = lookup.manifest.functions.find((f) => f.name === fnName);
     if (!fnSpec) continue;
 
-    // Add prompt.md once per plugin
+    // Add prompt.md once per plugin (executor-filtered)
     const loaded = loadedPlugins.get(pluginId);
     if (loaded?.promptMd && !addedPrompts.has(pluginId)) {
-      pluginPrompts.push(loaded.promptMd);
+      pluginPrompts.push(filterPromptForAudience(loaded.promptMd, "executor"));
       addedPrompts.add(pluginId);
     }
 
@@ -273,7 +273,7 @@ export function buildRoutedPluginToolSet(
       execute: async (args: Record<string, unknown>, { abortSignal }: { toolCallId: string; abortSignal?: AbortSignal }) => {
         const request = args["request"] as string;
 
-        log.dev.debug("plan_actions called", { request });
+        log.info("Calling planner", { request });
 
         try {
           const { steps: plan, discoveredTools } = await generatePlan(request);
@@ -290,7 +290,7 @@ export function buildRoutedPluginToolSet(
               seenPlugins.add(tool.pluginId);
               const loaded = loadedPlugins.get(tool.pluginId);
               if (loaded?.promptMd) {
-                plannerPrompts.push(loaded.promptMd);
+                plannerPrompts.push(filterPromptForAudience(loaded.promptMd, "planner"));
               }
             }
           }

@@ -263,7 +263,7 @@ async function search(args: Record<string, unknown>): Promise<unknown> {
             }
           }
 
-          return { name, price, size, stock, url, image };
+          return { gelsons_item_id: name, price, size, stock, url, image };
         });
       })()
     `);
@@ -301,9 +301,9 @@ async function addToCart(args: Record<string, unknown>): Promise<unknown> {
     return { error: "Browser plugin is not available. Enable the browser plugin first." };
   }
 
-  const productName = typeof args["product_name"] === "string" ? args["product_name"].trim() : "";
+  const productName = typeof args["gelsons_item_id"] === "string" ? args["gelsons_item_id"].trim() : "";
   if (!productName) {
-    return { error: "product_name is required." };
+    return { error: "gelsons_item_id is required." };
   }
 
   const quantity = typeof args["quantity"] === "number" && args["quantity"] >= 1 ? args["quantity"] : 1;
@@ -312,18 +312,30 @@ async function addToCart(args: Record<string, unknown>): Promise<unknown> {
     // Escape product name for use inside JS string literals
     const escaped = productName.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 
-    // Check if the product is on the current page:
-    //   'add'       — fresh "Add 1 ct ..." button (not yet in cart)
-    //   'quantity'  — "Quantity: N ct. Change quantity" button (already in cart, stepper collapsed)
-    //   'increment' — increment button already visible (stepper expanded)
-    //   'not-found' — product not on page
+    // Check if the product is on the current page using exact name matching.
+    // aria-label formats:
+    //   Add button:       "Add 1 ct {name}" or "Add 1 ct {name} to cart"
+    //   Quantity button:  "Quantity: N ct {name}. Change quantity"
+    //   Increment button: "Increment quantity of {name}"
     const { result: buttonState } = await browser.evaluateJs(`
       (() => {
-        const addBtn = document.querySelector('button[aria-label*="${escaped}"][aria-label^="Add "]');
+        const name = '${escaped}';
+        const btns = [...document.querySelectorAll('button')];
+        const addBtn = btns.find(b => {
+          const l = b.getAttribute('aria-label') || '';
+          return /^Add \\d+ ct /.test(l) && l.includes(name) &&
+            (l === 'Add 1 ct ' + name || l.startsWith('Add 1 ct ' + name + ' '));
+        });
         if (addBtn) return 'add';
-        const qtyBtn = document.querySelector('button[aria-label*="Change quantity"][aria-label^="Quantity"]');
+        const qtyBtn = btns.find(b => {
+          const l = b.getAttribute('aria-label') || '';
+          return l.startsWith('Quantity:') && l.includes(name) && l.endsWith('Change quantity');
+        });
         if (qtyBtn) return 'quantity';
-        const incBtn = document.querySelector('button[aria-label*="${escaped}"][aria-label^="Increment quantity of "]');
+        const incBtn = btns.find(b => {
+          const l = b.getAttribute('aria-label') || '';
+          return l === 'Increment quantity of ' + name;
+        });
         if (incBtn) return 'increment';
         return 'not-found';
       })()
@@ -337,7 +349,15 @@ async function addToCart(args: Record<string, unknown>): Promise<unknown> {
     if (buttonState === 'add') {
       pluginLog?.info(`Adding "${productName}" to cart`);
       await browser.evaluateJs(`
-        document.querySelector('button[aria-label*="${escaped}"][aria-label^="Add "]').click()
+        (() => {
+          const name = '${escaped}';
+          const btn = [...document.querySelectorAll('button')].find(b => {
+            const l = b.getAttribute('aria-label') || '';
+            return /^Add \\d+ ct /.test(l) && l.includes(name) &&
+              (l === 'Add 1 ct ' + name || l.startsWith('Add 1 ct ' + name + ' '));
+          });
+          if (btn) btn.click();
+        })()
       `);
       // Wait for the stepper to appear (button transitions from Add to quantity/increment)
       await new Promise(resolve => setTimeout(resolve, 1500));
@@ -347,7 +367,11 @@ async function addToCart(args: Record<string, unknown>): Promise<unknown> {
     if (buttonState === 'quantity' || buttonState === 'add') {
       const { result: expandedStepper } = await browser.evaluateJs(`
         (() => {
-          const qtyBtn = document.querySelector('button[aria-label*="Change quantity"][aria-label^="Quantity"]');
+          const name = '${escaped}';
+          const qtyBtn = [...document.querySelectorAll('button')].find(b => {
+            const l = b.getAttribute('aria-label') || '';
+            return l.startsWith('Quantity:') && l.includes(name) && l.endsWith('Change quantity');
+          });
           if (qtyBtn) { qtyBtn.click(); return 'expanded'; }
           return 'no-qty-btn';
         })()
@@ -369,7 +393,10 @@ async function addToCart(args: Record<string, unknown>): Promise<unknown> {
         while (Date.now() < incDeadline) {
           const { result } = await browser.evaluateJs(`
             (() => {
-              const btn = document.querySelector('button[aria-label*="${escaped}"][aria-label^="Increment quantity of "]');
+              const name = '${escaped}';
+              const btn = [...document.querySelectorAll('button')].find(b =>
+                b.getAttribute('aria-label') === 'Increment quantity of ' + name
+              );
               if (btn) { btn.click(); return true; }
               return false;
             })()

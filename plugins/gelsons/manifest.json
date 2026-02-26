@@ -39,7 +39,7 @@
     },
     {
       "name": "search",
-      "description": "Search for products on Gelson's. Returns product names, prices, sizes, stock status, and URLs.",
+      "description": "Search for products on Gelson's. Returns gelsons_item_id (use this verbatim with add_to_cart), prices, sizes, stock status, and URLs.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -70,16 +70,16 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "product_name": {
+          "gelsons_item_id": {
             "type": "string",
-            "description": "The product name to add (must match a product currently on the page from search results)"
+            "description": "The exact gelsons_item_id from search results. Must be copied verbatim — do not paraphrase or shorten."
           },
           "quantity": {
             "type": "number",
             "description": "Number of items to add. Defaults to 1."
           }
         },
-        "required": ["product_name"]
+        "required": ["gelsons_item_id"]
       }
     }
   ]

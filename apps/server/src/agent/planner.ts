@@ -3,12 +3,10 @@ import { z } from "zod";
 import { getProviderForRole } from "../providers/llm.js";
 import { createLogger } from "../logger/index.js";
 import { loadPrompt } from "../prompts/index.js";
-import { formatToolSpecs } from "../plugins/registry.js";
-import { getLoadedPlugins } from "../plugins/loader.js";
+import { getLoadedPlugins, filterPromptForAudience } from "../plugins/loader.js";
 import { toolRegistry } from "../plugins/tool-registry.js";
 import type { ToolSearchResult } from "../plugins/tool-registry.js";
 import type { PlanStep } from "@talos/shared/types";
-import { parseToolRef } from "@talos/shared";
 
 const log = createLogger("planner");
 
@@ -26,8 +24,6 @@ const planSchema = z.object({
 
 const PLANNER_SYSTEM = loadPrompt("planner-system.md");
 const REPLANNER_SYSTEM = loadPrompt("replanner-system.md");
-const VALIDATOR_SYSTEM = loadPrompt("validator-system.md");
-const VALIDATOR_USER = loadPrompt("validator-user.md");
 
 const MAX_FIND_TOOLS_CALLS = 3;
 const MAX_PLANNER_STEPS = 8;
@@ -47,7 +43,6 @@ export async function generatePlan(
     throw new Error("No active model configured");
   }
 
-  log.dev.debug("Generating plan via agentic loop", { request });
   log.user.high("Generating plan...");
 
   // Accumulate discovered tools across find_tools calls
@@ -65,7 +60,7 @@ export async function generatePlan(
         findToolsCount++;
         const isLast = findToolsCount >= MAX_FIND_TOOLS_CALLS;
 
-        log.dev.debug(`find_tools call ${findToolsCount}/${MAX_FIND_TOOLS_CALLS}`, { query: args.query });
+        log.info("Searching for tools", { query: args.query, searchNumber: findToolsCount });
 
         const results = await toolRegistry.search(args.query, 8);
 
@@ -73,6 +68,8 @@ export async function generatePlan(
         for (const r of results) {
           discoveredTools.set(r.toolRef, r);
         }
+
+        log.dev.debug("Tools discovered", { count: results.length, tools: results.map(r => r.toolRef) });
 
         const formatted = results.map((r) => {
           const params = r.paramSummary.length > 0 ? `\n  Parameters: ${r.paramSummary.join(", ")}` : "";
@@ -88,7 +85,7 @@ export async function generatePlan(
             seenPlugins.add(r.pluginId);
             const loaded = loadedPlugins.get(r.pluginId);
             if (loaded?.promptMd) {
-              newPrompts.push(loaded.promptMd);
+              newPrompts.push(filterPromptForAudience(loaded.promptMd, "planner"));
             }
           }
         }
@@ -149,93 +146,10 @@ export async function generatePlan(
 
   const steps: PlanStep[] = submittedPlan;
   const stepSummaries = steps.map((s) => `${s.id}: ${s.type}${s.tool ? ` [${s.tool}]` : ""} — ${s.description}`);
-  log.info(`Plan pass 1: ${steps.length} step(s)`, { steps: steps.map((s) => s.description) });
-  log.dev.debug("Pass 1 details", { steps: stepSummaries, plan: steps, discoveredTools: discoveredTools.size });
+  log.info(`Plan generated: ${steps.length} step(s)`, { steps: steps.map((s) => s.description) });
+  log.dev.debug("Plan details", { steps: stepSummaries, plan: steps, discoveredTools: discoveredTools.size });
 
-  // Pass 2: validate data flow with focused tool specs
-  const validated = await validatePlan(steps, request, discoveredTools);
-  return { steps: validated, discoveredTools };
-}
-
-/**
- * Validate a plan's data flow using focused tool specifications (pass 2).
- * Only sees tool specs for functions actually selected in the plan,
- * plus plugin prompts for only the used plugins.
- */
-export async function validatePlan(
-  plan: PlanStep[],
-  request: string,
-  discoveredTools: Map<string, ToolSearchResult>,
-): Promise<PlanStep[]> {
-  const toolSpecs = formatToolSpecs(plan);
-
-  // If there are no tool steps, skip validation
-  if (!toolSpecs) return plan;
-
-  const active = getProviderForRole("planner");
-  if (!active) return plan;
-
-  // Collect prompt.md only for plugins used in the plan
-  const usedPluginIds = new Set<string>();
-  for (const step of plan) {
-    if (step.tool) {
-      const { pluginId } = parseToolRef(step.tool);
-      usedPluginIds.add(pluginId);
-    }
-  }
-
-  const loadedPlugins = getLoadedPlugins();
-  const usedPrompts: string[] = [];
-  for (const pluginId of usedPluginIds) {
-    const loaded = loadedPlugins.get(pluginId);
-    if (loaded?.promptMd) {
-      usedPrompts.push(loaded.promptMd);
-    }
-  }
-
-  // Format the current plan as readable text with explicit field labels
-  const planLines = plan.map((s) => {
-    const toolStr = s.tool ? ` tool="${s.tool}"` : "";
-    return `- ${s.id}: [${s.type}]${toolStr} — ${s.description}`;
-  });
-
-  const pluginSection = usedPrompts.length > 0
-    ? `## Plugin Instructions\n${usedPrompts.join("\n\n---\n\n")}`
-    : "";
-
-  const prompt = VALIDATOR_USER
-    .replace("{{request}}", request)
-    .replace("{{toolSpecs}}", toolSpecs)
-    .replace("{{pluginInstructions}}", pluginSection)
-    .replace("{{planLines}}", planLines.join("\n"));
-
-  log.dev.debug("Validating plan (pass 2)", { toolStepCount: plan.filter((s) => s.type === "tool").length });
-
-  const result = await generateObject({
-    model: active.model,
-    schema: planSchema,
-    system: VALIDATOR_SYSTEM,
-    prompt,
-  });
-
-  const validated = result.object.steps as PlanStep[];
-
-  // Log differences if any
-  const changed = validated.length !== plan.length ||
-    validated.some((v, i) => {
-      const orig = plan[i];
-      return !orig || v.type !== orig.type || v.tool !== orig.tool;
-    });
-
-  if (changed) {
-    const validatedSummaries = validated.map((s) => `${s.id}: ${s.type}${s.tool ? ` [${s.tool}]` : ""} — ${s.description}`);
-    log.info(`Plan pass 2 revised: ${plan.length} → ${validated.length} step(s)`);
-    log.dev.debug("Pass 2 details", { steps: validatedSummaries, plan: validated });
-  } else {
-    log.info("Plan pass 2: no changes needed");
-  }
-
-  return validated;
+  return { steps, discoveredTools };
 }
 
 export interface StepOutcome {

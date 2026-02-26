@@ -5,8 +5,7 @@ import { getProviderForRole } from "../providers/llm.js";
 import { buildModulePluginToolSet, getModulePrompt } from "../plugins/runner.js";
 import { createLogger } from "../logger/index.js";
 import { loadPrompt } from "../prompts/index.js";
-import { formatToolSpecs } from "../plugins/registry.js";
-import { replanRemainingSteps, validatePlan } from "./planner.js";
+import { replanRemainingSteps } from "./planner.js";
 import type { StepOutcome } from "./planner.js";
 import type { PlanStep, PlanResult } from "@talos/shared/types";
 import type { ToolSearchResult } from "../plugins/tool-registry.js";
@@ -122,24 +121,6 @@ function getModelForStep(step: PlanStep) {
 }
 
 /**
- * Validate replanned steps using pass-2 validation.
- * Returns the validated steps, or the original steps if validation fails.
- */
-async function validateReplannedSteps(
-  steps: PlanStep[],
-  request: string,
-  discoveredTools: Map<string, ToolSearchResult>,
-): Promise<PlanStep[]> {
-  try {
-    return await validatePlan(steps, request, discoveredTools);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    log.warn("Replanned step validation failed, using unvalidated steps", { error: message });
-    return steps;
-  }
-}
-
-/**
  * Execute a plan by running each step in dependency order.
  * Tool steps get a focused LLM call with only that module's tools.
  * Think steps get a tool-less LLM call for pure computation.
@@ -168,6 +149,8 @@ export async function executePlan(
   const executed = new Set<string>();
   let remaining = new Set(currentPlan.map((s) => s.id));
   let replanCount = 0;
+
+  log.info("Starting plan execution", { stepCount: currentPlan.length, steps: currentPlan.map(s => s.id) });
 
   // Track which step IDs came from re-planning (to prevent cascade)
   const replanStepIds = new Set<string>();
@@ -223,10 +206,8 @@ export async function executePlan(
         return;
       }
 
-      // Run pass-2 validation on replanned steps
-      const validated = await validateReplannedSteps(revisedSteps, request, replanContext.discoveredTools);
-
       // Compute diff for notification
+      const validated = revisedSteps;
       const removedStepIds = remainingSteps.map((s) => s.id);
       const addedSteps = validated.map((s) => ({ id: s.id, description: s.description }));
 
@@ -296,7 +277,6 @@ export async function executePlan(
 
       onProgress?.(step.id, step.description, "running");
       log.user.high(`Executing step ${planStepNum.get(step.id)}: ${step.description}`);
-      log.info(`Executing plan step ${planStepNum.get(step.id)}: ${step.description}`);
 
       // Get appropriate model for this step
       const active = getModelForStep(step);
@@ -381,7 +361,7 @@ export async function executePlan(
         const nextDescriptions = nextSteps.map((s) => `${s.id}: ${s.description}`);
 
         if (stepError) {
-          log.info(`Plan evaluation: step ${step.id} errored — attempting re-plan`, {
+          log.dev.debug(`Plan evaluation: step ${step.id} errored, attempting re-plan`, {
             error: stepError,
             remainingSteps: nextDescriptions,
           });
@@ -391,16 +371,9 @@ export async function executePlan(
           break;
         }
 
-        const wasSkipped = stepResult != null && typeof stepResult === "object" && (stepResult as Record<string, unknown>)["skipped"] === true;
-        if (wasSkipped) {
-          log.info(`Plan evaluation: step ${step.id} skipped — remaining plan still valid, continuing`, {
-            remainingSteps: nextDescriptions,
-          });
-        } else {
-          log.info(`Plan evaluation: step ${step.id} complete — continuing with plan`, {
-            remainingSteps: nextDescriptions,
-          });
-        }
+        log.dev.debug(`Plan evaluation: step ${step.id} done, continuing`, {
+          remainingSteps: nextDescriptions,
+        });
       }
     }
   }
@@ -476,6 +449,8 @@ async function executeThinkStep(
   depContext: string,
   active: NonNullable<ReturnType<typeof getProviderForRole>>,
 ): Promise<unknown> {
+  log.info("Executing think step", { stepId: step.id, description: step.description });
+
   const tools = {
     __error__: {
       description: "Call this when you cannot accomplish the task — e.g. the required data is missing from prior step results. Signals a fatal error to the planner so it can re-plan.",
@@ -486,11 +461,15 @@ async function executeThinkStep(
     },
   };
 
+  const thinkPrompt = `You are executing one step of a larger plan.\n\nYour task: ${step.description}\n\nLarger plan context: ${originalRequest}\nUse this context to choose better parameters for your tool call.${depContext}`;
+
+  log.dev.verbose("Think step context", { stepId: step.id, prompt: thinkPrompt });
+
   const result = await generateText({
     model: active.model,
     system: loadPrompt("executor-think-system.md"),
     tools,
-    prompt: `You are executing one step of a larger plan.\n\nYour task: ${step.description}\n\nLarger plan context: ${originalRequest}\nUse this context to choose better parameters for your tool call.${depContext}`,
+    prompt: thinkPrompt,
   });
 
   // Check if the LLM called __error__
@@ -575,16 +554,20 @@ async function executeToolStep(
     : { ...moduleToolSet.tools, ...errorTool };
 
   const toolNames = Object.keys(tools);
-  log.dev.debug(`Executor tools for ${step.tool}`, { toolCount: toolNames.length, tools: toolNames });
+  log.info("Executing tool step", { stepNumber, stepId: step.id, description: step.description, tool: step.tool, tools: toolNames });
 
   const basePrompt = loadPrompt("executor-tool-system.md");
   const systemPrompt = moduleToolSet.pluginPrompts.length > 0
     ? `${basePrompt}\n\n${moduleToolSet.pluginPrompts.join("\n\n")}`
     : basePrompt;
 
+  const userPrompt = `You are executing one step of a larger plan.\n\nYour task: ${step.description}\n\nLarger plan context: ${originalRequest}\nUse this context to choose better parameters for your tool call.${depContext}`;
+
   const messages: ModelMessage[] = [
-    { role: "user", content: `You are executing one step of a larger plan.\n\nYour task: ${step.description}\n\nLarger plan context: ${originalRequest}\nUse this context to choose better parameters for your tool call.${depContext}` },
+    { role: "user", content: userPrompt },
   ];
+
+  log.dev.verbose("Executor step context", { stepId: step.id, prompt: userPrompt, systemPromptLength: systemPrompt.length });
 
   // Track attempt records for structured failure reports
   const attemptRecords: AttemptRecord[] = [];
@@ -602,7 +585,7 @@ async function executeToolStep(
     // (AI SDK v6 bug: empty-param tools via OpenRouter streaming don't emit tool-call)
     const pendingToolInputs = new Map<string, { toolName: string; argsText: string }>();
 
-    log.dev.debug(`Executor attempt ${attempt}/${MAX_EXECUTOR_ROUNDS} starting for step ${stepNumber}`, { tool: step.tool, tools: toolNames });
+    log.dev.debug(`Executor stream starting`, { attempt, maxAttempts: MAX_EXECUTOR_ROUNDS, stepId: step.id });
 
     // Suppress unhandled rejection warnings on derived promises
     const noop = () => {};
@@ -773,7 +756,6 @@ async function executeToolStep(
   // Between attempts, failed tool calls + error results are appended to messages.
   let lastResult;
   for (let attempt = 1; attempt <= MAX_EXECUTOR_ROUNDS; attempt++) {
-    log.info(`Executor attempt ${attempt}/${MAX_EXECUTOR_ROUNDS} for step ${stepNumber}: ${step.description}`);
     lastResult = await runStream(messages, attempt);
 
     // LLM explicitly gave up via __error__ — don't retry
@@ -843,7 +825,7 @@ async function executeToolStep(
               break;
             }
 
-            log.info(`Success criteria not met on attempt ${attempt}, retrying`, { feedback: evaluation.feedback });
+            log.dev.debug(`Success criteria not met, retrying`, { attempt, feedback: evaluation.feedback });
 
             // Append failed result + criteria feedback to messages for next attempt
             messages.push({
@@ -882,9 +864,9 @@ async function executeToolStep(
     if (attempt === MAX_EXECUTOR_ROUNDS) break;
 
     if (errorMsg) {
-      log.info(`Executor attempt ${attempt} returned error, retrying`, { error: errorMsg });
+      log.dev.debug(`Attempt ${attempt} returned error, retrying`, { error: errorMsg });
     } else {
-      log.info(`Executor attempt ${attempt} returned empty results, retrying with broader search`);
+      log.dev.debug(`Attempt ${attempt} returned empty results, retrying`);
     }
 
     // Append failed tool calls + results as messages for next attempt

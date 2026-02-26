@@ -149,6 +149,71 @@ export function getLoadedPlugin(id: string): LoadedPlugin | undefined {
   return loadedPlugins.get(id);
 }
 
+// ---------------------------------------------------------------------------
+// Audience-based prompt.md filtering
+// ---------------------------------------------------------------------------
+
+const AUDIENCE_HEADINGS = new Set(["planner", "executor", "common"]);
+
+/**
+ * Filter prompt.md content for a specific audience.
+ *
+ * Recognized headings: `## Planner`, `## Executor`, `## Common` (case-insensitive).
+ * - Content before the first audience heading is implicitly Common.
+ * - `## Common` content goes to all audiences.
+ * - `## Planner` content goes only to the planner.
+ * - `## Executor` content goes only to the executor.
+ * - Any other `##` headings are kept within the section they appear in.
+ *
+ * If no audience headings exist, the full text is returned unchanged.
+ */
+export function filterPromptForAudience(
+  promptMd: string,
+  audience: "planner" | "executor",
+): string {
+  const lines = promptMd.split("\n");
+
+  // null = before any audience heading (implicit common)
+  let currentSection: string | null = null;
+  const sections = new Map<string, string[]>();
+  const implicitCommonLines: string[] = [];
+  let hasAudienceHeadings = false;
+
+  for (const line of lines) {
+    const match = line.match(/^##\s+(\w+)\s*$/i);
+    if (match && AUDIENCE_HEADINGS.has(match[1]!.toLowerCase())) {
+      hasAudienceHeadings = true;
+      currentSection = match[1]!.toLowerCase();
+      if (!sections.has(currentSection)) {
+        sections.set(currentSection, []);
+      }
+      continue; // strip the audience heading itself
+    }
+
+    if (currentSection === null) {
+      implicitCommonLines.push(line);
+    } else {
+      sections.get(currentSection)!.push(line);
+    }
+  }
+
+  // No audience headings → return full text unchanged
+  if (!hasAudienceHeadings) return promptMd;
+
+  const parts: string[] = [];
+
+  const implicit = implicitCommonLines.join("\n").trim();
+  if (implicit) parts.push(implicit);
+
+  const explicit = sections.get("common")?.join("\n").trim();
+  if (explicit) parts.push(explicit);
+
+  const audienceContent = sections.get(audience)?.join("\n").trim();
+  if (audienceContent) parts.push(audienceContent);
+
+  return parts.join("\n\n");
+}
+
 // --- Plugin lifecycle (sidecars + start/stop hooks) ---
 
 const activePlugins = new Set<string>();

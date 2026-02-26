@@ -260,6 +260,8 @@ export async function streamChat(
       .where(eq(schema.conversations.id, conversationId))
       .run();
 
+    log.info("Chat message received", { conversationId, content: userContent.slice(0, 200) });
+
     let fullContent = "";
     let stepCount = 0;
     let toolCallCount = 0;
