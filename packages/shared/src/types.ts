@@ -143,7 +143,7 @@ export interface ActiveModel {
   provider: Provider | null;
 }
 
-export type ModelRole = "chat" | "planner" | "executor";
+export type ModelRole = "chat" | "planner" | "executor" | "smart";
 
 export interface ModelRoleAssignment {
   role: ModelRole;
@@ -303,6 +303,8 @@ export interface PlanStep {
   tool?: string;           // "module_ref/function_name" for tool steps, e.g. "obsidian:obsidian/search_for_snippet"
   description: string;     // what this step accomplishes
   depends_on?: string[];   // step IDs this depends on
+  success_criteria?: string;      // planner-generated gating prompt for executor evaluation
+  requires_smart_model?: boolean; // per-step model routing
 }
 
 export interface PlanResult {
@@ -310,6 +312,7 @@ export interface PlanResult {
     id: string;
     status: "complete" | "error";
     result?: unknown;
+    summary?: string;
     error?: string;
   }>;
   summary: string;

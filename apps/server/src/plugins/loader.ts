@@ -8,7 +8,8 @@ import { registerService, getService } from "../services/registry.js";
 import { db, schema } from "../db/index.js";
 import { createLogger, ensureLogArea } from "../logger/index.js";
 import { registerTrigger, clearRegistry } from "../triggers/registry.js";
-import { rebuildRegistry } from "./registry.js";
+import { rebuildRegistry, getRegistryEntries } from "./registry.js";
+import { toolRegistry } from "./tool-registry.js";
 import {
   isDockerAvailable,
   buildSidecarImage,
@@ -135,6 +136,9 @@ export async function loadAllPlugins(): Promise<void> {
 
   // Build the searchable registry of routed tool functions
   rebuildRegistry();
+
+  // Build the semantic search index for tool discovery
+  await toolRegistry.rebuild(getRegistryEntries());
 }
 
 export function getLoadedPlugins(): Map<string, LoadedPlugin> {

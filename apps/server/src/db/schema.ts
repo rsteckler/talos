@@ -22,7 +22,7 @@ export const models = sqliteTable("models", {
 });
 
 export const modelRoles = sqliteTable("model_roles", {
-  role: text("role").primaryKey(), // "chat" | "planner" | "executor"
+  role: text("role").primaryKey(), // "chat" | "planner" | "executor" | "smart"
   modelId: text("model_id")
     .notNull()
     .references(() => models.id, { onDelete: "cascade" }),

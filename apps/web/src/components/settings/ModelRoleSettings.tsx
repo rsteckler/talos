@@ -17,6 +17,7 @@ const ROLES: { role: ModelRole; label: string; description: string }[] = [
   { role: "chat", label: "Chat", description: "Used for conversational responses" },
   { role: "planner", label: "Planner", description: "Generates multi-step plans" },
   { role: "executor", label: "Executor", description: "Executes individual plan steps" },
+  { role: "smart", label: "Smart", description: "Used for complex reasoning steps (falls back to Executor)" },
 ]
 
 export function ModelRoleSettings() {

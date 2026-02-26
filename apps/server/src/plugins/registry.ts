@@ -413,6 +413,11 @@ export function formatToolSpecs(steps: PlanStep[]): string {
   return lines.join("\n").trim();
 }
 
+/** Get the current in-memory registry entries (for ToolRegistry rebuild). */
+export function getRegistryEntries(): PluginRegistryEntry[] {
+  return registry;
+}
+
 /** Get distinct categories with function counts. */
 export function getCategories(): Array<{ category: string; count: number }> {
   const counts = new Map<string, number>();

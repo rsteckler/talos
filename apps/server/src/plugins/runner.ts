@@ -2,7 +2,8 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { getLoadedPlugins } from "./loader.js";
-import { DIRECT_PLUGIN_IDS, lookupFunction, getModuleCatalog, getModuleFunctions, formatModuleCatalog } from "./registry.js";
+import { DIRECT_PLUGIN_IDS, lookupFunction, getModuleFunctions } from "./registry.js";
+import { toolRegistry } from "./tool-registry.js";
 import { createLogger } from "../logger/index.js";
 import { loadPrompt } from "../prompts/index.js";
 import { generatePlan } from "../agent/planner.js";
@@ -256,45 +257,43 @@ export function buildRoutedPluginToolSet(
   // Build direct plugins only
   const { tools, pluginPrompts } = buildPluginToolSet(DIRECT_PLUGIN_IDS, approvalGate);
 
-  // Build module catalog for the plan_actions description and system prompt
-  const catalog = getModuleCatalog();
-  const catalogText = formatModuleCatalog(catalog);
+  // Only add plan_actions if there are extended tools indexed
+  const hasExtendedTools = toolRegistry.size > 0;
 
-  if (catalogText) {
-    pluginPrompts.unshift(
-      loadPrompt("extended-tools.md") + "\n\nAvailable modules:\n" + catalogText,
-    );
+  if (hasExtendedTools) {
+    pluginPrompts.unshift(loadPrompt("extended-tools.md"));
   }
 
-  // Only add plan_actions if there are extended tools available
-  if (catalog.length > 0) {
+  if (hasExtendedTools) {
     tools["plan_actions"] = {
-      description: loadPrompt("plan-actions-description.md") + "\n\nAvailable modules:\n" + catalogText,
+      description: loadPrompt("plan-actions-description.md"),
       inputSchema: z.object({
         request: z.string().describe(loadPrompt("plan-actions-request.md")),
       }),
       execute: async (args: Record<string, unknown>, { abortSignal }: { toolCallId: string; abortSignal?: AbortSignal }) => {
         const request = args["request"] as string;
 
-        log.dev.debug("Planning actions", { request: request.slice(0, 100) });
         log.dev.debug("plan_actions called", { request });
 
         try {
-          // Collect unique plugin prompts for the planner's context
-          const plannerPrompts: string[] = [];
-          const seenPlugins = new Set<string>();
-          for (const entry of catalog) {
-            const pluginId = entry.moduleRef.split(":")[0];
-            if (pluginId && !seenPlugins.has(pluginId) && entry.promptMd) {
-              seenPlugins.add(pluginId);
-              plannerPrompts.push(entry.promptMd);
-            }
-          }
-
-          const plan = await generatePlan(request, catalogText, catalog, plannerPrompts.length > 0 ? plannerPrompts : undefined);
+          const { steps: plan, discoveredTools } = await generatePlan(request);
 
           // Notify client of plan structure before execution
           planCallbacks?.onPlanStart?.(request, plan.map((s) => ({ id: s.id, description: s.description })));
+
+          // Collect unique plugin prompts from discovered tools
+          const loadedPlugins = getLoadedPlugins();
+          const plannerPrompts: string[] = [];
+          const seenPlugins = new Set<string>();
+          for (const [, tool] of discoveredTools) {
+            if (!seenPlugins.has(tool.pluginId)) {
+              seenPlugins.add(tool.pluginId);
+              const loaded = loadedPlugins.get(tool.pluginId);
+              if (loaded?.promptMd) {
+                plannerPrompts.push(loaded.promptMd);
+              }
+            }
+          }
 
           const result = await executePlan(
             plan,
@@ -311,7 +310,7 @@ export function buildRoutedPluginToolSet(
             },
             abortSignal,
             {
-              moduleCatalog: catalogText,
+              discoveredTools,
               pluginPrompts: plannerPrompts.length > 0 ? plannerPrompts : undefined,
               onPlanRevised: (removedStepIds, addedSteps) => {
                 planCallbacks?.onPlanRevised?.(removedStepIds, addedSteps);
@@ -319,15 +318,26 @@ export function buildRoutedPluginToolSet(
             },
           );
 
+          // Strip raw results, return only summaries for the chat LLM
+          const summaryResult = {
+            ...result,
+            steps: result.steps.map((s) => ({
+              id: s.id,
+              status: s.status,
+              summary: s.summary,
+              error: s.error,
+            })),
+          };
+
           if (result.pluginPrompts && result.pluginPrompts.length > 0) {
             return {
               formattingInstructions:
                 "IMPORTANT: When presenting the results below to the user, follow these formatting rules:\n\n"
                 + result.pluginPrompts.join("\n\n---\n\n"),
-              results: result,
+              results: summaryResult,
             };
           }
-          return result;
+          return summaryResult;
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
           log.error("plan_actions failed", { error: message });

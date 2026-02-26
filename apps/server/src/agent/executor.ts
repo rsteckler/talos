@@ -1,13 +1,15 @@
-import { streamText, generateText, stepCountIs } from "ai";
-import type { ModelMessage } from "ai";
+import { streamText, generateText, generateObject, stepCountIs } from "ai";
+import type { ModelMessage, LanguageModel } from "ai";
 import { z } from "zod";
 import { getProviderForRole } from "../providers/llm.js";
 import { buildModulePluginToolSet, getModulePrompt } from "../plugins/runner.js";
 import { createLogger } from "../logger/index.js";
 import { loadPrompt } from "../prompts/index.js";
-import { replanRemainingSteps } from "./planner.js";
+import { formatToolSpecs } from "../plugins/registry.js";
+import { replanRemainingSteps, validatePlan } from "./planner.js";
 import type { StepOutcome } from "./planner.js";
 import type { PlanStep, PlanResult } from "@talos/shared/types";
+import type { ToolSearchResult } from "../plugins/tool-registry.js";
 import { parseToolRef } from "@talos/shared";
 import type { ApprovalGate } from "../plugins/runner.js";
 
@@ -18,8 +20,15 @@ interface ToolCallRecord {
   result: unknown;
 }
 
+interface AttemptRecord {
+  attemptNumber: number;
+  toolArgs: Record<string, unknown>;
+  resultSummary: string;
+  criteriaFeedback?: string;
+}
+
 export interface ReplanContext {
-  moduleCatalog: string;
+  discoveredTools: Map<string, ToolSearchResult>;
   pluginPrompts?: string[];
   onPlanRevised?: (removedStepIds: string[], addedSteps: Array<{ id: string; description: string }>) => void;
 }
@@ -28,6 +37,8 @@ const MAX_REPLANS = 3;
 const MAX_EXECUTOR_ROUNDS = 3;
 
 const log = createLogger("executor");
+
+const SUMMARY_PROMPT = loadPrompt("summary-generator.md");
 
 /** Check if a tool result is an error object ({ error: string }). Returns the error message or null. */
 function isErrorResult(result: unknown): string | null {
@@ -50,6 +61,83 @@ function isEmptyResult(result: unknown): boolean {
   return false;
 }
 
+/** Evaluate whether a step's result meets its success criteria. */
+async function evaluateSuccessCriteria(
+  result: unknown,
+  criteria: string,
+  stepDescription: string,
+  model: LanguageModel,
+): Promise<{ passed: boolean; feedback: string }> {
+  const resultStr = JSON.stringify(result).slice(0, 4000);
+
+  const evaluation = await generateObject({
+    model,
+    schema: z.object({
+      passed: z.boolean().describe("Whether the result meets the success criteria"),
+      feedback: z.string().describe("Brief explanation of why criteria passed or failed, and what to try differently if failed"),
+    }),
+    prompt: `Evaluate whether this step result meets the success criteria.
+
+Step: ${stepDescription}
+Success criteria: ${criteria}
+
+Result:
+${resultStr}
+
+Does the result satisfy the criteria? If not, explain what's wrong and suggest a different approach.`,
+  });
+
+  return evaluation.object;
+}
+
+/** Generate a concise summary of a step result. */
+async function generateStepSummary(
+  result: unknown,
+  stepDescription: string,
+  model: LanguageModel,
+): Promise<string> {
+  try {
+    const resultStr = JSON.stringify(result).slice(0, 4000);
+    const { text } = await generateText({
+      model,
+      system: SUMMARY_PROMPT,
+      prompt: `Step: ${stepDescription}\n\nResult:\n${resultStr}`,
+    });
+    return text.trim() || `Completed: ${stepDescription}`;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn("Step summary generation failed, using fallback", { error: message });
+    return `Completed: ${stepDescription}`;
+  }
+}
+
+/** Get the appropriate model for a plan step, respecting requires_smart_model. */
+function getModelForStep(step: PlanStep) {
+  if (step.requires_smart_model) {
+    const smart = getProviderForRole("smart");
+    if (smart) return smart;
+    // Fallback to executor if no smart model configured
+  }
+  return getProviderForRole("executor");
+}
+
+/**
+ * Validate replanned steps using pass-2 validation.
+ * Returns the validated steps, or the original steps if validation fails.
+ */
+async function validateReplannedSteps(
+  steps: PlanStep[],
+  request: string,
+  discoveredTools: Map<string, ToolSearchResult>,
+): Promise<PlanStep[]> {
+  try {
+    return await validatePlan(steps, request, discoveredTools);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn("Replanned step validation failed, using unvalidated steps", { error: message });
+    return steps;
+  }
+}
 
 /**
  * Execute a plan by running each step in dependency order.
@@ -66,11 +154,6 @@ export async function executePlan(
   signal?: AbortSignal,
   replanContext?: ReplanContext,
 ): Promise<PlanResult> {
-  const active = getProviderForRole("executor");
-  if (!active) {
-    throw new Error("No active model configured");
-  }
-
   const results = new Map<string, unknown>();
   const stepResults: PlanResult["steps"] = [];
   const usedPluginPrompts = new Map<string, string>();
@@ -120,42 +203,49 @@ export async function executePlan(
       replanCount++;
       const revisedSteps = await replanRemainingSteps(
         request,
-        replanContext.moduleCatalog,
+        replanContext.discoveredTools,
         completedOutcomes,
         remainingSteps,
         triggerOutcome,
         replanContext.pluginPrompts,
       );
 
-      // Validate: every tool step must have a tool reference
-      const invalid = revisedSteps.filter((s) => s.type === "tool" && !s.tool);
+      // Validate: every tool step must have a valid tool reference from discoveredTools
+      const invalid = revisedSteps.filter((s) => {
+        if (s.type !== "tool") return false;
+        if (!s.tool) return true;
+        return !replanContext.discoveredTools.has(s.tool);
+      });
       if (invalid.length > 0) {
-        log.warn("Re-plan generated tool steps without tool references, discarding re-plan", {
-          invalidSteps: invalid.map((s) => s.id),
+        log.warn("Re-plan generated tool steps with missing or unknown tool references, discarding re-plan", {
+          invalidSteps: invalid.map((s) => `${s.id}: ${s.tool ?? "(missing)"}`),
         });
         return;
       }
 
+      // Run pass-2 validation on replanned steps
+      const validated = await validateReplannedSteps(revisedSteps, request, replanContext.discoveredTools);
+
       // Compute diff for notification
       const removedStepIds = remainingSteps.map((s) => s.id);
-      const addedSteps = revisedSteps.map((s) => ({ id: s.id, description: s.description }));
+      const addedSteps = validated.map((s) => ({ id: s.id, description: s.description }));
 
       // Track new step IDs as re-plan-originated
-      for (const s of revisedSteps) {
+      for (const s of validated) {
         replanStepIds.add(s.id);
       }
 
       // Replace remaining plan steps
       currentPlan = [
         ...currentPlan.filter((s) => !remaining.has(s.id)),
-        ...revisedSteps,
+        ...validated,
       ];
 
       // Update tracking state
-      remaining = new Set(revisedSteps.map((s) => s.id));
+      remaining = new Set(validated.map((s) => s.id));
       planStepNum = new Map(currentPlan.map((s, i) => [s.id, i + 1]));
 
-      log.info(`Plan revised: removed ${removedStepIds.length} step(s), added ${revisedSteps.length} step(s)`, {
+      log.info(`Plan revised: removed ${removedStepIds.length} step(s), added ${validated.length} step(s)`, {
         removed: removedStepIds,
         added: addedSteps.map((s) => s.id),
       });
@@ -208,6 +298,17 @@ export async function executePlan(
       log.user.high(`Executing step ${planStepNum.get(step.id)}: ${step.description}`);
       log.info(`Executing plan step ${planStepNum.get(step.id)}: ${step.description}`);
 
+      // Get appropriate model for this step
+      const active = getModelForStep(step);
+      if (!active) {
+        const error = "No active model configured";
+        stepResults.push({ id: step.id, status: "error", error });
+        onProgress?.(step.id, step.description, "error");
+        executed.add(step.id);
+        remaining.delete(step.id);
+        continue;
+      }
+
       let stepError: string | undefined;
       let stepResult: unknown;
 
@@ -239,12 +340,19 @@ export async function executePlan(
           log.warn(`Plan step ${planStepNum.get(step.id)} returned error result: ${errorMsg}`);
         } else {
           const wasSkipped = stepResult != null && typeof stepResult === "object" && (stepResult as Record<string, unknown>)["skipped"] === true;
-          stepResults.push({ id: step.id, status: "complete", result: stepResult });
+
+          // Generate summary for successful steps
+          let summary: string | undefined;
+          if (!wasSkipped) {
+            summary = await generateStepSummary(stepResult, step.description, active.model);
+          }
+
+          stepResults.push({ id: step.id, status: "complete", result: stepResult, summary });
           onProgress?.(step.id, step.description, wasSkipped ? "skipped" : "complete");
           if (wasSkipped) {
             log.info(`Plan step ${planStepNum.get(step.id)} skipped: ${step.description}`);
           } else {
-            log.info(`Completed plan step ${planStepNum.get(step.id)}: ${step.description}`, { resultPreview: JSON.stringify(stepResult).slice(0, 200) });
+            log.info(`Completed plan step ${planStepNum.get(step.id)}: ${step.description}`, { resultPreview: JSON.stringify(stepResult).slice(0, 200), summary });
           }
         }
 
@@ -478,6 +586,9 @@ async function executeToolStep(
     { role: "user", content: `You are executing one step of a larger plan.\n\nYour task: ${step.description}\n\nLarger plan context: ${originalRequest}\nUse this context to choose better parameters for your tool call.${depContext}` },
   ];
 
+  // Track attempt records for structured failure reports
+  const attemptRecords: AttemptRecord[] = [];
+
   const runStream = async (streamMessages: ModelMessage[], attempt: number) => {
     let fullText = "";
     const toolResults: unknown[] = [];
@@ -587,17 +698,17 @@ async function executeToolStep(
     // Workaround: if the model made tool calls (tool-input-start) but the AI SDK
     // never emitted tool-call events, execute the tools manually
     if (pendingToolInputs.size > 0 && toolResults.length === 0) {
-      const pendingSummary = [...pendingToolInputs.entries()].map(([id, { toolName, argsText }]) =>
-        `${toolName}(${argsText.slice(0, 100) || "{}"}) [${id.slice(0, 12)}]`
+      const pendingSummary = [...pendingToolInputs.entries()].map(([id, { toolName: tn, argsText }]) =>
+        `${tn}(${argsText.slice(0, 100) || "{}"}) [${id.slice(0, 12)}]`
       );
       log.warn(`${String(pendingToolInputs.size)} tool input(s) started but never completed as tool-call events — executing manually`, {
         tools: pendingSummary,
       });
 
-      for (const [id, { toolName, argsText }] of pendingToolInputs) {
-        const tool = moduleToolSet.tools[toolName];
+      for (const [id, { toolName: tn, argsText }] of pendingToolInputs) {
+        const tool = moduleToolSet.tools[tn];
         if (!tool || !tool.execute) {
-          log.error(`Cannot manually execute tool "${toolName}" — not found in tool set`);
+          log.error(`Cannot manually execute tool "${tn}" — not found in tool set`);
           continue;
         }
 
@@ -606,25 +717,25 @@ async function executeToolStep(
           try {
             parsedArgs = JSON.parse(argsText) as Record<string, unknown>;
           } catch {
-            log.warn(`Could not parse tool args for "${toolName}", using empty args`, { argsText });
+            log.warn(`Could not parse tool args for "${tn}", using empty args`, { argsText });
           }
         }
 
-        log.dev.debug(`Manual executor tool call: ${toolName}`, { args: parsedArgs, toolCallId: id });
-        onToolCall?.(id, toolName, parsedArgs, step.id);
+        log.dev.debug(`Manual executor tool call: ${tn}`, { args: parsedArgs, toolCallId: id });
+        onToolCall?.(id, tn, parsedArgs, step.id);
 
         try {
           const result = await tool.execute(parsedArgs, { toolCallId: id, messages: [], abortSignal: undefined as unknown as AbortSignal });
-          log.dev.debug(`Manual executor tool result: ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 200) });
-          onToolResult?.(id, toolName, result, step.id);
+          log.dev.debug(`Manual executor tool result: ${tn}`, { resultPreview: JSON.stringify(result).slice(0, 200) });
+          onToolResult?.(id, tn, result, step.id);
           toolResults.push(result);
-          toolCallRecords.push({ toolCallId: id, toolName, args: parsedArgs, result });
+          toolCallRecords.push({ toolCallId: id, toolName: tn, args: parsedArgs, result });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
-          log.error(`Manual tool execution failed: ${toolName}`, { error: message });
+          log.error(`Manual tool execution failed: ${tn}`, { error: message });
           const errorResult = { error: message };
           toolResults.push(errorResult);
-          toolCallRecords.push({ toolCallId: id, toolName, args: parsedArgs, result: errorResult });
+          toolCallRecords.push({ toolCallId: id, toolName: tn, args: parsedArgs, result: errorResult });
         }
       }
     }
@@ -702,8 +813,72 @@ async function executeToolStep(
     const errorMsg = isErrorResult(lastToolResult);
     const empty = !errorMsg && isEmptyResult(lastToolResult);
 
-    // Success or final attempt — stop retrying
-    if (!errorMsg && !empty) break;
+    // Record attempt for failure reporting
+    const lastRecord = lastResult.toolCallRecords[lastResult.toolCallRecords.length - 1];
+    const attemptRecord: AttemptRecord = {
+      attemptNumber: attempt,
+      toolArgs: lastRecord?.args ?? {},
+      resultSummary: JSON.stringify(lastToolResult).slice(0, 500),
+    };
+
+    // Success checks: first error/empty, then success criteria
+    if (!errorMsg && !empty) {
+      // Check success criteria if defined
+      if (step.success_criteria) {
+        const executorModel = getProviderForRole("executor");
+        if (executorModel) {
+          const evaluation = await evaluateSuccessCriteria(
+            lastToolResult,
+            step.success_criteria,
+            step.description,
+            executorModel.model,
+          );
+
+          if (!evaluation.passed) {
+            attemptRecord.criteriaFeedback = evaluation.feedback;
+            attemptRecords.push(attemptRecord);
+
+            if (attempt === MAX_EXECUTOR_ROUNDS) {
+              log.warn(`Success criteria not met after ${attempt} attempts`, { feedback: evaluation.feedback });
+              break;
+            }
+
+            log.info(`Success criteria not met on attempt ${attempt}, retrying`, { feedback: evaluation.feedback });
+
+            // Append failed result + criteria feedback to messages for next attempt
+            messages.push({
+              role: "assistant",
+              content: lastResult.toolCallRecords.map((tc) => ({
+                type: "tool-call" as const,
+                toolCallId: tc.toolCallId,
+                toolName: tc.toolName,
+                input: tc.args,
+              })),
+            });
+            messages.push({
+              role: "tool",
+              content: lastResult.toolCallRecords.map((tc) => ({
+                type: "tool-result" as const,
+                toolCallId: tc.toolCallId,
+                toolName: tc.toolName,
+                output: { type: "text" as const, value: JSON.stringify(tc.result) },
+              })),
+            });
+            messages.push({
+              role: "user",
+              content: `Result did not meet success criteria: ${evaluation.feedback}\nTry a different approach — use different search terms, filters, or parameters.`,
+            });
+            continue;
+          }
+        }
+      }
+
+      // Passed all checks
+      attemptRecords.push(attemptRecord);
+      break;
+    }
+
+    attemptRecords.push(attemptRecord);
     if (attempt === MAX_EXECUTOR_ROUNDS) break;
 
     if (errorMsg) {
@@ -735,7 +910,25 @@ async function executeToolStep(
 
   // Return the last tool result if any tool executed successfully
   if (lastResult && lastResult.toolResults.length > 0) {
-    return lastResult.toolResults[lastResult.toolResults.length - 1];
+    const lastToolResult = lastResult.toolResults[lastResult.toolResults.length - 1];
+
+    // If all attempts failed and we have attempt records, build a structured failure report
+    const lastErrorMsg = isErrorResult(lastToolResult);
+    const usedErrorTool = lastResult.toolCallRecords.some((tc) => tc.toolName === "__error__");
+    if ((lastErrorMsg || usedErrorTool) && attemptRecords.length > 0) {
+      return {
+        error: JSON.stringify({
+          type: "failure_report",
+          stepId: step.id,
+          stepDescription: step.description,
+          totalAttempts: attemptRecords.length,
+          attempts: attemptRecords,
+          conclusion: lastErrorMsg ?? "Executor gave up via __error__",
+        }),
+      };
+    }
+
+    return lastToolResult;
   }
 
   // No tool was executed — this is a failure for a tool step.

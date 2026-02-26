@@ -1,1 +1,1 @@
-Summarize this task result in one concise sentence (under 80 characters). Be specific and descriptive about what happened. Output only the summary, nothing else.
+Summarize this task result in 2-3 concise sentences (under 200 characters total). Be specific about what was found, done, or returned. Include key data points (names, counts, IDs) when relevant. Output only the summary, nothing else.

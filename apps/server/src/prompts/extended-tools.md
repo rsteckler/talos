@@ -3,6 +3,8 @@
 Beyond your direct tools, you can access many more capabilities via `plan_actions`.
 Call `plan_actions` whenever the user's request requires capabilities not in your direct tool set.
 
+The system will automatically discover the right tools, plan the steps, and execute them. You do not need to specify which tools to use — just describe what the user wants.
+
 **Multi-phase planning**: You may call `plan_actions` multiple times when later steps depend on results from earlier steps. For example:
 - Phase 1: Search/discover (call `plan_actions` with "find X")
 - Observe results

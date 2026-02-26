@@ -1,10 +1,12 @@
-import { generateObject } from "ai";
+import { generateObject, generateText, stepCountIs } from "ai";
 import { z } from "zod";
 import { getProviderForRole } from "../providers/llm.js";
 import { createLogger } from "../logger/index.js";
 import { loadPrompt } from "../prompts/index.js";
 import { formatToolSpecs } from "../plugins/registry.js";
-import type { ModuleCatalogEntry } from "../plugins/registry.js";
+import { getLoadedPlugins } from "../plugins/loader.js";
+import { toolRegistry } from "../plugins/tool-registry.js";
+import type { ToolSearchResult } from "../plugins/tool-registry.js";
 import type { PlanStep } from "@talos/shared/types";
 import { parseToolRef } from "@talos/shared";
 
@@ -17,6 +19,8 @@ const planSchema = z.object({
     tool: z.string().optional().describe("Module ref + function name joined by '/', e.g. 'obsidian:obsidian/search_for_snippet'. Required for tool steps, omit for think steps."),
     description: z.string().describe("What this step accomplishes"),
     depends_on: z.array(z.string()).optional().describe("Step IDs this step depends on for input data"),
+    success_criteria: z.string().optional().describe("How to verify this step solved what was asked. Be specific to the user's request."),
+    requires_smart_model: z.boolean().optional().describe("Set true for complex analysis/synthesis/reasoning. Leave false for simple data retrieval."),
   })),
 });
 
@@ -25,53 +29,132 @@ const REPLANNER_SYSTEM = loadPrompt("replanner-system.md");
 const VALIDATOR_SYSTEM = loadPrompt("validator-system.md");
 const VALIDATOR_USER = loadPrompt("validator-user.md");
 
+const MAX_FIND_TOOLS_CALLS = 3;
+const MAX_PLANNER_STEPS = 8;
+
 /**
  * Generate a structured plan for executing a multi-step request.
- * Uses the active provider's model with structured output.
- * Pass 1 generates the initial plan; pass 2 validates data flow using focused tool specs.
- * @param catalogEntries - full catalog entries for pass 2 validation
+ * Uses an agentic loop: the planner searches for tools via find_tools,
+ * then submits a plan via submit_plan. Pass 2 validates data flow.
  * @param pluginPrompts - prompt.md content from plugins (workflow instructions for the planner)
  */
 export async function generatePlan(
   request: string,
-  moduleCatalog: string,
-  catalogEntries: ModuleCatalogEntry[],
   pluginPrompts?: string[],
-): Promise<PlanStep[]> {
+): Promise<{ steps: PlanStep[]; discoveredTools: Map<string, ToolSearchResult> }> {
   const active = getProviderForRole("planner");
   if (!active) {
     throw new Error("No active model configured");
   }
 
-  const moduleLines = moduleCatalog.split("\n").filter((l) => l.trim().length > 0);
-  log.dev.debug("Generating plan (pass 1)", { request, moduleCount: moduleLines.length, modules: moduleLines.map((l) => l.trim()) });
+  log.dev.debug("Generating plan via agentic loop", { request });
+  log.user.high("Generating plan...");
 
-  let prompt = `Available modules:\n${moduleCatalog}`;
+  // Accumulate discovered tools across find_tools calls
+  const discoveredTools = new Map<string, ToolSearchResult>();
+  let findToolsCount = 0;
+  let submittedPlan: PlanStep[] | null = null;
+
+  const tools = {
+    find_tools: {
+      description: "Search for available tools by describing what action you need to perform. Returns matching tools with their references, descriptions, and parameters. You may call this up to 3 times to discover all the tools you need.",
+      inputSchema: z.object({
+        query: z.string().describe("Natural language description of the action you need, e.g. 'search grocery store', 'send email', 'get directions'"),
+      }),
+      execute: async (args: { query: string }) => {
+        findToolsCount++;
+        const isLast = findToolsCount >= MAX_FIND_TOOLS_CALLS;
+
+        log.dev.debug(`find_tools call ${findToolsCount}/${MAX_FIND_TOOLS_CALLS}`, { query: args.query });
+
+        const results = await toolRegistry.search(args.query, 8);
+
+        // Accumulate into discovered set
+        for (const r of results) {
+          discoveredTools.set(r.toolRef, r);
+        }
+
+        const formatted = results.map((r) => {
+          const params = r.paramSummary.length > 0 ? `\n  Parameters: ${r.paramSummary.join(", ")}` : "";
+          return `- ${r.toolRef}: ${r.description}${params}`;
+        }).join("\n");
+
+        // Include plugin workflow instructions for newly discovered plugins
+        const loadedPlugins = getLoadedPlugins();
+        const newPrompts: string[] = [];
+        const seenPlugins = new Set<string>();
+        for (const r of results) {
+          if (!seenPlugins.has(r.pluginId)) {
+            seenPlugins.add(r.pluginId);
+            const loaded = loadedPlugins.get(r.pluginId);
+            if (loaded?.promptMd) {
+              newPrompts.push(loaded.promptMd);
+            }
+          }
+        }
+        const promptSection = newPrompts.length > 0
+          ? `\n\n## Plugin workflow instructions\n${newPrompts.join("\n\n---\n\n")}`
+          : "";
+
+        const note = isLast
+          ? "\n\nThis is your last search. Submit your plan now using submit_plan."
+          : `\n\nYou have ${MAX_FIND_TOOLS_CALLS - findToolsCount} search(es) remaining. Search again if needed, or submit your plan.`;
+
+        return `Found ${results.length} tool(s):\n${formatted || "(none)"}${promptSection}${note}`;
+      },
+    },
+    submit_plan: {
+      description: "Submit your final plan. Every tool step must reference a toolRef discovered via find_tools.",
+      inputSchema: planSchema,
+      execute: async (args: z.infer<typeof planSchema>) => {
+        // Validate every tool step references a discovered tool
+        const invalidSteps: string[] = [];
+        for (const step of args.steps) {
+          if (step.type === "tool") {
+            if (!step.tool) {
+              invalidSteps.push(`${step.id}: missing tool reference`);
+            } else if (!discoveredTools.has(step.tool)) {
+              invalidSteps.push(`${step.id}: tool "${step.tool}" was not found via find_tools`);
+            }
+          }
+        }
+
+        if (invalidSteps.length > 0) {
+          return `Plan rejected — invalid tool references:\n${invalidSteps.join("\n")}\n\nUse find_tools to discover valid tool references, then resubmit.`;
+        }
+
+        submittedPlan = args.steps as PlanStep[];
+        return "Plan accepted.";
+      },
+    },
+  };
+
+  let prompt = `User request: ${request}`;
 
   if (pluginPrompts && pluginPrompts.length > 0) {
     prompt += `\n\n## Plugin workflow instructions\n\n${pluginPrompts.join("\n\n---\n\n")}`;
   }
 
-  prompt += `\n\nUser request: ${request}`;
-
-  log.user.high("Generating plan...");
-
-  const result = await generateObject({
+  await generateText({
     model: active.model,
-    schema: planSchema,
     system: PLANNER_SYSTEM,
+    tools,
     prompt,
+    stopWhen: stepCountIs(MAX_PLANNER_STEPS),
   });
 
-  const steps = result.object.steps as PlanStep[];
+  if (!submittedPlan) {
+    throw new Error("Planner did not submit a plan");
+  }
 
+  const steps: PlanStep[] = submittedPlan;
   const stepSummaries = steps.map((s) => `${s.id}: ${s.type}${s.tool ? ` [${s.tool}]` : ""} — ${s.description}`);
   log.info(`Plan pass 1: ${steps.length} step(s)`, { steps: steps.map((s) => s.description) });
-  log.dev.debug("Pass 1 details", { steps: stepSummaries, plan: steps });
+  log.dev.debug("Pass 1 details", { steps: stepSummaries, plan: steps, discoveredTools: discoveredTools.size });
 
   // Pass 2: validate data flow with focused tool specs
-  const validated = await validatePlan(steps, request, catalogEntries);
-  return validated;
+  const validated = await validatePlan(steps, request, discoveredTools);
+  return { steps: validated, discoveredTools };
 }
 
 /**
@@ -79,10 +162,10 @@ export async function generatePlan(
  * Only sees tool specs for functions actually selected in the plan,
  * plus plugin prompts for only the used plugins.
  */
-async function validatePlan(
+export async function validatePlan(
   plan: PlanStep[],
   request: string,
-  catalogEntries: ModuleCatalogEntry[],
+  discoveredTools: Map<string, ToolSearchResult>,
 ): Promise<PlanStep[]> {
   const toolSpecs = formatToolSpecs(plan);
 
@@ -101,13 +184,12 @@ async function validatePlan(
     }
   }
 
+  const loadedPlugins = getLoadedPlugins();
   const usedPrompts: string[] = [];
-  const seenPrompts = new Set<string>();
-  for (const entry of catalogEntries) {
-    const pluginId = entry.moduleRef.split(":")[0];
-    if (pluginId && usedPluginIds.has(pluginId) && entry.promptMd && !seenPrompts.has(pluginId)) {
-      seenPrompts.add(pluginId);
-      usedPrompts.push(entry.promptMd);
+  for (const pluginId of usedPluginIds) {
+    const loaded = loadedPlugins.get(pluginId);
+    if (loaded?.promptMd) {
+      usedPrompts.push(loaded.promptMd);
     }
   }
 
@@ -165,12 +247,26 @@ export interface StepOutcome {
 }
 
 /**
+ * Format discovered tools as a mini-catalog for the replanner.
+ */
+function formatDiscoveredTools(discoveredTools: Map<string, ToolSearchResult>): string {
+  if (discoveredTools.size === 0) return "";
+
+  const lines: string[] = [];
+  for (const [, tool] of discoveredTools) {
+    const params = tool.paramSummary.length > 0 ? ` [${tool.paramSummary.join(", ")}]` : "";
+    lines.push(`- ${tool.toolRef}: ${tool.description}${params}`);
+  }
+  return lines.join("\n");
+}
+
+/**
  * Re-plan remaining steps after a step was skipped or errored.
  * Uses the planner role model to generate a revised set of steps.
  */
 export async function replanRemainingSteps(
   request: string,
-  moduleCatalog: string,
+  discoveredTools: Map<string, ToolSearchResult>,
   completedSteps: StepOutcome[],
   remainingSteps: PlanStep[],
   triggerStep: StepOutcome,
@@ -181,8 +277,10 @@ export async function replanRemainingSteps(
     throw new Error("No active model configured");
   }
 
+  const toolCatalog = formatDiscoveredTools(discoveredTools);
+
   let prompt = `## Original Request\n${request}\n\n`;
-  prompt += `## Available Modules\n${moduleCatalog}\n\n`;
+  prompt += `## Available Tools\n${toolCatalog}\n\n`;
 
   if (pluginPrompts && pluginPrompts.length > 0) {
     prompt += `## Plugin workflow instructions\n\n${pluginPrompts.join("\n\n---\n\n")}\n\n`;
@@ -190,7 +288,8 @@ export async function replanRemainingSteps(
 
   prompt += `## Completed Steps\n`;
   for (const s of completedSteps) {
-    const resultStr = s.result != null ? JSON.stringify(s.result).slice(0, 500) : "(no output)";
+    const maxResultLen = s.status === "error" ? 2000 : 500;
+    const resultStr = s.result != null ? JSON.stringify(s.result).slice(0, maxResultLen) : "(no output)";
     prompt += `- ${s.id} [${s.status}]: ${s.description}\n  Result: ${resultStr}\n`;
   }
 
@@ -200,7 +299,7 @@ export async function replanRemainingSteps(
     prompt += `Error: ${triggerStep.error}\n`;
   }
   if (triggerStep.result != null) {
-    prompt += `Result: ${JSON.stringify(triggerStep.result).slice(0, 500)}\n`;
+    prompt += `Result: ${JSON.stringify(triggerStep.result).slice(0, 2000)}\n`;
   }
 
   prompt += `\n## Remaining Planned Steps (not yet executed)\n`;
