@@ -196,10 +196,11 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
       setStateSync("recording")
       startRecording()
     } else if (current === "speaking") {
-      // User is interrupting the AI response
+      // User is interrupting the AI response — their voice exceeded the boosted threshold
       console.log("[VoiceConv] Interrupting TTS (user spoke during playback)")
       ttsQueueRef.current?.interrupt()
       sentenceChunkerRef.current?.reset()
+      vadRef.current?.setTtsActive(false)
       setStateSync("recording")
       startRecording()
     }
@@ -243,6 +244,7 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
           console.log("[VoiceConv] TTS queue drained — streamEnded:", streamEndedRef.current, "state:", stateRef.current)
           // If stream has ended and queue is drained → back to listening
           if (streamEndedRef.current && stateRef.current === "speaking") {
+            vadRef.current?.setTtsActive(false)
             setStateSync("listening")
             vadRef.current?.resetSilenceTimer()
             console.log("[VoiceConv] All TTS done — back to listening")
@@ -272,8 +274,9 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
         if (msg.type === "chunk") {
           if (s === "waiting_for_response") {
             setStateSync("speaking")
-            // VAD stays active — WebRTC loopback provides echo cancellation
-            console.log("[VoiceConv] Speaking started (VAD active, echo cancelled via WebRTC)")
+            // Boost VAD threshold during TTS so echo doesn't trigger interruption
+            vadRef.current?.setTtsActive(true)
+            console.log("[VoiceConv] Speaking started (VAD boosted for echo rejection)")
           }
           chunker.push(msg.content)
         } else if (msg.type === "end") {
@@ -283,6 +286,7 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
           // If TTS queue is already empty/done, transition immediately
           if (!ttsQueue.playing && ttsQueue.pending === 0) {
             if (stateRef.current === "speaking") {
+              vadRef.current?.setTtsActive(false)
               setStateSync("listening")
               vadRef.current?.resetSilenceTimer()
               console.log("[VoiceConv] No TTS queued — back to listening")
@@ -292,6 +296,7 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
           // On error, go back to listening
           ttsQueue.interrupt()
           chunker.reset()
+          vadRef.current?.setTtsActive(false)
           if (stateRef.current !== "idle") {
             setStateSync("listening")
             vadRef.current?.resetSilenceTimer()
@@ -383,6 +388,7 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
   useEffect(() => {
     if (
       prevConvRef.current !== activeConversationId &&
+      prevConvRef.current != null && // null → new ID means we just created it, not a user switch
       stateRef.current !== "idle"
     ) {
       stopConversation()

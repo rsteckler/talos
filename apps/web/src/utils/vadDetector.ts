@@ -9,6 +9,8 @@ export interface VADConfig {
   speechMinMs?: number
   /** Fraction of calibrated voice energy used as threshold (0–1). Default: 0.35 */
   adaptiveFactor?: number
+  /** Threshold multiplier during TTS playback (higher = harder to interrupt). Default: 3.0 */
+  ttsBoostFactor?: number
   onSpeechStart: () => void
   onSpeechEnd: () => void
 }
@@ -19,6 +21,7 @@ const DEFAULTS = {
   silenceTimeoutMs: 3000,
   speechMinMs: 500,
   adaptiveFactor: 0.35,
+  ttsBoostFactor: 3.0,
 } as const
 
 /**
@@ -39,6 +42,7 @@ export class VADDetector {
   private speechStartTime = 0
   private lastSpeechTime = 0
   private rafId: number | null = null
+  private _ttsActive = false
 
   // Adaptive calibration: rolling window of energy samples during confirmed speech
   private energySamples: number[] = []
@@ -54,6 +58,7 @@ export class VADDetector {
       silenceTimeoutMs: config.silenceTimeoutMs ?? DEFAULTS.silenceTimeoutMs,
       speechMinMs: config.speechMinMs ?? DEFAULTS.speechMinMs,
       adaptiveFactor: config.adaptiveFactor ?? DEFAULTS.adaptiveFactor,
+      ttsBoostFactor: config.ttsBoostFactor ?? DEFAULTS.ttsBoostFactor,
       onSpeechStart: config.onSpeechStart,
       onSpeechEnd: config.onSpeechEnd,
     }
@@ -79,6 +84,11 @@ export class VADDetector {
     this.lastSpeechTime = 0
   }
 
+  /** Enable/disable TTS boost — raises threshold during playback to reject echo. */
+  setTtsActive(active: boolean): void {
+    this._ttsActive = active
+  }
+
   /** Current adaptive threshold (for debugging). */
   get threshold(): number {
     return this.getAdaptiveThreshold()
@@ -90,14 +100,18 @@ export class VADDetector {
   }
 
   private getAdaptiveThreshold(): number {
+    let base: number
     if (this.calibratedEnergy <= 0) {
-      return this.config.energyThreshold
+      base = this.config.energyThreshold
+    } else {
+      // Use a fraction of the calibrated voice energy, floored by the minimum
+      base = Math.max(
+        this.config.energyThreshold,
+        this.calibratedEnergy * this.config.adaptiveFactor,
+      )
     }
-    // Use a fraction of the calibrated voice energy, floored by the minimum
-    return Math.max(
-      this.config.energyThreshold,
-      this.calibratedEnergy * this.config.adaptiveFactor,
-    )
+    // During TTS playback, boost threshold so only a clear voice can interrupt
+    return this._ttsActive ? base * this.config.ttsBoostFactor : base
   }
 
   private updateCalibration(energy: number): void {
