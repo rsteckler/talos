@@ -325,17 +325,21 @@ const search_for_snippet = wrap(async (args, cfg) => {
     limit?: number;
   };
 
-  const queryLower = query.toLowerCase();
+  // Split query into terms for OR matching — a note matches if ANY term appears
+  const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 0);
+  if (terms.length === 0) {
+    return { results: [], total: 0 };
+  }
+
   const files = walkVault(cfg, folder);
-  const results: {
+  const candidates: {
     noteId: string;
     title: string;
     snippet: string;
+    matchCount: number;
   }[] = [];
 
   for (const filePath of files) {
-    if (results.length >= limit) break;
-
     let content: string;
     try {
       content = fs.readFileSync(filePath, "utf-8");
@@ -368,18 +372,26 @@ const search_for_snippet = wrap(async (args, cfg) => {
       }
     }
 
-    // Content match
+    // OR match: count how many terms appear in the note
     const contentLower = content.toLowerCase();
-    const matchIndex = contentLower.indexOf(queryLower);
-    if (matchIndex === -1) continue;
+    let matchCount = 0;
+    let firstMatchIndex = -1;
+    for (const term of terms) {
+      const idx = contentLower.indexOf(term);
+      if (idx !== -1) {
+        matchCount++;
+        if (firstMatchIndex === -1) firstMatchIndex = idx;
+      }
+    }
+    if (matchCount === 0) continue;
 
-    // Build context snippet (matching line ± 1 line)
+    // Build context snippet around the first matching term (± 1 line)
     const lines = content.split("\n");
     let charCount = 0;
     let matchLine = 0;
     for (let i = 0; i < lines.length; i++) {
       const lineEnd = charCount + lines[i]!.length + 1;
-      if (matchIndex < lineEnd) {
+      if (firstMatchIndex < lineEnd) {
         matchLine = i;
         break;
       }
@@ -391,12 +403,21 @@ const search_for_snippet = wrap(async (args, cfg) => {
     const snippet = lines.slice(startLine, endLine + 1).join("\n");
 
     const relPath = toRelativePath(cfg, filePath);
-    results.push({
+    candidates.push({
       noteId: relPath,
       title: extractTitle(relPath, content),
       snippet,
+      matchCount,
     });
   }
+
+  // Sort by number of matching terms (most matches first), then take top N
+  candidates.sort((a, b) => b.matchCount - a.matchCount);
+  const results = candidates.slice(0, limit).map(({ noteId, title, snippet }) => ({
+    noteId,
+    title,
+    snippet,
+  }));
 
   return { results, total: results.length };
 });

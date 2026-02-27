@@ -5,9 +5,9 @@ Read, write, search, and navigate an Obsidian vault on the local filesystem.
 
 ## Notes
 
-** Important **  obsidian_search_for_snippet only returns results when all terms are present in the note.  It's MUCH better to search 'hotel' and get 10 results, then parse through them compared to searching 'los angeles hotel october 2024 vacation', because the note you're looking for is unlikely to have ALL of those terms.  
+** Important **  obsidian_search_for_snippet uses OR matching — a note matches if **any** of the query terms appear in it. Results are ranked by how many terms match (best matches first). Use multiple descriptive terms to surface the most relevant notes (e.g. "los angeles hotel vacation" will find notes containing any of those words, with notes containing more of them ranked higher).
 
-- `obsidian_search_for_snippet` — Search the vault. Returns **note IDs with short preview snippets** (not full content). Use `read_note` to get the complete note. **Every term must appear in a note for it to be found so use fewer, broader terms** (e.g. "hotel" not "hotel accomodation motel marriott"). Optional filters: `folder`, `tag`, `frontmatter_field`/`frontmatter_value`. Use `limit` to cap results.
+- `obsidian_search_for_snippet` — Search the vault. Returns **note IDs with short preview snippets** (not full content). Use `read_note` to get the complete note. **Uses OR matching**: any term in the query can match, and results are ranked by number of matching terms. Optional filters: `folder`, `tag`, `frontmatter_field`/`frontmatter_value`. Use `limit` to cap results.
 - `obsidian_read_note` — Read a note by path/noteId. Returns parsed frontmatter (object), body content, tags, and wikilinks separately. Path is relative to vault root; `.md` extension is optional.
 - `obsidian_create_note` — Create a new note. `path` and `content` required. Optional `frontmatter` object is serialized as YAML. Auto-creates parent folders. Errors if file already exists.
 - `obsidian_update_note` — Update an existing note. `content` replaces the body. `frontmatter` fields are merged with existing frontmatter (existing fields not specified are preserved).

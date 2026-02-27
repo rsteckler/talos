@@ -206,7 +206,7 @@ interface StreamCallbacks {
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void;
   onPlanStart?: (request: string, steps: Array<{ id: string; description: string }>) => void;
-  onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error") => void;
+  onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error", error?: string) => void;
   onPlanRevised?: (removedStepIds: string[], addedSteps: Array<{ id: string; description: string }>) => void;
   approvalGate?: ApprovalGate;
   signal?: AbortSignal;

@@ -48,5 +48,6 @@ Always follow this order:
 
 - **Use exact `gelsons_item_id`.** Pass the `gelsons_item_id` exactly as returned by `search`. Partial matches will fail. Do not assume the example in the step description is correct — the value you provide MUST be one of the `gelsons_item_id` values from the search results.
 - **Choose canonical results.** When calling add_to_cart, choose the item from the prior step's search results that most represents what the human asked for. For example, if the human asked for a potato, don't add "potato chips", even when they are the first result, when "potatoes" are available.
+- **Prefer to call __error__ instead of adding an irrelevant item.**  When searching for Television, Gelsons won't have one, but will show TV dinners.  **DO NOT** add them, as they are not Televisions.  Instead, report the error with an explanation that none of the items matched the human's request.
 - **Quantity stacks.** If an item is already in the cart, `add_to_cart` adds the specified quantity on top of what's there. It does not set an absolute quantity.
 - **Don't retry blindly.** If `add_to_cart` returns an error saying the product wasn't found, report the error — do not retry with different IDs.

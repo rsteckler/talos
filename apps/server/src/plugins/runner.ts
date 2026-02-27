@@ -239,7 +239,7 @@ export function buildModulePluginToolSet(
 
 export interface PlanActionCallbacks {
   onPlanStart?: (request: string, steps: Array<{ id: string; description: string }>) => void;
-  onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error") => void;
+  onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error", error?: string) => void;
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void;
   onPlanRevised?: (removedStepIds: string[], addedSteps: Array<{ id: string; description: string }>) => void;
@@ -278,6 +278,17 @@ export function buildRoutedPluginToolSet(
         try {
           const { steps: plan, discoveredTools } = await generatePlan(request);
 
+          // Namespace step IDs to avoid collisions when the LLM calls
+          // plan_actions multiple times (each plan reuses step_1, step_2, etc.)
+          const planPrefix = crypto.randomUUID().slice(0, 8);
+          for (const step of plan) {
+            const oldId = step.id;
+            step.id = `${planPrefix}_${oldId}`;
+            if (step.depends_on) {
+              step.depends_on = step.depends_on.map((dep) => `${planPrefix}_${dep}`);
+            }
+          }
+
           // Notify client of plan structure before execution
           planCallbacks?.onPlanStart?.(request, plan.map((s) => ({ id: s.id, description: s.description })));
 
@@ -299,8 +310,8 @@ export function buildRoutedPluginToolSet(
             plan,
             request,
             approvalGate,
-            (stepId, description, status) => {
-              planCallbacks?.onPlanStep?.(stepId, description, status);
+            (stepId, description, status, error) => {
+              planCallbacks?.onPlanStep?.(stepId, description, status, error);
             },
             (toolCallId, toolName, toolArgs, stepId) => {
               planCallbacks?.onToolCall?.(toolCallId, toolName, toolArgs, stepId);

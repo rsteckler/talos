@@ -34,6 +34,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     return { planToolCalls: planTcs, standaloneToolCalls: standalone }
   }, [message.toolCalls, message.plan])
 
+  // Hide empty assistant bubbles (e.g., plan_actions placeholder before plan/text arrives)
+  const hasVisibleContent =
+    message.content.length > 0 ||
+    (message.plan && message.plan.length > 0) ||
+    standaloneToolCalls.length > 0
+
+  if (!isUser && !hasVisibleContent) return null
+
   return (
     <div className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}>
       <span className="mb-1 text-[11px] font-medium text-muted-foreground">
@@ -42,11 +50,17 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div className={`max-w-[80%] px-4 py-2.5 ${bubbleClass}`}>
         {message.plan && message.plan.length > 0 && (
           <div className="mb-2 border-b border-border pb-2">
-            {message.plan.map((p, i) => (
-              <div key={p.request} className={i > 0 ? "border-t border-border/30 pt-2 mt-2" : ""}>
-                <PlanDisplay plan={p} toolCalls={planToolCalls} />
-              </div>
-            ))}
+            {message.plan.map((p, i) => {
+              // Scope tool calls to this plan's step IDs to avoid cross-plan collisions
+              // (replans reuse step_1, step_2, etc.)
+              const stepIds = new Set(p.steps.map((s) => s.id))
+              const scopedToolCalls = planToolCalls.filter((tc) => tc.stepId && stepIds.has(tc.stepId))
+              return (
+                <div key={`${p.request}-${i}`} className={i > 0 ? "border-t border-border/30 pt-2 mt-2" : ""}>
+                  <PlanDisplay plan={p} toolCalls={scopedToolCalls} />
+                </div>
+              )
+            })}
           </div>
         )}
         {standaloneToolCalls.length > 0 && (

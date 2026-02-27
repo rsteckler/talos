@@ -60,6 +60,7 @@ export async function generatePlan(
         findToolsCount++;
         const isLast = findToolsCount >= MAX_FIND_TOOLS_CALLS;
 
+        log.user.high("Searching for tools...");
         log.info("Searching for tools", { query: args.query, searchNumber: findToolsCount });
 
         const results = await toolRegistry.search(args.query, 8);

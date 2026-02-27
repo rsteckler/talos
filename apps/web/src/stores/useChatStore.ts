@@ -43,7 +43,7 @@ interface ChatState {
 
   // Plan
   setPlan: (plan: PlanState) => void;
-  updatePlanStepStatus: (stepId: string, status: PlanState["steps"][number]["status"]) => void;
+  updatePlanStepStatus: (stepId: string, status: PlanState["steps"][number]["status"], error?: string) => void;
   revisePlan: (removedStepIds: string[], addedSteps: Array<{ id: string; description: string }>) => void;
   markPlanStopping: () => void;
 
@@ -187,7 +187,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       return { messages: msgs }
     }),
-  updatePlanStepStatus: (stepId, status) =>
+  updatePlanStepStatus: (stepId, status, error) =>
     set((state) => {
       const msgs = state.messages.map((m) => {
         if (m.role !== "assistant" || !m.plan) return m
@@ -197,7 +197,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...m,
           plan: m.plan.map((p, i) =>
             i === planIdx
-              ? { ...p, steps: p.steps.map((s) => s.id === stepId ? { ...s, status } : s) }
+              ? { ...p, steps: p.steps.map((s) => s.id === stepId ? { ...s, status, ...(error ? { error } : {}) } : s) }
               : p,
           ),
         }

@@ -78,9 +78,24 @@ function stepTextClass(status: string): string {
   }
 }
 
+/** Extract a human-readable error message. Failure reports contain a `conclusion` field. */
+function formatStepError(error: string): string {
+  try {
+    const parsed = JSON.parse(error) as Record<string, unknown>
+    if (parsed["type"] === "failure_report" && typeof parsed["conclusion"] === "string") {
+      return parsed["conclusion"]
+    }
+  } catch {
+    // Not JSON — use as-is
+  }
+  return error
+}
+
 function PlanStepRow({ step, isLast, toolCalls }: PlanStepRowProps) {
   const [open, setOpen] = useState(() => step.status === "running")
   const hasToolCalls = toolCalls.length > 0
+  const hasError = step.status === "error" && step.error
+  const isCollapsible = hasToolCalls || hasError
 
   // Auto-expand running and stopping steps
   const isActive = step.status === "running" || step.status === "stopping"
@@ -109,7 +124,7 @@ function PlanStepRow({ step, isLast, toolCalls }: PlanStepRowProps) {
 
       {/* Step content */}
       <div className="flex-1 pb-2.5">
-        {hasToolCalls ? (
+        {isCollapsible ? (
           <Collapsible open={open || isActive} onOpenChange={setOpen}>
             <CollapsibleTrigger className="flex items-center gap-1 text-xs hover:text-foreground transition-colors">
               <ChevronRight
@@ -120,6 +135,9 @@ function PlanStepRow({ step, isLast, toolCalls }: PlanStepRowProps) {
               </span>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-1 ml-4">
+              {hasError && (
+                <p className="text-xs text-red-400/90 mb-1">{formatStepError(step.error!)}</p>
+              )}
               {toolCalls.map((tc) => (
                 <ToolCallDisplay key={tc.toolCallId} toolCall={tc} />
               ))}

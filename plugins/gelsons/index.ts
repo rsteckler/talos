@@ -312,29 +312,32 @@ async function addToCart(args: Record<string, unknown>): Promise<unknown> {
     // Escape product name for use inside JS string literals
     const escaped = productName.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 
-    // Check if the product is on the current page using exact name matching.
-    // aria-label formats:
-    //   Add button:       "Add 1 ct {name}" or "Add 1 ct {name} to cart"
-    //   Quantity button:  "Quantity: N ct {name}. Change quantity"
-    //   Increment button: "Increment quantity of {name}"
+    // Find the product card, then check button state WITHIN it.
+    // The quantity button ("Quantity: N ct. Change quantity") does NOT contain the
+    // product name, so we must scope to the card matching the product.
     const { result: buttonState } = await browser.evaluateJs(`
       (() => {
         const name = '${escaped}';
-        const btns = [...document.querySelectorAll('button')];
+        const cards = [...document.querySelectorAll('div[aria-label$="product card"]')];
+        const card = cards.find(c => {
+          const label = (c.getAttribute('aria-label') || '').replace(/ product card$/i, '');
+          return label === name;
+        });
+        if (!card) return 'not-found';
+        const btns = [...card.querySelectorAll('button')];
         const addBtn = btns.find(b => {
           const l = b.getAttribute('aria-label') || '';
-          return /^Add \\d+ ct /.test(l) && l.includes(name) &&
-            (l === 'Add 1 ct ' + name || l.startsWith('Add 1 ct ' + name + ' '));
+          return /^Add \\d+ ct /.test(l);
         });
         if (addBtn) return 'add';
         const qtyBtn = btns.find(b => {
           const l = b.getAttribute('aria-label') || '';
-          return l.startsWith('Quantity:') && l.includes(name) && l.endsWith('Change quantity');
+          return l.startsWith('Quantity:') && l.endsWith('Change quantity');
         });
         if (qtyBtn) return 'quantity';
         const incBtn = btns.find(b => {
           const l = b.getAttribute('aria-label') || '';
-          return l === 'Increment quantity of ' + name;
+          return l.startsWith('Increment quantity');
         });
         if (incBtn) return 'increment';
         return 'not-found';
@@ -351,11 +354,10 @@ async function addToCart(args: Record<string, unknown>): Promise<unknown> {
       await browser.evaluateJs(`
         (() => {
           const name = '${escaped}';
-          const btn = [...document.querySelectorAll('button')].find(b => {
-            const l = b.getAttribute('aria-label') || '';
-            return /^Add \\d+ ct /.test(l) && l.includes(name) &&
-              (l === 'Add 1 ct ' + name || l.startsWith('Add 1 ct ' + name + ' '));
-          });
+          const cards = [...document.querySelectorAll('div[aria-label$="product card"]')];
+          const card = cards.find(c => (c.getAttribute('aria-label') || '').replace(/ product card$/i, '') === name);
+          if (!card) return;
+          const btn = [...card.querySelectorAll('button')].find(b => /^Add \\d+ ct /.test(b.getAttribute('aria-label') || ''));
           if (btn) btn.click();
         })()
       `);
@@ -363,14 +365,18 @@ async function addToCart(args: Record<string, unknown>): Promise<unknown> {
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
 
-    // If the collapsed quantity button is showing, click it to reveal increment/decrement
+    // If the collapsed quantity button is showing, click it to reveal increment/decrement.
+    // The quantity button aria-label is "Quantity: N ct. Change quantity" (no product name).
     if (buttonState === 'quantity' || buttonState === 'add') {
       const { result: expandedStepper } = await browser.evaluateJs(`
         (() => {
           const name = '${escaped}';
-          const qtyBtn = [...document.querySelectorAll('button')].find(b => {
+          const cards = [...document.querySelectorAll('div[aria-label$="product card"]')];
+          const card = cards.find(c => (c.getAttribute('aria-label') || '').replace(/ product card$/i, '') === name);
+          if (!card) return 'no-card';
+          const qtyBtn = [...card.querySelectorAll('button')].find(b => {
             const l = b.getAttribute('aria-label') || '';
-            return l.startsWith('Quantity:') && l.includes(name) && l.endsWith('Change quantity');
+            return l.startsWith('Quantity:') && l.endsWith('Change quantity');
           });
           if (qtyBtn) { qtyBtn.click(); return 'expanded'; }
           return 'no-qty-btn';
@@ -387,15 +393,18 @@ async function addToCart(args: Record<string, unknown>): Promise<unknown> {
     if (clicksNeeded > 0) {
       pluginLog?.info(`Clicking increment ${String(clicksNeeded)} time(s) for "${productName}"`);
       for (let i = 0; i < clicksNeeded; i++) {
-        // Poll for the increment button (may take a moment after initial add)
+        // Poll for the increment button within the product card
         const incDeadline = Date.now() + 5000;
         let clicked = false;
         while (Date.now() < incDeadline) {
           const { result } = await browser.evaluateJs(`
             (() => {
               const name = '${escaped}';
-              const btn = [...document.querySelectorAll('button')].find(b =>
-                b.getAttribute('aria-label') === 'Increment quantity of ' + name
+              const cards = [...document.querySelectorAll('div[aria-label$="product card"]')];
+              const card = cards.find(c => (c.getAttribute('aria-label') || '').replace(/ product card$/i, '') === name);
+              if (!card) return false;
+              const btn = [...card.querySelectorAll('button')].find(b =>
+                (b.getAttribute('aria-label') || '').startsWith('Increment quantity')
               );
               if (btn) { btn.click(); return true; }
               return false;

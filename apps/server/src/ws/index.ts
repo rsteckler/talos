@@ -198,13 +198,14 @@ function handleChat(
         steps,
       });
     },
-    onPlanStep: (stepId, description, status) => {
+    onPlanStep: (stepId, description, status, error) => {
       sendMessage(ws, {
         type: "plan_step",
         conversationId,
         stepId,
         description,
         status,
+        ...(error ? { error } : {}),
       });
     },
     onPlanRevised: (removedStepIds, addedSteps) => {

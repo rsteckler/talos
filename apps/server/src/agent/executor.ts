@@ -129,7 +129,7 @@ export async function executePlan(
   plan: PlanStep[],
   request: string,
   approvalGate?: ApprovalGate,
-  onProgress?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error") => void,
+  onProgress?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error", error?: string) => void,
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void,
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void,
   signal?: AbortSignal,
@@ -283,7 +283,7 @@ export async function executePlan(
       if (!active) {
         const error = "No active model configured";
         stepResults.push({ id: step.id, status: "error", error });
-        onProgress?.(step.id, step.description, "error");
+        onProgress?.(step.id, step.description, "error", error);
         executed.add(step.id);
         remaining.delete(step.id);
         continue;
@@ -316,7 +316,7 @@ export async function executePlan(
         if (errorMsg) {
           stepError = errorMsg;
           stepResults.push({ id: step.id, status: "error", error: errorMsg, result: stepResult });
-          onProgress?.(step.id, step.description, "error");
+          onProgress?.(step.id, step.description, "error", errorMsg);
           log.warn(`Plan step ${planStepNum.get(step.id)} returned error result: ${errorMsg}`);
         } else {
           const wasSkipped = stepResult != null && typeof stepResult === "object" && (stepResult as Record<string, unknown>)["skipped"] === true;
@@ -348,7 +348,7 @@ export async function executePlan(
         const message = err instanceof Error ? err.message : String(err);
         stepError = message;
         stepResults.push({ id: step.id, status: "error", error: message });
-        onProgress?.(step.id, step.description, "error");
+        onProgress?.(step.id, step.description, "error", message);
         log.error(`Plan step ${planStepNum.get(step.id)} failed: ${step.description}`, { error: message });
       }
 

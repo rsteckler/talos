@@ -192,7 +192,7 @@ function handleMessage(message: ServerMessage) {
       break
     }
     case "plan_step":
-      store.updatePlanStepStatus(message.stepId, message.status)
+      store.updatePlanStepStatus(message.stepId, message.status, message.error)
       break
     case "plan_revised":
       store.revisePlan(message.removedStepIds, message.addedSteps)
