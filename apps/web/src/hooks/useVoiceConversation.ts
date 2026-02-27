@@ -5,6 +5,7 @@ import { voiceApi } from "@/api/voice"
 import { VADDetector } from "@/utils/vadDetector"
 import { SentenceChunker } from "@/utils/sentenceChunker"
 import { TTSQueue } from "@/utils/ttsQueue"
+import { WebRTCLoopbackPlayer } from "@/utils/webrtcLoopback"
 import { stopAutoTts } from "@/utils/ttsPlayer"
 import {
   subscribeToMessages,
@@ -56,7 +57,8 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
   const chunksRef = useRef<Blob[]>([])
   const mimeTypeRef = useRef<string>("audio/webm")
 
-  // TTS + sentence chunking
+  // TTS + sentence chunking + echo cancellation
+  const loopbackPlayerRef = useRef<WebRTCLoopbackPlayer | null>(null)
   const ttsQueueRef = useRef<TTSQueue | null>(null)
   const sentenceChunkerRef = useRef<SentenceChunker | null>(null)
   const unsubMessagesRef = useRef<(() => void) | null>(null)
@@ -228,16 +230,22 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
       source.connect(analyser)
       // Don't connect to destination — no audio output
 
-      // TTS queue
+      // WebRTC loopback for echo-cancelled TTS playback
+      const loopbackPlayer = new WebRTCLoopbackPlayer()
+      await loopbackPlayer.init()
+      loopbackPlayerRef.current = loopbackPlayer
+      console.log("[VoiceConv] WebRTC loopback player initialized")
+
+      // TTS queue (routed through loopback for echo cancellation)
       const ttsQueue = new TTSQueue({
+        loopbackPlayer,
         onPlaybackComplete: () => {
           console.log("[VoiceConv] TTS queue drained — streamEnded:", streamEndedRef.current, "state:", stateRef.current)
           // If stream has ended and queue is drained → back to listening
           if (streamEndedRef.current && stateRef.current === "speaking") {
             setStateSync("listening")
             vadRef.current?.resetSilenceTimer()
-            vadRef.current?.start()
-            console.log("[VoiceConv] All TTS done — back to listening, VAD resumed")
+            console.log("[VoiceConv] All TTS done — back to listening")
           }
         },
         onError: (err) => {
@@ -264,9 +272,8 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
         if (msg.type === "chunk") {
           if (s === "waiting_for_response") {
             setStateSync("speaking")
-            // Stop VAD while TTS is playing to prevent echo self-triggering
-            vadRef.current?.stop()
-            console.log("[VoiceConv] Speaking started — VAD paused")
+            // VAD stays active — WebRTC loopback provides echo cancellation
+            console.log("[VoiceConv] Speaking started (VAD active, echo cancelled via WebRTC)")
           }
           chunker.push(msg.content)
         } else if (msg.type === "end") {
@@ -278,8 +285,7 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
             if (stateRef.current === "speaking") {
               setStateSync("listening")
               vadRef.current?.resetSilenceTimer()
-              vadRef.current?.start()
-              console.log("[VoiceConv] No TTS queued — back to listening, VAD resumed")
+              console.log("[VoiceConv] No TTS queued — back to listening")
             }
           }
         } else if (msg.type === "error") {
@@ -289,7 +295,6 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
           if (stateRef.current !== "idle") {
             setStateSync("listening")
             vadRef.current?.resetSilenceTimer()
-            vadRef.current?.start()
           }
         }
       })
@@ -326,11 +331,13 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
     mediaRecorderRef.current = null
     chunksRef.current = []
 
-    // TTS
+    // TTS + loopback
     ttsQueueRef.current?.interrupt()
     ttsQueueRef.current = null
     sentenceChunkerRef.current?.reset()
     sentenceChunkerRef.current = null
+    loopbackPlayerRef.current?.destroy()
+    loopbackPlayerRef.current = null
 
     // Message subscription
     unsubMessagesRef.current?.()

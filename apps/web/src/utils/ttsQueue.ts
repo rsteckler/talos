@@ -1,4 +1,5 @@
 import { voiceApi } from "@/api/voice"
+import type { WebRTCLoopbackPlayer } from "./webrtcLoopback"
 
 export interface TTSQueueOptions {
   onPlaybackStart?: () => void
@@ -6,6 +7,8 @@ export interface TTSQueueOptions {
   onError?: (error: Error) => void
   /** Returns the current playback rate (read each time a sentence plays). */
   getPlaybackRate?: () => number
+  /** When provided, audio is routed through WebRTC loopback for echo cancellation. */
+  loopbackPlayer?: WebRTCLoopbackPlayer
 }
 
 /**
@@ -38,6 +41,7 @@ export class TTSQueue {
   interrupt(): void {
     this.isStopped = true
     this.queue = []
+    this.options.loopbackPlayer?.stop()
     if (this.currentAudio) {
       this.currentAudio.pause()
       this.currentAudio.onended = null
@@ -79,25 +83,32 @@ export class TTSQueue {
       const blob = await voiceApi.synthesize(text)
       if (this.isStopped) return
 
-      const url = URL.createObjectURL(blob)
-      this.currentObjectUrl = url
-
-      const audio = new Audio(url)
       const rate = this.options.getPlaybackRate?.() ?? 1.0
-      if (rate !== 1.0) audio.playbackRate = rate
-      this.currentAudio = audio
 
       this.options.onPlaybackStart?.()
 
-      await new Promise<void>((resolve, reject) => {
-        audio.onended = () => resolve()
-        audio.onerror = () => reject(new Error("Audio playback error"))
-        audio.play().catch(reject)
-      })
+      if (this.options.loopbackPlayer) {
+        // Route through WebRTC loopback for echo cancellation
+        await this.options.loopbackPlayer.play(blob, { playbackRate: rate })
+      } else {
+        // Direct playback (used outside conversation mode)
+        const url = URL.createObjectURL(blob)
+        this.currentObjectUrl = url
 
-      URL.revokeObjectURL(url)
-      this.currentObjectUrl = null
-      this.currentAudio = null
+        const audio = new Audio(url)
+        if (rate !== 1.0) audio.playbackRate = rate
+        this.currentAudio = audio
+
+        await new Promise<void>((resolve, reject) => {
+          audio.onended = () => resolve()
+          audio.onerror = () => reject(new Error("Audio playback error"))
+          audio.play().catch(reject)
+        })
+
+        URL.revokeObjectURL(url)
+        this.currentObjectUrl = null
+        this.currentAudio = null
+      }
 
       await this.playNext()
     } catch (error) {
