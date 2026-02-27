@@ -1,8 +1,8 @@
 import { generateText, stepCountIs } from "ai";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
-import { getActiveProvider, loadSystemPrompt } from "../providers/llm.js";
-import { buildPluginToolSet } from "../plugins/runner.js";
+import { getProviderForRole, loadSystemPrompt } from "../providers/llm.js";
+import { buildRoutedPluginToolSet } from "../plugins/runner.js";
 import { createLogger } from "../logger/index.js";
 import { broadcastInbox, broadcastStatus } from "../ws/index.js";
 import { generateInboxSummary } from "../agent/summaryGenerator.js";
@@ -32,16 +32,17 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
   broadcastStatus("thinking");
 
   try {
-    const active = getActiveProvider();
+    const active = getProviderForRole("chat");
     if (!active) {
       throw new Error("No active model configured");
     }
 
     const systemPrompt = loadSystemPrompt();
 
-    // Build plugin tool set — filter to specific plugins if specified
-    const filterPluginIds = task.tools ? (JSON.parse(task.tools) as string[]) : undefined;
-    const { tools, pluginPrompts } = buildPluginToolSet(filterPluginIds);
+    // Build routed tool set: direct plugins + plan_actions meta-tool
+    // This routes tasks through the same planner/executor pipeline as chat,
+    // giving full logging visibility (tool calls, plan steps, retries, etc.)
+    const { tools, pluginPrompts } = buildRoutedPluginToolSet();
     const hasTools = Object.keys(tools).length > 0;
 
     const fullSystemPrompt = pluginPrompts.length > 0
@@ -59,6 +60,17 @@ export async function executeTask(task: TaskRow, triggerContext?: TriggerContext
       messages: [{ role: "user", content: userContent }],
       ...(hasTools ? { tools, stopWhen: stepCountIs(10) } : {}),
     });
+
+    // Log outer-level tool calls for visibility (inner planner/executor logs fire automatically)
+    for (const step of result.steps) {
+      for (const tc of step.toolCalls) {
+        log.user.high(`Tool: ${tc.toolName}`, { args: tc.input });
+      }
+      for (const tr of step.toolResults) {
+        const preview = typeof tr.output === "string" ? tr.output.slice(0, 500) : JSON.stringify(tr.output).slice(0, 500);
+        log.user.medium(`Result: ${tr.toolName}`, { result: preview });
+      }
+    }
 
     // Capture token usage
     const inputTokens = result.usage.inputTokens ?? 0;
