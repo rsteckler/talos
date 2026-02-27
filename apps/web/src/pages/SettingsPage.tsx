@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import {
   Select,
@@ -19,6 +20,7 @@ import { PluginList } from "@/components/settings/PluginList"
 import { ChannelList } from "@/components/settings/ChannelList"
 import { VoiceProviderList } from "@/components/settings/VoiceProviderList"
 import { VoiceRoleSettings } from "@/components/settings/VoiceRoleSettings"
+import { useVoiceStore } from "@/stores/useVoiceStore"
 import { soulApi, pluginsPromptApi, humanPromptApi } from "@/api/soul"
 
 export function SettingsPage() {
@@ -41,6 +43,18 @@ export function SettingsPage() {
   const [humanSaving, setHumanSaving] = useState(false)
   const [humanSaved, setHumanSaved] = useState(false)
   const [humanError, setHumanError] = useState<string | null>(null)
+
+  const voiceSettings = useVoiceStore((s) => s.settings)
+  const fetchVoiceSettings = useVoiceStore((s) => s.fetchSettings)
+  const updateVoiceSettings = useVoiceStore((s) => s.updateSettings)
+  const [localSpeed, setLocalSpeed] = useState(1.0)
+
+  // Sync local speed from server settings once loaded
+  useEffect(() => {
+    if (voiceSettings?.speed) {
+      setLocalSpeed(parseFloat(voiceSettings.speed))
+    }
+  }, [voiceSettings?.speed])
 
   useEffect(() => {
     soulApi.get()
@@ -71,6 +85,10 @@ export function SettingsPage() {
         setHumanLoading(false)
       })
   }, [])
+
+  useEffect(() => {
+    fetchVoiceSettings()
+  }, [fetchVoiceSettings])
 
   const handleSoulSave = useCallback(async () => {
     setSoulSaving(true)
@@ -219,6 +237,31 @@ export function SettingsPage() {
             <CardContent className="space-y-6">
               <VoiceProviderList />
               <VoiceRoleSettings />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm">Playback speed</Label>
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    {localSpeed.toFixed(2)}x
+                  </span>
+                </div>
+                <Slider
+                  min={0.25}
+                  max={4.0}
+                  step={0.05}
+                  value={[localSpeed]}
+                  onValueChange={([val]) => {
+                    if (val != null) setLocalSpeed(val)
+                  }}
+                  onValueCommit={([val]) => {
+                    if (val != null) {
+                      updateVoiceSettings({ speed: val.toFixed(2) })
+                    }
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Adjust text-to-speech playback speed (0.25x – 4.0x).
+                </p>
+              </div>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label htmlFor="auto-tts">Auto read-aloud</Label>

@@ -7,6 +7,22 @@ const WS_URL = "ws://localhost:3001"
 const MAX_RECONNECT_ATTEMPTS = 10
 const RECONNECT_INTERVAL_MS = 3000
 
+// --- Message subscription for voice conversation mode ---
+type MessageListener = (message: ServerMessage) => void
+const messageListeners = new Set<MessageListener>()
+
+/** Subscribe to raw WebSocket messages (used by voice conversation hook). */
+export function subscribeToMessages(fn: MessageListener): () => void {
+  messageListeners.add(fn)
+  return () => { messageListeners.delete(fn) }
+}
+
+/** When true, suppresses auto-TTS in favor of voice conversation's incremental TTS. */
+export let voiceConversationActive = false
+export function setVoiceConversationActive(active: boolean): void {
+  voiceConversationActive = active
+}
+
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -111,6 +127,7 @@ export function useWebSocket() {
 let streamingPlaceholderId: string | null = null
 
 function handleMessage(message: ServerMessage) {
+  messageListeners.forEach((fn) => fn(message))
   const store = useChatStore.getState()
 
   switch (message.type) {
@@ -143,7 +160,7 @@ function handleMessage(message: ServerMessage) {
       // Auto-TTS: read aloud if enabled in settings
       try {
         const settings = JSON.parse(localStorage.getItem("talos-settings") ?? "{}")
-        if (settings.autoTtsEnabled && message.messageId) {
+        if (settings.autoTtsEnabled && message.messageId && !voiceConversationActive) {
           autoPlayTts(message.messageId)
         }
       } catch {

@@ -7,6 +7,8 @@ import { ChatLogFilterDialog } from "@/components/chat/ChatLogFilterDialog"
 import { useSettings } from "@/contexts/SettingsContext"
 import { ModelSwitcher } from "@/components/chat/ModelSwitcher"
 import { VoiceMicButton } from "@/components/chat/VoiceMicButton"
+import { VoiceConversationButton } from "@/components/chat/VoiceConversationButton"
+import { useVoiceConversation } from "@/hooks/useVoiceConversation"
 import { Send, Square, Loader2, AlertCircle, ScrollText, Plus } from "lucide-react"
 import type { FormEvent, KeyboardEvent } from "react"
 import type { Message, LogEntry } from "@talos/shared/types"
@@ -44,6 +46,7 @@ export function ChatArea() {
   const agentStatus = useConnectionStore((s) => s.agentStatus)
   const latestStatusLog = useConnectionStore((s) => s.latestStatusLog)
   const { settings } = useSettings()
+  const { state: voiceConvState, isActive: voiceConvActive, toggle: toggleVoiceConv } = useVoiceConversation()
 
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -294,15 +297,22 @@ export function ChatArea() {
               className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
               style={{ maxHeight: 200 }}
             />
-            <VoiceMicButton
-              onTranscript={(text) => {
-                const current = useChatStore.getState().inputValue
-                setInputValue(current ? `${current} ${text}` : text)
-                resizeTextarea()
-              }}
-              disabled={connectionStatus !== "connected" || isStreaming}
+            {!voiceConvActive && (
+              <VoiceMicButton
+                onTranscript={(text) => {
+                  const current = useChatStore.getState().inputValue
+                  setInputValue(current ? `${current} ${text}` : text)
+                  resizeTextarea()
+                }}
+                disabled={connectionStatus !== "connected" || isStreaming}
+              />
+            )}
+            <VoiceConversationButton
+              state={voiceConvState}
+              onToggle={toggleVoiceConv}
+              disabled={connectionStatus !== "connected"}
             />
-            {isStreaming && activeConversationId ? (
+            {isStreaming && activeConversationId && !voiceConvActive ? (
               <button
                 type="button"
                 onClick={handleStop}

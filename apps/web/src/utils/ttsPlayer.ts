@@ -1,4 +1,11 @@
+import { useVoiceStore } from "@/stores/useVoiceStore"
+
 let currentAudio: HTMLAudioElement | null = null
+
+function getPlaybackRate(): number {
+  const speed = useVoiceStore.getState().settings?.speed
+  return speed ? parseFloat(speed) || 1.0 : 1.0
+}
 
 export async function autoPlayTts(messageId: string): Promise<void> {
   // Stop any current audio
@@ -14,6 +21,8 @@ export async function autoPlayTts(messageId: string): Promise<void> {
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const audio = new Audio(url)
+    const rate = getPlaybackRate()
+    if (rate !== 1.0) audio.playbackRate = rate
     currentAudio = audio
     audio.onended = () => {
       URL.revokeObjectURL(url)

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Volume2, Square, Loader2, AlertCircle } from "lucide-react"
 import { voiceApi } from "@/api/voice"
+import { useVoiceStore } from "@/stores/useVoiceStore"
 
 interface TtsButtonProps {
   messageId: string
@@ -56,6 +57,9 @@ export function TtsButton({ messageId, text }: TtsButtonProps) {
       objectUrlRef.current = url
 
       const audio = new Audio(url)
+      const speed = useVoiceStore.getState().settings?.speed
+      const rate = speed ? parseFloat(speed) || 1.0 : 1.0
+      if (rate !== 1.0) audio.playbackRate = rate
       audioRef.current = audio
 
       audio.onended = () => {
