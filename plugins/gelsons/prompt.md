@@ -12,6 +12,7 @@ Automates grocery shopping on shop.gelsons.com via a persistent browser session.
 | `login` | Log into the Gelson's account (uses stored credentials) |
 | `search` | Search for products by keyword — returns `gelsons_item_id`, prices, sizes, stock |
 | `add_to_cart` | Add a product to the cart by `gelsons_item_id` and quantity (must be on the current page) |
+| `show_cart` | Returns a link to the Gelson's cart / checkout page |
 
 ### CAPTCHA Handling
 

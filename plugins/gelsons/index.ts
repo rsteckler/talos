@@ -450,6 +450,13 @@ async function addToCart(args: Record<string, unknown>): Promise<unknown> {
   }
 }
 
+async function showCart(): Promise<unknown> {
+  return {
+    url: "https://shop.gelsons.com/store/checkout_v4?sid=11458&improvedParams=true&checkoutReArch=true",
+    message: "Here is the link to your Gelson's cart.",
+  };
+}
+
 // --- Exported handler map ---
 
 export const handlers = {
@@ -457,4 +464,5 @@ export const handlers = {
   search,
   check_session: checkSession,
   add_to_cart: addToCart,
+  show_cart: showCart,
 };

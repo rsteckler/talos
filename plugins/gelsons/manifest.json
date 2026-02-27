@@ -24,7 +24,7 @@
       "id": "gelsons",
       "name": "Gelson's",
       "description": "Gelson's grocery shopping automation",
-      "functions": ["login", "search", "check_session", "add_to_cart"]
+      "functions": ["login", "search", "check_session", "add_to_cart", "show_cart"]
     }
   ],
   "functions": [
@@ -80,6 +80,15 @@
           }
         },
         "required": ["gelsons_item_id"]
+      }
+    },
+    {
+      "name": "show_cart",
+      "description": "Returns a link to the Gelson's cart / checkout page. Call this when the user wants to view or check out their cart.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
       }
     }
   ]
