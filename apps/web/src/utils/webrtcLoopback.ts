@@ -5,7 +5,7 @@
  * built-in AEC can use the playback signal as a reference — preventing
  * the microphone from picking up TTS output as "speech".
  *
- * Flow: AudioElement → captureStream → senderPC → receiverPC → <audio> element
+ * Flow: AudioBuffer → BufferSource → MediaStreamDestination → senderPC → receiverPC → <audio>
  *
  * The mic's getUserMedia({ echoCancellation: true }) then has a proper
  * reference signal to subtract from the mic input.
@@ -15,6 +15,8 @@ export class WebRTCLoopbackPlayer {
   private senderPC: RTCPeerConnection | null = null
   private receiverPC: RTCPeerConnection | null = null
   private outputAudio: HTMLAudioElement | null = null
+  private audioCtx: AudioContext | null = null
+  private currentSource: AudioBufferSourceNode | null = null
   private ready = false
   private readyPromise: Promise<void> | null = null
 
@@ -36,6 +38,10 @@ export class WebRTCLoopbackPlayer {
     this.senderPC = sender
     this.receiverPC = receiver
 
+    // Persistent AudioContext for decoding and streaming audio
+    const audioCtx = new AudioContext()
+    this.audioCtx = audioCtx
+
     // Forward ICE candidates between the two peers
     sender.onicecandidate = (e) => {
       if (e.candidate) receiver.addIceCandidate(e.candidate).catch(() => {})
@@ -56,15 +62,9 @@ export class WebRTCLoopbackPlayer {
       }
     })
 
-    // Add a silent audio track to bootstrap the connection
-    // We'll replace it with real audio when playing
-    const ctx = new AudioContext()
-    const oscillator = ctx.createOscillator()
-    const dest = ctx.createMediaStreamDestination()
-    oscillator.connect(dest)
-    oscillator.start()
+    // Bootstrap the connection with a silent track from a MediaStreamDestination
+    const dest = audioCtx.createMediaStreamDestination()
     const bootstrapTrack = dest.stream.getAudioTracks()[0]!
-
     sender.addTrack(bootstrapTrack, dest.stream)
 
     // SDP exchange
@@ -78,70 +78,71 @@ export class WebRTCLoopbackPlayer {
 
     await trackReady
 
-    // Clean up the bootstrap oscillator
-    oscillator.stop()
-    ctx.close().catch(() => {})
-
     this.ready = true
   }
 
   /**
    * Play an audio blob through the WebRTC loopback.
+   * Decodes the blob into an AudioBuffer, streams it via Web Audio API
+   * through the RTCPeerConnection, and plays on the receiver side.
    * Returns a promise that resolves when playback finishes.
    */
   async play(
     blob: Blob,
     options?: { playbackRate?: number },
   ): Promise<void> {
-    if (!this.ready || !this.senderPC || !this.outputAudio) {
+    if (!this.ready || !this.senderPC || !this.audioCtx) {
       throw new Error("WebRTCLoopbackPlayer not initialized")
     }
 
-    const url = URL.createObjectURL(blob)
+    // Decode the audio blob into an AudioBuffer
+    const arrayBuffer = await blob.arrayBuffer()
+    const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer)
 
-    try {
-      // Create a source audio element and capture its stream
-      const sourceAudio = new Audio(url)
-      sourceAudio.muted = true // Don't play directly — only through WebRTC
-      const rate = options?.playbackRate ?? 1.0
-      if (rate !== 1.0) sourceAudio.playbackRate = rate
+    // Create a buffer source → MediaStreamDestination to get a proper track
+    const source = this.audioCtx.createBufferSource()
+    source.buffer = audioBuffer
+    const rate = options?.playbackRate ?? 1.0
+    if (rate !== 1.0) source.playbackRate.value = rate
 
-      // captureStream() gives us a MediaStream of the audio element's output
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const capturedStream: MediaStream = (sourceAudio as any).captureStream()
-      const capturedTrack = capturedStream.getAudioTracks()[0]
-      if (!capturedTrack) throw new Error("No audio track from captured stream")
+    const dest = this.audioCtx.createMediaStreamDestination()
+    source.connect(dest)
 
-      // Replace the sender's track with the captured audio track
-      const senders = this.senderPC.getSenders()
-      const audioSender = senders.find((s) => s.track?.kind === "audio")
-      if (audioSender) {
-        await audioSender.replaceTrack(capturedTrack)
-      } else {
-        this.senderPC.addTrack(capturedTrack, capturedStream)
-      }
+    const track = dest.stream.getAudioTracks()[0]
+    if (!track) throw new Error("No audio track from buffer source")
 
-      // Apply playback rate to the output audio too
-      if (rate !== 1.0) this.outputAudio.playbackRate = rate
-
-      // Start playback and wait for it to finish
-      await new Promise<void>((resolve, reject) => {
-        sourceAudio.onended = () => resolve()
-        sourceAudio.onerror = () => reject(new Error("Audio playback error"))
-        sourceAudio.play().catch(reject)
-      })
-    } finally {
-      URL.revokeObjectURL(url)
+    // Replace the sender's track with this audio track
+    const senders = this.senderPC.getSenders()
+    const audioSender = senders.find((s) => s.track?.kind === "audio")
+    if (audioSender) {
+      await audioSender.replaceTrack(track)
+    } else {
+      this.senderPC.addTrack(track, dest.stream)
     }
+
+    this.currentSource = source
+
+    // Start playback and wait for it to finish
+    await new Promise<void>((resolve) => {
+      source.onended = () => {
+        this.currentSource = null
+        resolve()
+      }
+      source.start()
+    })
   }
 
   /**
    * Stop any currently playing audio immediately.
    */
   stop(): void {
-    if (this.outputAudio) {
-      this.outputAudio.pause()
-      this.outputAudio.currentTime = 0
+    if (this.currentSource) {
+      try {
+        this.currentSource.stop()
+      } catch {
+        // Already stopped
+      }
+      this.currentSource = null
     }
   }
 
@@ -163,6 +164,10 @@ export class WebRTCLoopbackPlayer {
     if (this.receiverPC) {
       this.receiverPC.close()
       this.receiverPC = null
+    }
+    if (this.audioCtx) {
+      this.audioCtx.close().catch(() => {})
+      this.audioCtx = null
     }
 
     this.ready = false
