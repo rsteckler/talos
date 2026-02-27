@@ -205,7 +205,7 @@ interface StreamCallbacks {
   onError: (error: string) => void;
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void;
-  onPlanStart?: (request: string, steps: Array<{ id: string; description: string }>) => void;
+  onPlanStart?: (request: string, steps: Array<{ id: string; description: string; smart?: boolean }>) => void;
   onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error", error?: string) => void;
   onPlanRevised?: (removedStepIds: string[], addedSteps: Array<{ id: string; description: string }>) => void;
   approvalGate?: ApprovalGate;
@@ -293,10 +293,10 @@ export async function streamChat(
       if (tc) { tc.result = result; tc.status = "complete"; }
       onToolResult?.(toolCallId, toolName, result, stepId);
     };
-    const collectingOnPlanStart = (request: string, steps: Array<{ id: string; description: string }>) => {
+    const collectingOnPlanStart = (request: string, steps: Array<{ id: string; description: string; smart?: boolean }>) => {
       collectedPlans.push({
         request,
-        steps: steps.map((s) => ({ id: s.id, description: s.description, status: "pending" as const })),
+        steps: steps.map((s) => ({ id: s.id, description: s.description, status: "pending" as const, ...(s.smart ? { smart: true } : {}) })),
       });
       onPlanStart?.(request, steps);
     };

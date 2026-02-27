@@ -5,11 +5,13 @@ export type Theme = "light" | "dark" | "system"
 export interface Settings {
   theme: Theme
   showLogsInChat: boolean
+  autoTtsEnabled: boolean
 }
 
 const defaultSettings: Settings = {
   theme: "system",
   showLogsInChat: false,
+  autoTtsEnabled: false,
 }
 
 interface SettingsContextValue {
@@ -29,6 +31,7 @@ function loadSettings(): Settings {
       return {
         theme: parsed.theme ?? defaultSettings.theme,
         showLogsInChat: parsed.showLogsInChat ?? defaultSettings.showLogsInChat,
+        autoTtsEnabled: parsed.autoTtsEnabled ?? defaultSettings.autoTtsEnabled,
       }
     }
   } catch {

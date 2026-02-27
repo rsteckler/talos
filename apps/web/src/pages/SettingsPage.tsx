@@ -17,6 +17,8 @@ import { ProviderList } from "@/components/settings/ProviderList"
 import { ModelRoleSettings } from "@/components/settings/ModelRoleSettings"
 import { PluginList } from "@/components/settings/PluginList"
 import { ChannelList } from "@/components/settings/ChannelList"
+import { VoiceProviderList } from "@/components/settings/VoiceProviderList"
+import { VoiceRoleSettings } from "@/components/settings/VoiceRoleSettings"
 import { soulApi, pluginsPromptApi, humanPromptApi } from "@/api/soul"
 
 export function SettingsPage() {
@@ -204,6 +206,34 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent>
               <ChannelList />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Voice</CardTitle>
+              <CardDescription>
+                Configure voice providers for text-to-speech and speech-to-text.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <VoiceProviderList />
+              <VoiceRoleSettings />
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="auto-tts">Auto read-aloud</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically read new assistant responses aloud.
+                  </p>
+                </div>
+                <Switch
+                  id="auto-tts"
+                  checked={settings.autoTtsEnabled}
+                  onCheckedChange={(checked) =>
+                    updateSettings({ autoTtsEnabled: checked })
+                  }
+                />
+              </div>
             </CardContent>
           </Card>
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from "react"
 import { useConnectionStore, useChatStore, useInboxStore, useLogStore, useProviderStore } from "@/stores"
+import { autoPlayTts } from "@/utils/ttsPlayer"
 import type { ClientMessage, ServerMessage } from "@talos/shared/types"
 
 const WS_URL = "ws://localhost:3001"
@@ -139,6 +140,15 @@ function handleMessage(message: ServerMessage) {
         streamingPlaceholderId = null
       }
       store.setStreaming(false)
+      // Auto-TTS: read aloud if enabled in settings
+      try {
+        const settings = JSON.parse(localStorage.getItem("talos-settings") ?? "{}")
+        if (settings.autoTtsEnabled && message.messageId) {
+          autoPlayTts(message.messageId)
+        }
+      } catch {
+        // Ignore parse errors
+      }
       break
     case "error":
       if (streamingPlaceholderId) {
@@ -187,6 +197,7 @@ function handleMessage(message: ServerMessage) {
           id: s.id,
           description: s.description,
           status: "pending" as const,
+          ...(s.smart ? { smart: true } : {}),
         })),
       })
       break

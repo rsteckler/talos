@@ -3,6 +3,7 @@ import type { Message } from "@talos/shared/types"
 import { ToolCallDisplay } from "./ToolCallDisplay"
 import { PlanDisplay } from "./PlanDisplay"
 import { Markdown } from "./Markdown"
+import { TtsButton } from "./TtsButton"
 
 interface MessageBubbleProps {
   message: Message;
@@ -81,6 +82,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             {message.usage.inputTokens.toLocaleString()} in → {message.usage.outputTokens.toLocaleString()} out · {message.usage.totalTokens.toLocaleString()} tokens
             {message.usage.cost != null && ` · $${message.usage.cost.toFixed(4)}`}
           </p>
+        )}
+        {!isUser && message.content.length > 0 && (
+          <div className="mt-1 flex justify-end">
+            <TtsButton messageId={message.id} text={message.content} />
+          </div>
         )}
       </div>
     </div>

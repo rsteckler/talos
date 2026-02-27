@@ -27,6 +27,7 @@ import { webhookRouter } from "./api/webhooks.js";
 import { themeRouter } from "./api/themes.js";
 import { oauthRouter } from "./api/oauth.js";
 import { channelRouter } from "./api/channels.js";
+import { voiceRouter } from "./api/voice.js";
 import { errorHandler } from "./api/errorHandler.js";
 import { attachWebSocket } from "./ws/index.js";
 import { loadAllPlugins, initPlugins, shutdownPlugins } from "./plugins/index.js";
@@ -73,6 +74,7 @@ app.use("/api", webhookRouter);
 app.use("/api", themeRouter);
 app.use("/api", oauthRouter);
 app.use("/api", channelRouter);
+app.use("/api", voiceRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);

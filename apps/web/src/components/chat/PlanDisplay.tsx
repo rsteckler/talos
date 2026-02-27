@@ -133,6 +133,11 @@ function PlanStepRow({ step, isLast, toolCalls }: PlanStepRowProps) {
               <span className={stepTextClass(step.status)}>
                 {label}
               </span>
+              {step.smart && (
+                <span className="inline-flex items-center rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-400">
+                  Smart
+                </span>
+              )}
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-1 ml-4">
               {hasError && (
@@ -146,6 +151,11 @@ function PlanStepRow({ step, isLast, toolCalls }: PlanStepRowProps) {
         ) : (
           <p className={`text-xs ${stepTextClass(step.status)}`}>
             {label}
+            {step.smart && (
+              <span className="ml-1.5 inline-flex items-center rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-400">
+                Smart
+              </span>
+            )}
           </p>
         )}
       </div>

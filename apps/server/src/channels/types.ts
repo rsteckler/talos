@@ -12,6 +12,11 @@ export interface ChannelContext {
   resolveConversation(externalChatId: string): Promise<string>;
   newConversation(externalChatId: string): Promise<string>;
   log: PluginLogger;
+
+  // Voice
+  transcribe(audio: Buffer, mimeType: string): Promise<{ text: string }>;
+  synthesize(text: string): Promise<Buffer>;
+  isVoiceConfigured(): { tts: boolean; stt: boolean };
 }
 
 export interface LoadedChannel {

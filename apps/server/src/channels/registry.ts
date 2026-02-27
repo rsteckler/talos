@@ -4,6 +4,7 @@ import { streamChat } from "../agent/core.js";
 import { getLoadedChannels, getLoadedChannel } from "./loader.js";
 import { broadcastStatus } from "../ws/index.js";
 import { createLogger, ensureLogArea } from "../logger/index.js";
+import { getVoiceProviderForRole } from "../providers/voice.js";
 import type { ChannelContext } from "./types.js";
 import type { InboxItem, PluginLogger } from "@talos/shared/types";
 import type { ApprovalGate } from "../plugins/index.js";
@@ -79,6 +80,24 @@ function createChannelContext(channelId: string, logName?: string): ChannelConte
     },
 
     log: channelLog,
+
+    async transcribe(audio: Buffer, mimeType: string): Promise<{ text: string }> {
+      const { transcribeAudio } = await import("../services/voice.js");
+      return transcribeAudio(audio, mimeType);
+    },
+
+    async synthesize(text: string): Promise<Buffer> {
+      const { synthesizeSpeech } = await import("../services/voice.js");
+      const result = await synthesizeSpeech(text);
+      return Buffer.from(result.audio);
+    },
+
+    isVoiceConfigured(): { tts: boolean; stt: boolean } {
+      return {
+        tts: getVoiceProviderForRole("tts") !== null,
+        stt: getVoiceProviderForRole("stt") !== null,
+      };
+    },
   };
 }
 

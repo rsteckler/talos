@@ -392,6 +392,7 @@ export interface PlanStepInfo {
   description: string;
   status: "pending" | "running" | "complete" | "skipped" | "error" | "stopping" | "cancelled" | "removed";
   error?: string;
+  smart?: boolean;      // step used the smart model
 }
 
 export interface PlanState {
@@ -491,6 +492,66 @@ export interface ThemeFile {
   dark: ThemeColors;
 }
 
+// --- Voice Providers ---
+
+export type VoiceProviderType = "openai" | "elevenlabs";
+
+export interface VoiceProvider {
+  id: string;
+  name: string;
+  type: VoiceProviderType;
+  baseUrl: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface VoiceProviderCreateRequest {
+  name: string;
+  type: VoiceProviderType;
+  apiKey: string;
+  baseUrl?: string;
+}
+
+export interface VoiceProviderUpdateRequest {
+  name?: string;
+  apiKey?: string;
+  baseUrl?: string | null;
+}
+
+export type VoiceRole = "tts" | "stt";
+
+export interface VoiceRoleAssignment {
+  role: VoiceRole;
+  voiceProviderId: string;
+  modelId: string;
+  voice: string | null;
+  providerName: string;
+}
+
+export interface VoiceSettings {
+  defaultVoice: string;
+  language: string;
+  outputFormat: string;
+  speed: string;
+  autoTtsEnabled: boolean;
+}
+
+export interface VoiceModelInfo {
+  modelId: string;
+  displayName: string;
+  voices?: string[];
+}
+
+export interface VoiceModelCatalog {
+  tts: VoiceModelInfo[];
+  stt: VoiceModelInfo[];
+}
+
+export interface TranscriptionResult {
+  text: string;
+  durationSeconds?: number;
+}
+
 // --- WebSocket Protocol ---
 
 export type ClientMessage =
@@ -509,7 +570,7 @@ export type ServerMessage =
   | { type: "tool_result"; conversationId: string; toolCallId: string; toolName: string; result: unknown; stepId?: string }
   | { type: "tool_approval_request"; conversationId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
   | { type: "status"; status: AgentStatus }
-  | { type: "plan_start"; conversationId: string; request: string; steps: Array<{ id: string; description: string }> }
+  | { type: "plan_start"; conversationId: string; request: string; steps: Array<{ id: string; description: string; smart?: boolean }> }
   | { type: "plan_step"; conversationId: string; stepId: string; description: string; status: "running" | "complete" | "skipped" | "error"; error?: string }
   | { type: "inbox"; item: InboxItem }
   | { type: "log"; entry: LogEntry }

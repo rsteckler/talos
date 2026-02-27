@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, InlineKeyboard, InputFile } from "grammy";
 import type { ChannelHandler, ChannelContext } from "../../apps/server/src/channels/types.js";
 import type { InboxItem } from "@talos/shared/types";
 
@@ -238,6 +238,94 @@ export const handler: ChannelHandler = {
       } catch (err) {
         const message = err instanceof Error ? err.message : "An error occurred";
         ctx.log.error(`Chat error: ${message}`);
+        await tgCtx.reply(`Error: ${message}`);
+      } finally {
+        clearInterval(typingInterval);
+      }
+    });
+
+    // Handle voice messages (STT → chat → optional TTS response)
+    bot.on(["message:voice", "message:audio"], async (tgCtx) => {
+      if (!isAllowed(tgCtx.chat.id)) return;
+
+      const chatId = String(tgCtx.chat.id);
+      const { stt } = ctx.isVoiceConfigured();
+      if (!stt) {
+        await tgCtx.reply("Voice input is not configured. Please set up an STT provider in Settings.");
+        return;
+      }
+
+      knownChatIds.add(chatId);
+      await tgCtx.replyWithChatAction("typing");
+
+      const typingInterval = setInterval(() => {
+        tgCtx.replyWithChatAction("typing").catch(() => {});
+      }, 4000);
+
+      try {
+        // Download voice file from Telegram
+        const file = await tgCtx.getFile();
+        const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+        const response = await fetch(fileUrl);
+        if (!response.ok) throw new Error("Failed to download voice file");
+        const audioBuffer = Buffer.from(await response.arrayBuffer());
+
+        // Determine MIME type
+        const isVoice = tgCtx.message.voice !== undefined;
+        const mimeType = isVoice ? "audio/ogg" : "audio/mpeg";
+
+        // Transcribe
+        const { text: transcribedText } = await ctx.transcribe(audioBuffer, mimeType);
+        if (!transcribedText.trim()) {
+          await tgCtx.reply("(Could not transcribe audio)");
+          return;
+        }
+
+        // Process through normal chat flow
+        const conversationId = await ctx.resolveConversation(chatId);
+
+        const approvalGate = async (toolName: string, args: Record<string, unknown>) => {
+          const approvalId = crypto.randomUUID().slice(0, 8);
+          const keyboard = new InlineKeyboard()
+            .text("Approve", `approve:${approvalId}`)
+            .text("Deny", `deny:${approvalId}`);
+          const argsPreview = JSON.stringify(args, null, 2).slice(0, 200);
+          await tgCtx.reply(`Tool: ${toolName}\nArgs: ${argsPreview}`, { reply_markup: keyboard });
+          return new Promise<boolean>((resolve) => {
+            pendingApprovals.set(approvalId, { resolve, toolName });
+            setTimeout(() => {
+              if (pendingApprovals.has(approvalId)) {
+                pendingApprovals.delete(approvalId);
+                resolve(false);
+              }
+            }, 5 * 60 * 1000);
+          });
+        };
+
+        const result = await ctx.chat(conversationId, transcribedText, approvalGate);
+
+        // Try to respond with voice if TTS is configured
+        const { tts } = ctx.isVoiceConfigured();
+        if (tts) {
+          try {
+            const audioOut = await ctx.synthesize(result.content);
+            await tgCtx.replyWithVoice(new InputFile(audioOut));
+          } catch {
+            // TTS failed — fall back to text
+            const parts = splitMessage(result.content);
+            for (const part of parts) {
+              await tgCtx.reply(part);
+            }
+          }
+        } else {
+          const parts = splitMessage(result.content);
+          for (const part of parts) {
+            await tgCtx.reply(part);
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "An error occurred";
+        ctx.log.error(`Voice chat error: ${message}`);
         await tgCtx.reply(`Error: ${message}`);
       } finally {
         clearInterval(typingInterval);

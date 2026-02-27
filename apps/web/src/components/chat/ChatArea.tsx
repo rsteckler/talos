@@ -6,6 +6,7 @@ import { InboxContextCard } from "@/components/chat/InboxContextCard"
 import { ChatLogFilterDialog } from "@/components/chat/ChatLogFilterDialog"
 import { useSettings } from "@/contexts/SettingsContext"
 import { ModelSwitcher } from "@/components/chat/ModelSwitcher"
+import { VoiceMicButton } from "@/components/chat/VoiceMicButton"
 import { Send, Square, Loader2, AlertCircle, ScrollText, Plus } from "lucide-react"
 import type { FormEvent, KeyboardEvent } from "react"
 import type { Message, LogEntry } from "@talos/shared/types"
@@ -292,6 +293,14 @@ export function ChatArea() {
               rows={1}
               className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
               style={{ maxHeight: 200 }}
+            />
+            <VoiceMicButton
+              onTranscript={(text) => {
+                const current = useChatStore.getState().inputValue
+                setInputValue(current ? `${current} ${text}` : text)
+                resizeTextarea()
+              }}
+              disabled={connectionStatus !== "connected" || isStreaming}
             />
             {isStreaming && activeConversationId ? (
               <button

@@ -268,6 +268,42 @@ export function runMigrations(): void {
     `);
   });
 
+  // --- v6: Add voice provider tables ---
+  applyMigration(6, () => {
+    raw.exec(`
+      CREATE TABLE IF NOT EXISTS voice_providers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('openai', 'elevenlabs')),
+        api_key TEXT NOT NULL,
+        base_url TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS voice_roles (
+        role TEXT PRIMARY KEY CHECK(role IN ('tts', 'stt')),
+        voice_provider_id TEXT NOT NULL REFERENCES voice_providers(id) ON DELETE CASCADE,
+        model_id TEXT NOT NULL,
+        voice TEXT,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS voice_settings (
+        id INTEGER PRIMARY KEY,
+        default_voice TEXT NOT NULL DEFAULT 'alloy',
+        language TEXT NOT NULL DEFAULT 'en',
+        output_format TEXT NOT NULL DEFAULT 'mp3',
+        speed TEXT NOT NULL DEFAULT '1.0',
+        auto_tts_enabled INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT OR IGNORE INTO voice_settings (id, default_voice, language, output_format, speed, auto_tts_enabled, updated_at)
+      VALUES (1, 'alloy', 'en', 'mp3', '1.0', 0, '${new Date().toISOString()}');
+    `);
+  });
+
   // Note: createLogger used here but initLogger() hasn't been called yet,
   // so this falls back to console.log. That's fine for migration output.
   console.log("[db] info: Database migrations complete");

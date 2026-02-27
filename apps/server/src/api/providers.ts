@@ -313,7 +313,7 @@ router.put("/models/active", (req, res) => {
 
 // --- Model Roles ---
 
-const MODEL_ROLES = ["chat", "planner", "executor"] as const;
+const MODEL_ROLES = ["chat", "planner", "executor", "smart"] as const;
 
 // GET /api/models/roles
 router.get("/models/roles", (_req, res) => {

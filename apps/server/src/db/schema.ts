@@ -133,6 +133,36 @@ export const channelSessions = sqliteTable("channel_sessions", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const voiceProviders = sqliteTable("voice_providers", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type", { enum: ["openai", "elevenlabs"] }).notNull(),
+  apiKey: text("api_key").notNull(),
+  baseUrl: text("base_url"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+});
+
+export const voiceRoles = sqliteTable("voice_roles", {
+  role: text("role").primaryKey(), // "tts" | "stt"
+  voiceProviderId: text("voice_provider_id")
+    .notNull()
+    .references(() => voiceProviders.id, { onDelete: "cascade" }),
+  modelId: text("model_id").notNull(),
+  voice: text("voice"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const voiceSettings = sqliteTable("voice_settings", {
+  id: integer("id").primaryKey(),
+  defaultVoice: text("default_voice").notNull().default("alloy"),
+  language: text("language").notNull().default("en"),
+  outputFormat: text("output_format").notNull().default("mp3"),
+  speed: text("speed").notNull().default("1.0"),
+  autoTtsEnabled: integer("auto_tts_enabled", { mode: "boolean" }).notNull().default(false),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const inbox = sqliteTable("inbox", {
   id: text("id").primaryKey(),
   taskRunId: text("task_run_id").references(() => taskRuns.id, { onDelete: "set null" }),

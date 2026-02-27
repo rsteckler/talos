@@ -238,7 +238,7 @@ export function buildModulePluginToolSet(
 }
 
 export interface PlanActionCallbacks {
-  onPlanStart?: (request: string, steps: Array<{ id: string; description: string }>) => void;
+  onPlanStart?: (request: string, steps: Array<{ id: string; description: string; smart?: boolean }>) => void;
   onPlanStep?: (stepId: string, description: string, status: "running" | "complete" | "skipped" | "error", error?: string) => void;
   onToolCall?: (toolCallId: string, toolName: string, args: Record<string, unknown>, stepId?: string) => void;
   onToolResult?: (toolCallId: string, toolName: string, result: unknown, stepId?: string) => void;
@@ -290,7 +290,7 @@ export function buildRoutedPluginToolSet(
           }
 
           // Notify client of plan structure before execution
-          planCallbacks?.onPlanStart?.(request, plan.map((s) => ({ id: s.id, description: s.description })));
+          planCallbacks?.onPlanStart?.(request, plan.map((s) => ({ id: s.id, description: s.description, ...(s.requires_smart_model ? { smart: true } : {}) })));
 
           // Collect unique plugin prompts from discovered tools
           const loadedPlugins = getLoadedPlugins();
