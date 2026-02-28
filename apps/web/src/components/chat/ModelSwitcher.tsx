@@ -29,7 +29,12 @@ interface ProviderCatalog {
 
 export function ModelSwitcher() {
   const activeModel = useProviderStore((s) => s.activeModel)
+  const roleAssignments = useProviderStore((s) => s.roleAssignments)
   const [open, setOpen] = useState(false)
+
+  // Show chat role model if assigned, otherwise fall back to default
+  const chatRole = roleAssignments.find((r) => r.role === "chat")
+  const displayName = chatRole?.modelDisplayName ?? activeModel.model?.displayName ?? "No model"
 
   return (
     <>
@@ -37,7 +42,7 @@ export function ModelSwitcher() {
         onClick={() => setOpen(true)}
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
-        <span>{activeModel.model?.displayName ?? "No model"}</span>
+        <span>{displayName}</span>
         <svg
           className="size-3"
           viewBox="0 0 12 12"
@@ -62,8 +67,10 @@ interface ModelPickerDialogProps {
 
 function ModelPickerDialog({ open, onOpenChange }: ModelPickerDialogProps) {
   const activeModel = useProviderStore((s) => s.activeModel)
-  const setActiveModel = useProviderStore((s) => s.setActiveModel)
+  const roleAssignments = useProviderStore((s) => s.roleAssignments)
   const setActiveModelFromCatalog = useProviderStore((s) => s.setActiveModelFromCatalog)
+  const setRole = useProviderStore((s) => s.setRole)
+  const fetchModels = useProviderStore((s) => s.fetchModels)
   const modelsByProvider = useProviderStore((s) => s.modelsByProvider)
 
   const [catalogs, setCatalogs] = useState<ProviderCatalog[]>([])
@@ -105,6 +112,11 @@ function ModelPickerDialog({ open, onOpenChange }: ModelPickerDialogProps) {
           }
         }
         setCatalogs(loaded)
+
+        // Ensure DB models are loaded for active model highlighting
+        for (const p of providers) {
+          fetchModels(p.id)
+        }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Failed to load models")
@@ -146,21 +158,40 @@ function ModelPickerDialog({ open, onOpenChange }: ModelPickerDialogProps) {
       const existing = dbModels.find((m) => m.modelId === catalogModel.modelId)
 
       if (existing) {
-        await setActiveModel(existing.id)
+        // Set the chat role to this model
+        await setRole("chat", existing.id)
       } else {
-        await setActiveModelFromCatalog(
+        // Create model from catalog (also sets it as global default), then set chat role
+        const created = await setActiveModelFromCatalog(
           provider.id,
           catalogModel.modelId,
           catalogModel.displayName,
         )
+        if (created.model) {
+          await setRole("chat", created.model.id)
+        }
       }
       onOpenChange(false)
     },
-    [modelsByProvider, setActiveModel, setActiveModelFromCatalog, onOpenChange],
+    [modelsByProvider, setRole, setActiveModelFromCatalog, onOpenChange],
   )
 
-  const activeModelId = activeModel.model?.modelId ?? null
-  const activeProviderId = activeModel.provider?.id ?? null
+  // Resolve effective chat model's modelId + provider for highlighting
+  const chatRole = roleAssignments.find((r) => r.role === "chat")
+  const activeChatDbId = chatRole?.modelId ?? activeModel.model?.id ?? null
+  // Find the API modelId and provider for the active chat model
+  const activeChatInfo = useMemo(() => {
+    if (!activeChatDbId) return null
+    for (const [providerId, models] of Object.entries(modelsByProvider)) {
+      const match = models.find((m) => m.id === activeChatDbId)
+      if (match) return { modelId: match.modelId, providerId }
+    }
+    // Fall back to activeModel if not found in modelsByProvider
+    if (activeModel.model && activeModel.provider) {
+      return { modelId: activeModel.model.modelId, providerId: activeModel.provider.id }
+    }
+    return null
+  }, [activeChatDbId, modelsByProvider, activeModel])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -229,8 +260,9 @@ function ModelPickerDialog({ open, onOpenChange }: ModelPickerDialogProps) {
                 <div className="divide-y divide-border/50">
                   {models.map((model) => {
                     const isActive =
-                      model.modelId === activeModelId &&
-                      provider.id === activeProviderId
+                      activeChatInfo != null &&
+                      model.modelId === activeChatInfo.modelId &&
+                      provider.id === activeChatInfo.providerId
                     return (
                       <button
                         key={model.modelId}

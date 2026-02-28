@@ -11,13 +11,15 @@ import { useInboxStore, useProviderStore, useChatStore } from "@/stores"
 function AppContent() {
   const fetchInbox = useInboxStore((s) => s.fetchInbox)
   const fetchActiveModel = useProviderStore((s) => s.fetchActiveModel)
+  const fetchRoles = useProviderStore((s) => s.fetchRoles)
   const fetchConversations = useChatStore((s) => s.fetchConversations)
 
   useEffect(() => {
     fetchInbox()
     fetchActiveModel()
+    fetchRoles()
     fetchConversations()
-  }, [fetchInbox, fetchActiveModel, fetchConversations])
+  }, [fetchInbox, fetchActiveModel, fetchRoles, fetchConversations])
 
   useWebSocket()
 

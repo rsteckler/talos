@@ -18,7 +18,7 @@ interface ProviderState {
   refreshModels: (providerId: string) => Promise<void>;
   fetchActiveModel: () => Promise<void>;
   setActiveModel: (modelId: string) => Promise<void>;
-  setActiveModelFromCatalog: (providerId: string, catalogModelId: string, displayName: string) => Promise<void>;
+  setActiveModelFromCatalog: (providerId: string, catalogModelId: string, displayName: string) => Promise<ActiveModel>;
   fetchRoles: () => Promise<void>;
   setRole: (role: string, modelId: string) => Promise<void>;
   removeRole: (role: string) => Promise<void>;
@@ -151,8 +151,10 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       set({ activeModel });
       // Refresh models for this provider since a new one may have been inserted
       await get().fetchModels(providerId);
+      return activeModel;
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to set active model" });
+      return { model: null, provider: null };
     }
   },
 
