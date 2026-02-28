@@ -1,0 +1,1 @@
+Execute a single tool directly without the planner. Use this for simple, one-step tasks after finding the right tool with `search_tools`. For multi-step workflows that coordinate multiple tools, use `plan_actions` instead.

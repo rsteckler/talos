@@ -226,7 +226,7 @@ export function getPluginCatalog(): string {
   const lines = [
     "## Available Extended Tools",
     "",
-    "You have access to the tools below via `plan_actions`.",
+    "You have access to the tools below via `search_tools` + `use_tool` (simple tasks) or `plan_actions` (complex workflows).",
     "",
   ];
 

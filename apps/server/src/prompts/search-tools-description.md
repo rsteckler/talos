@@ -1,0 +1,1 @@
+Search for available tools by describing what you need. Returns matching tools with their names, descriptions, and parameter details. Use the results to call `use_tool` for simple tasks or `plan_actions` for complex multi-step workflows.

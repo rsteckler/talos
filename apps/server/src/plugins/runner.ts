@@ -265,6 +265,68 @@ export function buildRoutedPluginToolSet(
   }
 
   if (hasExtendedTools) {
+    // search_tools: semantic search for available tools
+    tools["search_tools"] = {
+      description: loadPrompt("search-tools-description.md"),
+      inputSchema: z.object({
+        query: z.string().describe("Natural language description of what you need to do"),
+      }),
+      execute: async (args: Record<string, unknown>) => {
+        const query = args["query"] as string;
+        log.dev.debug("search_tools", { query });
+        const results = await toolRegistry.search(query, 8);
+        return results.map((r) => ({
+          tool: `${r.pluginId}_${r.functionName}`,
+          description: r.description,
+          parameters: r.paramSummary,
+        }));
+      },
+    };
+
+    // use_tool: direct execution of a single tool (bypasses planner)
+    tools["use_tool"] = {
+      description: loadPrompt("use-tool-description.md"),
+      inputSchema: z.object({
+        tool: z.string().describe("Tool name from search_tools results (e.g. web-search_search)"),
+        args: z.record(z.unknown()).describe("Arguments matching the tool's parameter schema"),
+      }),
+      execute: async (rawArgs: Record<string, unknown>, { toolCallId }: { toolCallId: string }) => {
+        const toolName = rawArgs["tool"] as string;
+        const toolArgs = (rawArgs["args"] ?? {}) as Record<string, unknown>;
+
+        const lookup = lookupFunction(toolName);
+        if (!lookup) {
+          log.warn("use_tool: tool not found", { tool: toolName });
+          return { error: `Tool not found: ${toolName}. Use search_tools to find available tools.` };
+        }
+
+        // Gate on approval if not auto-allowed
+        if (!lookup.autoAllow && approvalGate) {
+          const approved = await approvalGate(toolCallId, toolName, toolArgs);
+          if (!approved) {
+            log.user.medium("Tool denied", { tool: toolName });
+            return { denied: true, message: "User denied tool execution" };
+          }
+        }
+
+        // Fire callback for UI tracking
+        planCallbacks?.onToolCall?.(toolCallId, toolName, toolArgs);
+
+        log.dev.debug(`use_tool: executing ${toolName}`, { args: toolArgs });
+        try {
+          const result = await withTimeout(lookup.handler(toolArgs, lookup.credentials), TOOL_TIMEOUT_MS, toolName);
+          log.dev.debug(`use_tool: completed ${toolName}`, { resultPreview: JSON.stringify(result).slice(0, 200) });
+          planCallbacks?.onToolResult?.(toolCallId, toolName, result);
+          return result;
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          log.error(`use_tool: ${toolName} threw`, { error: message });
+          planCallbacks?.onToolResult?.(toolCallId, toolName, { error: message });
+          return { error: message };
+        }
+      },
+    };
+
     tools["plan_actions"] = {
       description: loadPrompt("plan-actions-description.md"),
       inputSchema: z.object({
