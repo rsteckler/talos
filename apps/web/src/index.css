@@ -264,3 +264,10 @@
     margin-right: 0.4em;
   }
 }
+
+/* View Transition: orb morphing between NavRail and ChatArea */
+::view-transition-old(talos-orb),
+::view-transition-new(talos-orb) {
+  animation-duration: 0.4s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}

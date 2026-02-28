@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from "react"
-import { useChatStore, useProviderStore, useConnectionStore } from "@/stores"
+import { useChatStore, useProviderStore, useConnectionStore, useLayoutStore } from "@/stores"
 import { MessageBubble } from "@/components/chat/MessageBubble"
 import { InlineChatLog } from "@/components/chat/InlineChatLog"
 import { InboxContextCard } from "@/components/chat/InboxContextCard"
@@ -8,7 +8,9 @@ import { useSettings } from "@/contexts/SettingsContext"
 import { ModelSwitcher } from "@/components/chat/ModelSwitcher"
 import { VoiceMicButton } from "@/components/chat/VoiceMicButton"
 import { VoiceConversationButton } from "@/components/chat/VoiceConversationButton"
-import { useVoiceConversation } from "@/hooks/useVoiceConversation"
+import { useVoiceConversation, voiceEnergyRef } from "@/hooks/useVoiceConversation"
+import { TalosOrb as AnimatedOrb } from "@/components/orb/TalosOrb"
+import { useOrb } from "@/contexts/OrbContext"
 import { Send, Square, Loader2, AlertCircle, ScrollText, Plus } from "lucide-react"
 import type { FormEvent, KeyboardEvent } from "react"
 import type { Message, LogEntry } from "@talos/shared/types"
@@ -16,6 +18,23 @@ import type { Message, LogEntry } from "@talos/shared/types"
 type TimelineItem =
   | { kind: "message"; data: Message }
   | { kind: "log"; data: LogEntry }
+
+const voiceOrbConfig = {
+  size: 350,
+  ringCount: 4,
+  cometCount: 3,
+  sparkliness: 0.6,
+  blobiness: 0.15,
+  animationScale: 0.5,
+}
+
+const VOICE_STATE_LABELS: Record<string, string> = {
+  listening: "Listening\u2026",
+  recording: "Hearing you\u2026",
+  transcribing: "Processing\u2026",
+  waiting_for_response: "Thinking\u2026",
+  speaking: "Speaking\u2026",
+}
 
 function getGreeting(): string {
   const hour = new Date().getHours()
@@ -47,12 +66,15 @@ export function ChatArea() {
   const latestStatusLog = useConnectionStore((s) => s.latestStatusLog)
   const { settings } = useSettings()
   const { state: voiceConvState, isActive: voiceConvActive, toggle: toggleVoiceConv } = useVoiceConversation()
+  const voiceOrbVisible = useLayoutStore((s) => s.voiceConversationActive)
+  const orbRef = useOrb()
 
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const shouldAutoScrollRef = useRef(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const orbContainerRef = useRef<HTMLDivElement>(null)
 
   const resizeTextarea = useCallback(() => {
     const ta = textareaRef.current
@@ -72,6 +94,24 @@ export function ChatArea() {
   useEffect(() => {
     clearChatLogs()
   }, [activeConversationId, clearChatLogs])
+
+  // Animate orb scale based on voice energy during conversation mode
+  useEffect(() => {
+    if (!voiceOrbVisible) return
+    let rafId: number
+    let smoothed = 0
+    const tick = () => {
+      rafId = requestAnimationFrame(tick)
+      // Smooth the energy to avoid jitter (exponential moving average)
+      smoothed += (voiceEnergyRef.current - smoothed) * 0.3
+      // Map 0–1 energy to 1.0–1.8 scale
+      const scale = 1 + smoothed * 0.8
+      const el = orbContainerRef.current
+      if (el) el.style.transform = `scale(${scale})`
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [voiceOrbVisible])
 
   // Build merged timeline of messages and logs
   const timeline = useMemo<TimelineItem[]>(() => {
@@ -188,7 +228,9 @@ export function ChatArea() {
           <div className="flex flex-col items-center leading-none">
             <span className="text-base font-semibold text-foreground">Talos</span>
             <span className="text-[10px] font-mono text-muted-foreground/70 italic truncate max-w-[140px]">
-              {isStopping ? "Stopping\u2026" : agentStatus === "idle" ? "Sleeping" : latestStatusLog ?? "Thinking\u2026"}
+              {voiceConvActive
+                ? (VOICE_STATE_LABELS[voiceConvState] ?? "")
+                : isStopping ? "Stopping\u2026" : agentStatus === "idle" ? "Sleeping" : latestStatusLog ?? "Thinking\u2026"}
             </span>
           </div>
         </div>
@@ -214,6 +256,14 @@ export function ChatArea() {
 
       {/* Messages */}
       <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* Voice conversation orb — behind chat content */}
+        {voiceOrbVisible && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div ref={orbContainerRef} style={{ viewTransitionName: "talos-orb" }}>
+              <AnimatedOrb ref={orbRef} initialConfig={voiceOrbConfig} initialState="idle" />
+            </div>
+          </div>
+        )}
         <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 font-chat scrollbar-thumb-only p-4 pb-20">
           {messages.length === 0 && !inboxContext ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
@@ -262,7 +312,7 @@ export function ChatArea() {
             </div>
           )}
         </div>
-        <div className="isolate pointer-events-none absolute inset-x-0 bottom-4 flex flex-col items-stretch px-4">
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex flex-col items-stretch px-4">
           <div className="pointer-events-auto flex items-center gap-1 px-1 pb-1">
             <button
               onClick={() => {

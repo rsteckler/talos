@@ -72,11 +72,12 @@ export function NavRail() {
   const orbRef = useOrb()
   const slidePanel = useLayoutStore((s) => s.slidePanel)
   const toggleSlidePanel = useLayoutStore((s) => s.toggleSlidePanel)
+  const voiceActive = useLayoutStore((s) => s.voiceConversationActive)
   const unreadCount = useInboxStore((s) => s.unreadCount)
   const agentStatus = useConnectionStore((s) => s.agentStatus)
   const prevStatusRef = useRef<AgentStatus>("idle")
 
-  // Sync orb animation state with agent status
+  // Sync orb animation state with agent status (skip during voice conversation)
   useEffect(() => {
     const orb = orbRef.current
     if (!orb || agentStatus === prevStatusRef.current) return
@@ -84,7 +85,7 @@ export function NavRail() {
 
     switch (agentStatus) {
       case "idle":
-        orb.sleep()
+        if (!voiceActive) orb.sleep()
         break
       case "thinking":
       case "responding":
@@ -96,17 +97,24 @@ export function NavRail() {
 
   return (
     <nav className="flex h-full w-14 shrink-0 flex-col items-center border-r border-border bg-card py-3">
-      {/* Orb */}
+      {/* Orb — hidden when voice conversation is active (moves to ChatArea) */}
       <div
         className="pointer-events-none relative mb-14 flex items-center justify-center"
         style={{ width: 32, height: 32, overflow: "visible" }}
       >
-        <div
-          className="absolute"
-          style={{ transform: "translate(-50%, -50%)", left: "50%", top: "50%" }}
-        >
-          <AnimatedOrb ref={orbRef} initialConfig={navOrbConfig} initialState="sleep" />
-        </div>
+        {!voiceActive && (
+          <div
+            className="absolute"
+            style={{
+              transform: "translate(-50%, -50%)",
+              left: "50%",
+              top: "50%",
+              viewTransitionName: "talos-orb",
+            }}
+          >
+            <AnimatedOrb ref={orbRef} initialConfig={navOrbConfig} initialState="sleep" />
+          </div>
+        )}
       </div>
 
       {/* Primary nav */}

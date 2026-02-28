@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react"
-import { useChatStore, useConnectionStore } from "@/stores"
+import { useChatStore, useConnectionStore, useLayoutStore } from "@/stores"
 import { useVoiceStore } from "@/stores/useVoiceStore"
 import { voiceApi } from "@/api/voice"
 import { VADDetector } from "@/utils/vadDetector"
@@ -11,6 +11,9 @@ import {
   subscribeToMessages,
   setVoiceConversationActive,
 } from "@/hooks/useWebSocket"
+
+/** Module-level energy ref (0–1) updated every frame by VAD. Read via rAF for visualizations. */
+export const voiceEnergyRef = { current: 0 }
 
 export type VoiceConversationState =
   | "idle"
@@ -308,6 +311,7 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
       // VAD
       const vad = new VADDetector(analyser, {
         silenceTimeoutMs: 3000,
+        onEnergy: (energy) => { voiceEnergyRef.current = energy },
         onSpeechStart: handleSpeechStart,
         onSpeechEnd: () => {
           void handleSpeechEnd()
@@ -317,6 +321,17 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
       vad.start()
 
       setVoiceConversationActive(true)
+
+      // Animate orb from NavRail to center via View Transition API
+      const activate = () => {
+        useLayoutStore.getState().setVoiceConversationActive(true)
+      }
+      if (document.startViewTransition) {
+        document.startViewTransition(activate)
+      } else {
+        activate()
+      }
+
       setStateSync("listening")
     } catch (err) {
       console.error("[VoiceConv] Failed to start:", err)
@@ -362,6 +377,17 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
     }
 
     setVoiceConversationActive(false)
+
+    // Animate orb back to NavRail via View Transition API
+    const deactivate = () => {
+      useLayoutStore.getState().setVoiceConversationActive(false)
+    }
+    if (document.startViewTransition) {
+      document.startViewTransition(deactivate)
+    } else {
+      deactivate()
+    }
+
     setStateSync("idle")
   }, [setStateSync])
 

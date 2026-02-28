@@ -1,5 +1,6 @@
 import { useMemo } from "react"
 import type { Message } from "@talos/shared/types"
+import { useLayoutStore } from "@/stores"
 import { ToolCallDisplay } from "./ToolCallDisplay"
 import { PlanDisplay } from "./PlanDisplay"
 import { Markdown } from "./Markdown"
@@ -12,6 +13,7 @@ interface MessageBubbleProps {
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user"
   const isError = message.isError === true
+  const voiceActive = useLayoutStore((s) => s.voiceConversationActive)
 
   const bubbleClass = isUser
     ? "rounded-2xl rounded-tr-md bg-primary/10 text-foreground"
@@ -44,7 +46,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   if (!isUser && !hasVisibleContent) return null
 
   return (
-    <div className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}>
+    <div className={`flex flex-col ${isUser ? "items-end" : "items-start"} ${voiceActive ? "opacity-80" : ""}`}>
       <span className="mb-1 text-[11px] font-medium text-muted-foreground">
         {isUser ? "You" : "Talos"}
       </span>

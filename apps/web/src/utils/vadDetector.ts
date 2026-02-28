@@ -11,6 +11,8 @@ export interface VADConfig {
   adaptiveFactor?: number
   /** Threshold multiplier during TTS playback (higher = harder to interrupt). Default: 3.0 */
   ttsBoostFactor?: number
+  /** Called every frame with normalized energy (0–1). Use for visualizations. */
+  onEnergy?: (energy: number) => void
   onSpeechStart: () => void
   onSpeechEnd: () => void
 }
@@ -59,6 +61,7 @@ export class VADDetector {
       speechMinMs: config.speechMinMs ?? DEFAULTS.speechMinMs,
       adaptiveFactor: config.adaptiveFactor ?? DEFAULTS.adaptiveFactor,
       ttsBoostFactor: config.ttsBoostFactor ?? DEFAULTS.ttsBoostFactor,
+      onEnergy: config.onEnergy ?? (() => {}),
       onSpeechStart: config.onSpeechStart,
       onSpeechEnd: config.onSpeechEnd,
     }
@@ -137,6 +140,9 @@ export class VADDetector {
       sum += this.dataArray[i]!
     }
     const avgEnergy = sum / this.config.speechBins
+
+    // Emit normalized energy (0–1) for visualizations
+    this.config.onEnergy(Math.min(avgEnergy / 255, 1))
 
     const now = performance.now()
     const activeThreshold = this.getAdaptiveThreshold()

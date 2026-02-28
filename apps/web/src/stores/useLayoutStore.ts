@@ -6,6 +6,8 @@ interface LayoutState {
   slidePanel: SlidePanel
   setSlidePanel: (panel: SlidePanel) => void
   toggleSlidePanel: (panel: "flow" | "tasks" | "history") => void
+  voiceConversationActive: boolean
+  setVoiceConversationActive: (active: boolean) => void
 }
 
 export const useLayoutStore = create<LayoutState>((set, get) => ({
@@ -15,4 +17,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const current = get().slidePanel
     set({ slidePanel: current === panel ? null : panel })
   },
+  voiceConversationActive: false,
+  setVoiceConversationActive: (active) => set({ voiceConversationActive: active }),
 }))
